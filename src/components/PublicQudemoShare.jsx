@@ -136,9 +136,13 @@ const PublicQudemoShare = () => {
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [loadingCalendly, setLoadingCalendly] = useState(false);
   const [showCalendlyError, setShowCalendlyError] = useState(false);
+  const [avatarVideoUrl, setAvatarVideoUrl] = useState(null);
+  const [showAvatarVideo, setShowAvatarVideo] = useState(false);
+  const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
   const messagesEndRef = useRef(null);
   const loomIframeRef = useRef();
   const videoPlayerRef = useRef(null);
+  const avatarVideoRef = useRef(null);
   // Load shared qudemo data
   useEffect(() => {
     const loadSharedQudemo = async () => {
@@ -283,9 +287,36 @@ const PublicQudemoShare = () => {
         },
         timeout: 30000
       });
+      // Generate AI avatar video for the answer
+      const aiAnswer = response.data?.answer || 'Sorry, I could not find an answer.';
+      
+      // Generate avatar video if available
+      if (aiAnswer && aiAnswer !== 'Sorry, I could not find an answer.') {
+        setIsGeneratingAvatar(true);
+        try {
+          const avatarResponse = await axios.post(getNodeApiUrl('/api/avatar/generate'), {
+            text: aiAnswer,
+            shareToken: shareToken
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000
+          });
+          
+          if (avatarResponse.data.success && avatarResponse.data.videoUrl) {
+            setAvatarVideoUrl(avatarResponse.data.videoUrl);
+            setShowAvatarVideo(true);
+            console.log('✅ Avatar video generated:', avatarResponse.data.videoUrl);
+          }
+        } catch (avatarError) {
+          console.warn('⚠️ Avatar video generation failed:', avatarError);
+          // Continue without avatar video
+        } finally {
+          setIsGeneratingAvatar(false);
+        }
+      }
+      
       // Process the response and handle video switching
       try {
-        const aiAnswer = response.data?.answer || 'Sorry, I could not find an answer.';
         // Check for video navigation data in the response
         let targetVideoUrl = null;
         let timestamp = 0;
@@ -518,11 +549,12 @@ const PublicQudemoShare = () => {
           <div className="flex flex-col lg:flex-row h-[80vh]">
             {/* Video Section */}
             <div 
-              className="w-full lg:w-2/3 relative flex flex-col items-center justify-center bg-black"
+              className="w-full lg:w-2/3 relative flex flex-col bg-black overflow-y-auto"
               onClick={enableAudio}
             >
+              {/* Main Video Player */}
               {currentVideo ? (
-                <div className="relative w-full h-full">
+                <div className="relative w-full flex-shrink-0" style={{ height: showAvatarVideo ? '60%' : '100%' }}>
                   <HybridVideoPlayer
                     ref={videoPlayerRef}
                     key={`${currentVideo.video_url}-${currentTimestamp}-${videoRefreshKey}`}
@@ -610,6 +642,49 @@ const PublicQudemoShare = () => {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* AI Avatar Video Section */}
+              {(showAvatarVideo || isGeneratingAvatar) && (
+                <div className="w-full flex-shrink-0 bg-gradient-to-b from-gray-900 to-black" style={{ height: '40%' }}>
+                  {isGeneratingAvatar ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-3 mx-auto"></div>
+                        <p className="text-white text-sm">Generating AI Avatar...</p>
+                        <p className="text-gray-400 text-xs mt-1">Creating personalized video response</p>
+                      </div>
+                    </div>
+                  ) : avatarVideoUrl ? (
+                    <div className="relative h-full">
+                      <video
+                        ref={avatarVideoRef}
+                        src={avatarVideoUrl}
+                        className="w-full h-full object-contain"
+                        controls
+                        autoPlay
+                        onEnded={() => setShowAvatarVideo(false)}
+                      />
+                      {/* Avatar Badge */}
+                      <div className="absolute top-3 left-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-lg">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+                        </svg>
+                        AI Avatar
+                      </div>
+                      {/* Close Button */}
+                      <button
+                        onClick={() => {
+                          setShowAvatarVideo(false);
+                          setAvatarVideoUrl(null);
+                        }}
+                        className="absolute top-3 right-3 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-70 transition-all"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
