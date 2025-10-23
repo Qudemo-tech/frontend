@@ -30,7 +30,7 @@ const baseMenuItems = [
     { name: 'Create Qudemo', icon: PlusIcon, path: '/create' },
     { name: 'Qudemos', icon: PlayIcon, path: '/qudemos' },
     { name: 'Interactions', icon: UserGroupIcon, path: '/customer-interactions', requiresPro: true },
-    { name: 'Beta Version', icon: SparklesIcon, path: '/beta-version', isBeta: true },
+    // { name: 'Beta Version', icon: SparklesIcon, path: '/beta-version', isBeta: true }, // COMMENTED OUT
 ];
 
 const Sidebar = ({ isOpen, setIsOpen }) => {

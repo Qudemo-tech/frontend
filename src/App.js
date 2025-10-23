@@ -425,6 +425,8 @@ function App() {
                 </CompanyProvider>
               } 
             />
+            {/* BETA VERSION ROUTE - COMMENTED OUT */}
+            {/*
             <Route 
               path="/beta-version" 
               element={
@@ -439,6 +441,7 @@ function App() {
                 </CompanyProvider>
               } 
             />
+            */}
             {/* Catch all route */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
