@@ -1063,7 +1063,8 @@ const CreateQuDemo = () => {
               Select AI Voice 🎤 {!presenterPhoto && <span className="text-xs text-gray-400 font-normal">(Upload presenter photo to enable AI videos)</span>}
             </label>
             <p className="text-xs text-gray-500 mb-3 text-left">
-              Preview different voice styles below. Click the speaker icon to hear each one. (Note: These are preview samples - actual AI videos use HeyGen's professional voices)
+              Preview different voice styles below. Click the speaker icon to hear each one. 
+              <span className="block mt-1 text-amber-600 font-medium">⚠️ Note: Only the "Custom Professional" voice is currently configured in HeyGen. Other voices require valid HeyGen voice IDs.</span>
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {availableVoices.map((voice) => (
@@ -1077,9 +1078,9 @@ const CreateQuDemo = () => {
                   } ${!presenterPhoto ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                    <div className="flex-1 text-left">
                       <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="text-sm font-semibold text-gray-900">
+                        <h4 className="text-sm font-semibold text-gray-900 text-left">
                           {voice.name}
                         </h4>
                         {voice.is_default && (
@@ -1093,10 +1094,10 @@ const CreateQuDemo = () => {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-600 mb-1">
+                      <p className="text-xs text-gray-600 mb-1 text-left">
                         {voice.description}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 text-left">
                         {voice.language} • {voice.gender}
                       </p>
                     </div>
@@ -1141,8 +1142,8 @@ const CreateQuDemo = () => {
             <div className={`mt-3 border rounded-lg p-3 ${presenterPhoto ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
               <p className={`text-xs ${presenterPhoto ? 'text-blue-800' : 'text-yellow-800'}`}>
                 💡 <strong>Tip:</strong> {presenterPhoto 
-                  ? 'Your AI videos will use the selected voice style. Currently only the default Professional Voice is available for production.' 
-                  : 'These are preview voices to help you choose. Upload a presenter photo above to enable AI video generation.'}
+                  ? 'The selected voice will be sent to HeyGen. For best results, use the "Custom Professional" voice (pre-configured with your HeyGen account). Other voices need valid HeyGen voice IDs to work.' 
+                  : 'These are voice previews. Upload a presenter photo above to enable AI video generation with your selected voice.'}
               </p>
             </div>
           </div>
