@@ -1,9 +1,10 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   XMarkIcon,
+  SpeakerWaveIcon,
 } from "@heroicons/react/24/outline";
 import { useCompany } from "../context/CompanyContext";
-import { getNodeApiUrl } from "../config/api";
+import { getNodeApiUrl, getVideoApiUrl } from "../config/api";
 import { useNavigate } from "react-router-dom";
 import DocumentUpload from "./DocumentUpload";
 const CreateQuDemo = () => {
@@ -30,6 +31,10 @@ const CreateQuDemo = () => {
   const [presenterPhoto, setPresenterPhoto] = useState(null);
   const [presenterPhotoPreview, setPresenterPhotoPreview] = useState(null);
   const [presenterName, setPresenterName] = useState("");
+  const [selectedVoiceId, setSelectedVoiceId] = useState("01d674cfd32b4728a3fddd21b7e7d543"); // Default voice
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [loadingVoiceId, setLoadingVoiceId] = useState(null);
   // Handle error popup close and redirect
   const handleErrorPopupClose = () => {
     setShowErrorPopup(false);
@@ -84,6 +89,130 @@ const CreateQuDemo = () => {
     setPresenterPhoto(null);
     setPresenterPhotoPreview(null);
   };
+
+  // Fetch available voices on mount
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const response = await fetch(getVideoApiUrl('/heygen-voices'));
+        const data = await response.json();
+        if (data.success) {
+          setAvailableVoices(data.voices);
+        }
+      } catch (error) {
+        console.error('Error fetching voices:', error);
+      }
+    };
+    fetchVoices();
+  }, []);
+
+  // Handle voice preview using Web Speech Synthesis API
+  const handleVoicePreview = (voice) => {
+    console.log('🎤 Playing voice preview:', voice.name);
+    
+    // If already playing this voice, stop it
+    if (playingVoiceId === voice.id) {
+      window.speechSynthesis.cancel();
+      setPlayingVoiceId(null);
+      setLoadingVoiceId(null);
+      return;
+    }
+
+    // Stop any currently playing speech
+    window.speechSynthesis.cancel();
+
+    try {
+      setLoadingVoiceId(voice.id);
+      
+      // Wait for voices to be loaded (Chrome requires this)
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        console.log('📢 Available voices:', voices.length);
+        
+        const utterance = new SpeechSynthesisUtterance(voice.sample_text);
+        
+        // Try to find a voice that matches the gender
+        let selectedVoice;
+        if (voice.gender === 'Female') {
+          selectedVoice = voices.find(v => 
+            v.lang.startsWith('en') && 
+            (v.name.toLowerCase().includes('female') || 
+             v.name.toLowerCase().includes('samantha') ||
+             v.name.toLowerCase().includes('victoria') ||
+             v.name.toLowerCase().includes('karen') ||
+             v.name.toLowerCase().includes('zira'))
+          );
+        } else {
+          selectedVoice = voices.find(v => 
+            v.lang.startsWith('en') && 
+            (v.name.toLowerCase().includes('male') || 
+             v.name.toLowerCase().includes('david') ||
+             v.name.toLowerCase().includes('mark') ||
+             v.name.toLowerCase().includes('google us english'))
+          );
+        }
+        
+        // Fallback to any English voice
+        if (!selectedVoice) {
+          selectedVoice = voices.find(v => v.lang.startsWith('en'));
+        }
+        
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+          console.log('🎯 Using voice:', selectedVoice.name);
+        }
+        
+        // Set voice characteristics from API (or defaults)
+        utterance.rate = voice.rate || (voice.is_custom ? 0.95 : 1.0);
+        utterance.pitch = voice.pitch || (voice.gender === 'Female' ? 1.1 : 0.9);
+        utterance.volume = 1.0;
+        
+        utterance.onstart = () => {
+          setLoadingVoiceId(null);
+          setPlayingVoiceId(voice.id);
+          console.log('▶️ Voice playing:', voice.name);
+        };
+        
+        utterance.onend = () => {
+          setPlayingVoiceId(null);
+          setLoadingVoiceId(null);
+          console.log('⏹️ Voice ended:', voice.name);
+        };
+        
+        utterance.onerror = (error) => {
+          console.error('❌ Voice error:', error);
+          setPlayingVoiceId(null);
+          setLoadingVoiceId(null);
+        };
+        
+        window.speechSynthesis.speak(utterance);
+      };
+      
+      // Check if voices are already loaded
+      if (window.speechSynthesis.getVoices().length > 0) {
+        loadVoices();
+      } else {
+        // Wait for voices to load (Chrome)
+        window.speechSynthesis.onvoiceschanged = () => {
+          loadVoices();
+        };
+        // Timeout fallback
+        setTimeout(loadVoices, 100);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in voice preview:', error);
+      setPlayingVoiceId(null);
+      setLoadingVoiceId(null);
+    }
+  };
+
+  // Cleanup speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // const handleSourceChange = (index, value) => { // Not used
   //   const updated = [...sources];
@@ -407,12 +536,14 @@ const CreateQuDemo = () => {
         }
       }
       // Create qudemo first
+      console.log('🎤 Selected Voice ID for QuDemo:', selectedVoiceId);
       const qudemoData = {
         title: title || "Untitled Qudemo",
         description: "No description provided",
         companyId: company.id,
         calendlyLink: calendlyLink.trim() || null,
         presenterName: presenterName.trim() || null,
+        voiceId: selectedVoiceId, // Add selected voice ID
         videos: validVideoUrls.map((url, index) => {
           const validation = validateVideoUrl(url);
           return {
@@ -924,6 +1055,98 @@ const CreateQuDemo = () => {
               </div>
             )}
         </div>
+
+        {/* Voice Selection Section */}
+        {availableVoices.length > 0 && (
+          <div className="mt-6">
+            <label className="block text-sm font-bold text-gray-900 mb-2 text-left">
+              Select AI Voice 🎤 {!presenterPhoto && <span className="text-xs text-gray-400 font-normal">(Upload presenter photo to enable AI videos)</span>}
+            </label>
+            <p className="text-xs text-gray-500 mb-3 text-left">
+              Preview different voice styles below. Click the speaker icon to hear each one. (Note: These are preview samples - actual AI videos use HeyGen's professional voices)
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {availableVoices.map((voice) => (
+                <div
+                  key={voice.id}
+                  onClick={() => setSelectedVoiceId(voice.id)}
+                  className={`relative cursor-pointer border-2 rounded-lg p-4 transition-all ${
+                    selectedVoiceId === voice.id
+                      ? 'border-purple-600 bg-purple-50'
+                      : 'border-gray-200 hover:border-purple-300 bg-white'
+                  } ${!presenterPhoto ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h4 className="text-sm font-semibold text-gray-900">
+                          {voice.name}
+                        </h4>
+                        {voice.is_default && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                            Recommended
+                          </span>
+                        )}
+                        {selectedVoiceId === voice.id && presenterPhoto && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                            ✓ Will be used
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mb-1">
+                        {voice.description}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {voice.language} • {voice.gender}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleVoicePreview(voice);
+                      }}
+                      disabled={loadingVoiceId === voice.id}
+                      className={`ml-2 p-2 rounded-full transition-colors ${
+                        playingVoiceId === voice.id
+                          ? 'bg-purple-600 text-white'
+                          : loadingVoiceId === voice.id
+                            ? 'bg-gray-200 text-gray-400 cursor-wait'
+                            : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-600'
+                      }`}
+                      title={loadingVoiceId === voice.id ? "Loading..." : playingVoiceId === voice.id ? "Stop preview" : "Preview voice"}
+                    >
+                      {loadingVoiceId === voice.id ? (
+                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <SpeakerWaveIcon className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                  {selectedVoiceId === voice.id && (
+                    <div className="absolute top-2 right-2">
+                      <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className={`mt-3 border rounded-lg p-3 ${presenterPhoto ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
+              <p className={`text-xs ${presenterPhoto ? 'text-blue-800' : 'text-yellow-800'}`}>
+                💡 <strong>Tip:</strong> {presenterPhoto 
+                  ? 'Your AI videos will use the selected voice style. Currently only the default Professional Voice is available for production.' 
+                  : 'These are preview voices to help you choose. Upload a presenter photo above to enable AI video generation.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Calendly Link Section */}
         <div className="mt-6">
