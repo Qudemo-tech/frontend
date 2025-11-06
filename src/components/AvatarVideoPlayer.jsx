@@ -5,14 +5,58 @@ import React, { useState, useRef, useEffect } from 'react';
  * 
  * Displays HeyGen-generated AI avatar videos for document-based answers.
  * Provides a modern video player with playback controls.
+ * Now optimized to use preloaded video cache for instant playback!
  */
-const AvatarVideoPlayer = ({ avatarVideoUrl, answer, isVisible }) => {
+const AvatarVideoPlayer = ({ avatarVideoUrl, answer, isVisible, faqId, avatarVideoCache }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const videoRef = useRef(null);
+  const [cacheHit, setCacheHit] = useState(false);
+  const [videoSrc, setVideoSrc] = useState(avatarVideoUrl);
+
+  // Check cache and set video source for instant loading
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !avatarVideoUrl) return;
+
+    // Check if video is in cache
+    const cacheKey = faqId || avatarVideoUrl;
+    const cachedVideo = avatarVideoCache?.[cacheKey];
+
+    if (cachedVideo?.ready && cachedVideo?.element) {
+      console.log('⚡ INSTANT LOAD! Using cached video element');
+      console.log('⚡ Cache metadata:', {
+        duration: cachedVideo.element.duration,
+        readyState: cachedVideo.element.readyState,
+        networkState: cachedVideo.element.networkState
+      });
+      setCacheHit(true);
+      
+      // If cached video is fully loaded, use its src directly (browser cache will be instant)
+      if (cachedVideo.element.readyState >= 3) { // HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+        setIsLoading(false);
+        
+        // Copy metadata from cached video for instant display
+        if (cachedVideo.element.duration && !isNaN(cachedVideo.element.duration)) {
+          setDuration(cachedVideo.element.duration);
+        }
+      }
+      
+      // Set the source - browser will use its cache
+      setVideoSrc(avatarVideoUrl.replace(/ /g, '%20'));
+    } else {
+      console.log('⏳ Loading video from network...', {
+        cacheKey,
+        cacheStatus: cachedVideo ? 'LOADING' : 'NOT_FOUND'
+      });
+      setCacheHit(false);
+      setIsLoading(true);
+      setVideoSrc(avatarVideoUrl.replace(/ /g, '%20'));
+    }
+  }, [avatarVideoUrl, faqId, avatarVideoCache]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -34,6 +78,9 @@ const AvatarVideoPlayer = ({ avatarVideoUrl, answer, isVisible }) => {
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
       setIsLoading(false);
+      if (cacheHit) {
+        console.log('⚡ Cached video loaded instantly!');
+      }
     };
 
     const handlePlay = () => {
@@ -119,7 +166,9 @@ const AvatarVideoPlayer = ({ avatarVideoUrl, answer, isVisible }) => {
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-              <p className="text-white mt-2 text-sm">Loading avatar video...</p>
+              <p className="text-white mt-2 text-sm">
+                {cacheHit ? 'Loading from cache...' : 'Loading avatar video...'}
+              </p>
             </div>
           </div>
         )}
@@ -127,11 +176,12 @@ const AvatarVideoPlayer = ({ avatarVideoUrl, answer, isVisible }) => {
         <video
           ref={videoRef}
           className="w-full h-full object-contain"
-          src={avatarVideoUrl.replace(/ /g, '%20')}
+          src={videoSrc}
           autoPlay
           muted={false}
           preload="auto"
           playsInline
+          key={videoSrc} // Force re-render when src changes
         >
           Your browser does not support the video tag.
         </video>

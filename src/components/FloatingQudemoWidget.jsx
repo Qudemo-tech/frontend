@@ -47,6 +47,8 @@ const FloatingQudemoWidget = ({
   const previewVideoRef = useRef(null);
   const chatMessagesRef = useRef(null);
   const videoPreloadCacheRef = useRef({}); // Cache of preloaded video elements
+  const avatarVideoCacheRef = useRef({}); // Cache specifically for FAQ avatar videos
+  const cacheTimestampRef = useRef(null); // Track when cache was last refreshed
   const recognitionRef = useRef(null);
   const loomIframeRef = useRef(null);
   const hasLoadedDataRef = useRef(false); // Track if we've already loaded data
@@ -286,6 +288,122 @@ const FloatingQudemoWidget = ({
       // Video index changed - no need to reset ended state anymore
     }
   }, [currentVideoIndex, videoFlow, isExpanded]);
+
+  // Preload all FAQ avatar videos for instant playback
+  const preloadAvatarVideos = async () => {
+    if (!qudemoData || !qudemoData.id || !qudemoData.company_name) {
+      console.log('⚠️ Cannot preload avatar videos: missing qudemo data');
+      return;
+    }
+
+    // Check if cache needs refresh (refresh every 10 minutes)
+    const now = Date.now();
+    const CACHE_LIFETIME = 10 * 60 * 1000; // 10 minutes
+    
+    if (cacheTimestampRef.current && (now - cacheTimestampRef.current) < CACHE_LIFETIME) {
+      console.log('✅ Avatar video cache still fresh, skipping preload');
+      return;
+    }
+
+    try {
+      console.log('🎬 Starting avatar video preload...');
+      const companyName = qudemoData.company_name;
+      const qudemoId = qudemoData.id;
+
+      // Fetch all FAQs with their video URLs
+      const faqsUrl = getVideoApiUrl(`/faqs/${encodeURIComponent(companyName)}/${qudemoId}`);
+      const response = await fetch(faqsUrl);
+      
+      if (!response.ok) {
+        console.warn('⚠️ Could not fetch FAQs for preloading');
+        return;
+      }
+
+      const data = await response.json();
+      const faqs = data.faqs || [];
+      
+      console.log(`📦 Found ${faqs.length} FAQs to preload`);
+
+      // Preload up to 10 most important videos (intro + top 9 FAQs)
+      const videosToPreload = faqs.slice(0, 10).filter(faq => faq.avatar_video_url);
+      
+      console.log(`🎯 Preloading ${videosToPreload.length} avatar videos...`);
+
+      for (const faq of videosToPreload) {
+        const videoUrl = faq.avatar_video_url;
+        const cacheKey = faq.id || videoUrl;
+
+        // Skip if already cached
+        if (avatarVideoCacheRef.current[cacheKey]?.ready) {
+          continue;
+        }
+
+        // Create hidden video element for preloading
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        video.preload = 'auto';
+        video.muted = true;
+        video.style.display = 'none';
+        video.crossOrigin = 'anonymous';
+
+        // Add to DOM to trigger loading
+        document.body.appendChild(video);
+
+        // Track when video is loaded
+        video.addEventListener('canplaythrough', () => {
+          avatarVideoCacheRef.current[cacheKey] = {
+            element: video,
+            ready: true,
+            url: videoUrl,
+            question: faq.question
+          };
+          console.log(`✅ Cached avatar video: ${faq.question.substring(0, 50)}...`);
+        });
+
+        video.addEventListener('error', (e) => {
+          console.error(`❌ Failed to preload avatar video: ${faq.question}`, e);
+          if (video.parentNode) {
+            video.parentNode.removeChild(video);
+          }
+          delete avatarVideoCacheRef.current[cacheKey];
+        });
+
+        // Store reference immediately (even before loaded)
+        avatarVideoCacheRef.current[cacheKey] = {
+          element: video,
+          ready: false,
+          url: videoUrl,
+          question: faq.question
+        };
+      }
+
+      // Update cache timestamp
+      cacheTimestampRef.current = now;
+      console.log(`✅ Avatar video preload initiated. Cache will refresh in 10 minutes.`);
+
+    } catch (error) {
+      console.error('❌ Error preloading avatar videos:', error);
+    }
+  };
+
+  // Trigger avatar video preloading when qudemoData is available
+  useEffect(() => {
+    if (qudemoData && isExpanded) {
+      preloadAvatarVideos();
+    }
+  }, [qudemoData, isExpanded]);
+
+  // Cleanup avatar video cache on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(avatarVideoCacheRef.current).forEach(cached => {
+        if (cached?.element?.parentNode) {
+          cached.element.parentNode.removeChild(cached.element);
+        }
+      });
+      avatarVideoCacheRef.current = {};
+    };
+  }, []);
 
   const loadVideoThumbnail = async () => {
     try {
@@ -663,8 +781,18 @@ const FloatingQudemoWidget = ({
         
         // If we got an avatar video for sales inquiry, use it
         if (data && data.has_avatar_video && data.avatar_video_url) {
-        setChatMessages(prev => [...prev, { 
-          type: 'bot', 
+          // Check cache for sales inquiry video
+          const cacheKey = 'faq_fallback_sales';
+          const cachedVideo = avatarVideoCacheRef.current[cacheKey];
+          
+          if (cachedVideo?.ready) {
+            console.log('⚡ CACHE HIT! Sales inquiry video ready');
+          } else {
+            console.log('⏳ Cache miss for sales inquiry video');
+          }
+          
+          setChatMessages(prev => [...prev, { 
+            type: 'bot', 
             text: data.answer
           }]);
           
@@ -771,11 +899,23 @@ const FloatingQudemoWidget = ({
         });
         
         if (data.has_avatar_video && data.avatar_video_url) {
-          console.log('✅ Setting avatar video state:', {
-            videoUrl: data.avatar_video_url,
-            answer: data.answer,
-            faqId: data.faq_id
-          });
+          // Check if video is in cache
+          const cacheKey = data.faq_id || data.avatar_video_url;
+          const cachedVideo = avatarVideoCacheRef.current[cacheKey];
+          
+          if (cachedVideo?.ready) {
+            console.log('⚡ CACHE HIT! Using preloaded avatar video:', {
+              videoUrl: data.avatar_video_url,
+              faqId: data.faq_id,
+              cacheStatus: 'READY'
+            });
+          } else {
+            console.log('⏳ Cache miss, loading avatar video:', {
+              videoUrl: data.avatar_video_url,
+              faqId: data.faq_id,
+              cacheStatus: cachedVideo ? 'LOADING' : 'NOT_CACHED'
+            });
+          }
           
           // Display avatar video
           setCurrentAvatarVideo({
@@ -1386,6 +1526,8 @@ const FloatingQudemoWidget = ({
                        avatarVideoUrl={currentAvatarVideo.videoUrl}
                        answer={currentAvatarVideo.answer}
                        isVisible={isExpanded}
+                       faqId={currentAvatarVideo.faqId}
+                       avatarVideoCache={avatarVideoCacheRef.current}
                      />
                    </div>
                  ) : videoFlow && videoFlow.videos && videoFlow.videos[currentVideoIndex] ? (
