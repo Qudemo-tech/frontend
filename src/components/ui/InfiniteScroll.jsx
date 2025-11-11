@@ -5,74 +5,63 @@ const InfiniteScroll = ({ right = false }) => {
   const logos = [
     {
       name: "Opal",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/otv1rEDn2X7h8TFtKPCksQmAEKQ.svg?width=75&height=17",
+      opacity: 1,
+      image: "/zuna.png",
     },
     {
       name: "Dune",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/rrRoFs4icQtustYbIGm5r5DXREI.svg?width=50&height=17",
+      opacity: 1,
+      image: "/thaklis logo.png",
     },
     {
       name: "Oasis",
-      opacity: 0.7,
-      image:
-        "https://framerusercontent.com/images/hhTRf8RciR9bakkAgIckAkEiQM.svg?width=57&height=18",
+      opacity: 1,
+      image: "/rateup-logo-blue-text.svg",
     },
     {
       name: "Asterisk",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/1ph1389RD4RtUDEfqVhWbujyF7s.svg?width=56&height=20",
+      opacity: 1,
+      image: "/katha-logo-ignite.png",
     },
     {
       name: "Cooks",
-      opacity: 0.5,
-      image:
-        "https://framerusercontent.com/images/Yn3MOOL9rTXhK9U8MLvSnEoNP8.svg?width=45&height=14",
+      opacity: 1,
+      image: "/dgymbook.png",
     },
     {
       name: "Opal",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/otv1rEDn2X7h8TFtKPCksQmAEKQ.svg?width=75&height=17",
+      opacity: 1,
+      image: "/zuna.png",
     },
     {
       name: "Dune",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/rrRoFs4icQtustYbIGm5r5DXREI.svg?width=50&height=17",
+      opacity: 1,
+      image: "/thaklis logo.png",
     },
     {
       name: "Oasis",
-      opacity: 0.7,
-      image:
-        "https://framerusercontent.com/images/hhTRf8RciR9bakkAgIckAkEiQM.svg?width=57&height=18",
+      opacity: 1,
+      image: "/rateup-logo-blue-text.svg",
     },
     {
       name: "Asterisk",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/1ph1389RD4RtUDEfqVhWbujyF7s.svg?width=56&height=20",
+      opacity: 1,
+      image: "/katha-logo-ignite.png",
     },
     {
       name: "Cooks",
-      opacity: 0.5,
-      image:
-        "https://framerusercontent.com/images/Yn3MOOL9rTXhK9U8MLvSnEoNP8.svg?width=45&height=14",
+      opacity: 1,
+      image: "/dgymbook.png",
     },
     {
       name: "Opal",
-      opacity: 0.4,
-      image:
-        "https://framerusercontent.com/images/otv1rEDn2X7h8TFtKPCksQmAEKQ.svg?width=75&height=17",
+      opacity: 1,
+      image: "/zuna.png",
     },
   ];
 
   return (
-    <div className="carousel-continaer max-w-5xl mx-auto w-full overflow-hidden">
+    <div className="carousel-continaer max-w-5xl mx-auto w-full overflow-hidden my-10">
       {/* Scrolling container with opacity mask */}
       <div
         className="absolute left-0 top-0 bottom-0 w-32 z-10 pointer-events-none"
@@ -93,7 +82,7 @@ const InfiniteScroll = ({ right = false }) => {
         {logos.map((logo, index) => (
           <div
             key={index}
-            className="carousel-item"
+            className="carousel-item flex items-center"
             style={{
               opacity: logo.opacity,
             }}
@@ -106,7 +95,8 @@ const InfiniteScroll = ({ right = false }) => {
               alt=""
               style={{
                 display: "block",
-                height: "26px",
+                maxHeight: "62px",
+                margin: "auto",
                 width: "auto",
                 borderRadius: "inherit",
                 objectPosition: "center center",

@@ -240,7 +240,7 @@ const HomePage = () => {
             <img
               src="/Qudemo LP.svg"
               alt="Qudemo Logo"
-              className="cursor-pointer w-auto h-8 scale-[3] ml-2"
+              className="cursor-pointer w-auto h-8 scale-[3.5] ml-2.5"
               height={36}
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             />
@@ -306,7 +306,7 @@ const HomePage = () => {
         {/* Hero Section */}
         <FadeInSection delay={0} className="flex flex-col z-[999]">
           <div
-            className="flex justify-center flex-col items-center pt-60 px-6 h-[60vh] relative"
+            className="flex justify-center flex-col items-center pt-60 px-6 relative"
             style={{
               background:
                 "radial-gradient(80% 25% at 50% 7.5%,var(--token-c6d9a740-f8af-44c7-ac7a-31b27a79b7f2,#000e47)0%,var(--token-6d7bfc0f-867f-43f5-837b-f61a13bf9490,#000)100%)",
@@ -466,7 +466,7 @@ const HomePage = () => {
             />
           </div>
           <div
-            className="px-6 min-h-[100vh] relative my-auto flex flex-col justify-center overflow-hidden"
+            className="px-6 py-40 relative my-auto flex flex-col justify-center overflow-hidden"
             id="benefits"
           >
             <div className="absolute top-0 left-0 right-0 w-full h-[100vh] bottom-0 opacity-[0.2] z-50">
@@ -624,7 +624,7 @@ const HomePage = () => {
           </div>
 
           <div
-            className="px-6 min-h-[80vh] relative overflow-hidden flex flex-col justify-center"
+            className="px-6 py-40 relative overflow-hidden flex flex-col justify-center"
             id="why"
           >
             <div
@@ -766,7 +766,7 @@ const HomePage = () => {
             }}
           />
           <div
-            className="px-6 min-h-[100vh] flex flex-col my-auto justify-center overflow-hidden"
+            className="px-6 py-40 flex flex-col my-auto justify-center overflow-hidden"
             id="testimonials"
             style={{
               background: "rgba(0, 0, 0, 0.6)",
@@ -858,7 +858,7 @@ const HomePage = () => {
         </FadeInSection>
 
         {/* Pricing Section */}
-        <FadeInSection delay={0.1} className="flex flex-col py-20 relative">
+        <FadeInSection delay={0.1} className="flex flex-col relative">
           <div className="absolute top-0 left-0 right-0 w-full bottom-0 opacity-[0.2]">
             <LightRays
               lightSpread={200}
@@ -871,7 +871,7 @@ const HomePage = () => {
             />
           </div>
           <div
-            className="px-6 w-full flex flex-col my-auto justify-center overflow-hidden"
+            className="px-6 w-full py-40 flex flex-col my-auto justify-center overflow-hidden"
             id="pricing"
           >
             <div
@@ -1023,7 +1023,7 @@ const HomePage = () => {
             }}
           />
           <div
-            className="px-6 z-50 bg-transparent min-h-[40vh] my-auto flex flex-col justify-center overflow-hidden"
+            className="px-6 z-50 bg-transparent py-40 my-auto flex flex-col justify-center overflow-hidden"
             style={{
               borderColor: "rgba(138, 165, 255, 0.3)",
               boxShadow: "0 4px 24px rgba(41, 52, 255, 0.1)",
@@ -1066,7 +1066,7 @@ const HomePage = () => {
         </FadeInSection>
 
         {/* Seamless Integrations Section */}
-        <FadeInSection delay={0.1} className="pt-20 !min-h-[40vh] relative">
+        <FadeInSection delay={0.1} className="relative">
           <div className="absolute top-0 left-0 right-0 w-full bottom-0 opacity-[0.2] z-50">
             <LightRays
               lightSpread={200}
@@ -1078,7 +1078,7 @@ const HomePage = () => {
               raysSpeed={1.0}
             />
           </div>
-          <div className="px-6 relative min-h-[40vh] flex items-center justify-center overflow-hidden">
+          <div className="px-6 relative pt-40 -mb-36 flex items-center justify-center overflow-hidden">
             <div className="max-w-7xl mx-auto text-center relative w-full">
               {/* Badge */}
               <div className="flex justify-center mb-8">
@@ -1433,29 +1433,6 @@ const HomePage = () => {
                     />
                   </line>
                 </svg>
-
-                {/* Light beams emanating from center */}
-                <div
-                  className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full pointer-events-none"
-                  style={{ zIndex: 0 }}
-                >
-                  {[0, 90, 180, 270, 360].map((angle, i) => (
-                    <div
-                      key={i}
-                      className="absolute left-1/2 top-1/2 origin-left"
-                      style={{
-                        width: "400px",
-                        height: "2px",
-                        background:
-                          "linear-gradient(45deg, rgba(59, 130, 246, 0.3) 0%, transparent 100%)",
-                        transform: `rotate(${angle}deg)`,
-                        animation: `beamPulse ${2 + i * 0.3}s ease-in-out infinite`,
-                        animationDelay: `${i * 0.2}s`,
-                        filter: "blur(2px)",
-                      }}
-                    />
-                  ))}
-                </div>
               </div>
             </div>
 
@@ -1856,7 +1833,7 @@ const HomePage = () => {
             />
           </div>
           <div
-            className="py-16 px-6 min-h-[80vh] overflow-hidden"
+            className="px-6 pb-40 overflow-hidden"
             id="faq"
             style={{
               background: "rgba(0, 0, 0, 0.7)",
