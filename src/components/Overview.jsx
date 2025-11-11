@@ -49,12 +49,12 @@ const activity = [
 
 const Overview = () => {
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6 dashboard-font">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-xl sm:text-2xl font-semibold">Overview</h2>
         <Link to="/create" className="w-full sm:w-auto">
-          <button className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2">
+          <button className="w-full sm:w-auto bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 flex items-center justify-center gap-2">
             Create Qudemo
           </button>
         </Link>
@@ -135,9 +135,8 @@ const Overview = () => {
                   {user.initial}
                 </div>
                 <div className="text-sm">
-                  <span className="font-medium">{user.name}</span>{" "}
-                  {user.action} demo{" "}
-                  <span className="font-semibold">{user.demo}</span>
+                  <span className="font-medium">{user.name}</span> {user.action}{" "}
+                  demo <span className="font-semibold">{user.demo}</span>
                   <div className="text-gray-500 text-xs mt-1">
                     {user.time} • {user.questions} questions asked
                   </div>

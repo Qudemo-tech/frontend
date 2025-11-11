@@ -118,13 +118,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           transition-all duration-300 ease-in-out
           overflow-hidden flex flex-col
           ${isOpen ? "w-72" : "w-0 border-r-0"}
-          md:relative
+          md:relative dashboard-font font-medium
           fixed md:static top-0 left-0 z-50
         `}
       >
         <div className="w-72 flex flex-col h-full overflow-y-auto">
           {/* Logo Section */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-strokedark/10 flex-shrink-0">
+          <div className="flex items-center justify-between px-8 py-4 flex-shrink-0">
             <Link
               to="/overview"
               className="cursor-pointer"
@@ -133,7 +133,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
               <img
                 src="/Qudemo.svg"
                 alt="Qudemo Logo"
-                className="h-10 ml-5 scale-[2.5] w-auto hover:opacity-80 transition-opacity"
+                className="h-10 ml-8 mt-4 scale-[3] w-auto hover:opacity-80 transition-opacity"
               />
             </Link>
             {/* Close button (mobile only) */}
@@ -146,8 +146,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </div>
 
           {/* MENU Section */}
-          <div className="px-4 py-4 text-left">
-            <h3 className="text-xs font-semibold text-bodydark2 uppercase tracking-wider">
+          <div className="px-5 py-4 text-left">
+            <h3 className="text-[12px] font-normal text-bodydark2 uppercase tracking-wider">
               MENU
             </h3>
           </div>
@@ -177,7 +177,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                     onClick={handleMobileClose}
                     className={({ isActive }) => {
                       const baseClasses =
-                        "flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 relative group";
+                        "flex items-center gap-3 px-3.5 py-2 rounded-lg font-medium transition-all duration-200 relative group";
 
                       if (isActive) {
                         return `${baseClasses} bg-blue-500/10 text-primary`;
@@ -190,10 +190,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                       }
                     }}
                   >
-                    {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
+                    {Icon && <Icon className="size-6 flex-shrink-0" />}
                     {/* COMMENTED OUT FOR TESTING - No lock icons shown */}
                     {/* {showLock && <LockClosedIcon className="h-3 w-3" />} */}
-                    <span className="text-sm">{name}</span>
+                    <span className="text-[14px]">{name}</span>
                     {isBeta && (
                       <span className="ml-auto px-2 py-0.5 text-xs font-semibold text-white bg-success rounded">
                         NEW
@@ -206,8 +206,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </nav>
 
           {/* SUPPORT Section */}
-          <div className="px-4 py-4 text-left mt-auto">
-            <h3 className="text-xs font-semibold text-bodydark2 uppercase tracking-wider">
+          <div className="px-5 py-4 text-left mt-auto">
+            <h3 className="text-[12px] font-normal text-bodydark2 uppercase tracking-wider">
               SUPPORT
             </h3>
           </div>
@@ -262,36 +262,24 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </div>
 
           {/* Bottom section with plan */}
-          <div className="p-4 border-t border-strokedark/10 bg-white">
+          <div className="p-4 bg-white">
             {/* Current Plan Container */}
             <div
-              className="block bg-whiten rounded-lg p-3.5 border border-strokedark/10 hover:bg-primary/5 hover:border-primary/30 transition-all duration-200 cursor-pointer"
+              className="block bg-gray-50 rounded-lg p-3.5 hover:bg-primary/5 hover:border-primary/30 transition-all duration-200 cursor-pointer"
               onClick={handlePlanClick}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between flex-col items-start gap-2">
                 <div className="flex flex-col space-y-0.5 text-left">
-                  <p className="text-sm font-semibold text-graydark text-left">
+                  <p className="text-base font-semibold text-graydark text-left">
                     {subscriptionPlan === "pro" ? "Pro Plan" : "Free Plan"}
                   </p>
-                  <p className="text-xs text-primary font-medium text-left">
-                    {subscriptionPlan === "pro" ? "Manage Plan" : "Upgrade"}
-                  </p>
                 </div>
-                <div className="flex-shrink-0">
-                  <svg
-                    className="w-4 h-4 text-primary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7l5 5m0 0l-5 5m5-5H6"
-                    />
-                  </svg>
-                </div>
+                <button
+                  onClick={handlePlanClick}
+                  className="bg-primary w-full hover:bg-primary/90 text-white px-6 h-12 rounded-lg text-sm font-medium transition-colors duration-200"
+                >
+                  {subscriptionPlan === "pro" ? "Manage Plan" : "Upgrade"}
+                </button>
               </div>
             </div>
           </div>

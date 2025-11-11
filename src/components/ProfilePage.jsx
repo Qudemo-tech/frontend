@@ -348,7 +348,7 @@ export default function ProfilePage() {
                   type="button"
                   onClick={handleSaveProfile}
                   disabled={isSavingProfile}
-                  className="inline-flex justify-center h-12 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex justify-center py-3 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSavingProfile ? "Saving..." : "Save Changes"}
                 </button>
@@ -356,7 +356,7 @@ export default function ProfilePage() {
                   type="button"
                   onClick={handleCancelProfile}
                   disabled={isSavingProfile}
-                  className="inline-flex justify-center h-12 px-4 border border-strokedark/20 shadow-sm text-sm font-medium rounded-md text-bodydark bg-white hover:bg-whiter focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex justify-center py-3 px-4 border border-strokedark/20 shadow-sm text-sm font-medium rounded-md text-bodydark bg-white hover:bg-whiter focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

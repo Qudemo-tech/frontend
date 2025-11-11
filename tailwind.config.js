@@ -5,7 +5,7 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#3C50E0",
+          DEFAULT: "#465fff",
           50: "#F0F2FE",
           100: "#E1E6FD",
           200: "#C3CDFB",
@@ -40,7 +40,7 @@ module.exports = {
         whiter: "#f9fafb",
         boxdark: "#24303F",
         "boxdark-2": "#1A222C",
-        graydark: "#333A48",
+        graydark: "#1d2939",
       },
       animation: {
         "star-movement-bottom":

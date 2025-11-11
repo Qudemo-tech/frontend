@@ -4,6 +4,7 @@ import { useCompany } from "../context/CompanyContext";
 import { getNodeApiUrl, getApiUrl } from "../config/api";
 import { useNavigate } from "react-router-dom";
 import DocumentUpload from "./DocumentUpload";
+import { CircleCheck, Info } from "lucide-react";
 const CreateQuDemo = () => {
   const { company, isLoading } = useCompany();
   const navigate = useNavigate();
@@ -39,16 +40,16 @@ const CreateQuDemo = () => {
   useEffect(() => {
     // Load voices immediately
     window.speechSynthesis.getVoices();
-    
+
     // Also load on voiceschanged event (for browsers that load async)
     const loadVoices = () => {
       window.speechSynthesis.getVoices();
     };
-    
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    
+
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+
     return () => {
-      window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+      window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
     };
   }, []);
 
@@ -56,7 +57,7 @@ const CreateQuDemo = () => {
   useEffect(() => {
     const fetchVoices = async () => {
       try {
-        const pythonApiUrl = getApiUrl('python');
+        const pythonApiUrl = getApiUrl("python");
         const response = await fetch(`${pythonApiUrl}/heygen-voices`);
         const data = await response.json();
         if (data.success && data.voices) {
@@ -155,21 +156,31 @@ const CreateQuDemo = () => {
 
     // Create speech synthesis utterance
     const utterance = new SpeechSynthesisUtterance(voice.sample_text);
-    
+
     // Configure voice characteristics based on gender
     const availableVoices = window.speechSynthesis.getVoices();
     let selectedBrowserVoice;
-    
+
     if (voice.gender === "Female") {
-      selectedBrowserVoice = availableVoices.find(v => v.name.includes("Female") || v.name.includes("Samantha") || v.name.includes("Victoria"));
+      selectedBrowserVoice = availableVoices.find(
+        (v) =>
+          v.name.includes("Female") ||
+          v.name.includes("Samantha") ||
+          v.name.includes("Victoria"),
+      );
     } else {
-      selectedBrowserVoice = availableVoices.find(v => v.name.includes("Male") || v.name.includes("Daniel") || v.name.includes("Alex"));
+      selectedBrowserVoice = availableVoices.find(
+        (v) =>
+          v.name.includes("Male") ||
+          v.name.includes("Daniel") ||
+          v.name.includes("Alex"),
+      );
     }
-    
+
     if (selectedBrowserVoice) {
       utterance.voice = selectedBrowserVoice;
     }
-    
+
     // Set rate and pitch from voice data
     utterance.rate = voice.rate || 1.0;
     utterance.pitch = voice.pitch || 1.0;
@@ -844,19 +855,19 @@ const CreateQuDemo = () => {
     );
   }
   return (
-    <div className="min-h-screen bg-whiter flex items-start justify-center pt-8">
-      <div className="w-full max-w-2xl mx-auto px-4">
+    <div className="min-h-screen bg-whiter flex items-center flex-col justify-center pt-8 dashboard-font">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-graydark mb-3">
+          Create New Qudemo
+        </h1>
+        <p className="text-base text-normal text-bodydark">
+          Create an interactive demo that allows prospects to learn about your
+          product at their own pace.
+        </p>
+      </div>
+      <div className="w-full max-w-2xl p-6 bg-white rounded-2xl border border-gray-200">
         {/* Main Heading and Subheading */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-graydark mb-3">
-            Create New Qudemo
-          </h1>
-          <p className="text-lg text-bodydark">
-            Create an interactive demo that allows prospects to learn about your
-            product at their own pace.
-          </p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-6 mt-16">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Qudemo Title */}
           <div>
             <label className="block text-sm font-bold text-graydark mb-2 text-left">
@@ -868,7 +879,7 @@ const CreateQuDemo = () => {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter qudemo title"
               required
-              className="w-full border border-strokedark/20 px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full text-[14px] border px-4 py-3 rounded-lg focus:border-blue-400 outline-none focus:ring-2 focus:ring-blue-500/40"
             />
           </div>
           {/* Video URL */}
@@ -881,7 +892,7 @@ const CreateQuDemo = () => {
             </p>
             {videoUrls.map((url, index) => (
               <div key={index} className="mb-4">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 relative">
                   <input
                     type="text"
                     value={url}
@@ -889,11 +900,11 @@ const CreateQuDemo = () => {
                       handleVideoUrlChange(index, e.target.value)
                     }
                     placeholder="https://www.loom.com/share/your-video-id or https://youtube.com/watch?v="
-                    className={`flex-1 border px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full text-[14px] border px-4 py-3 rounded-lg focus:border-blue-400 outline-none focus:ring-2 focus:ring-blue-500/40 ${
                       urlValidationErrors[index]
-                        ? "border-red-500 bg-red-50"
+                        ? "!border-red-500"
                         : url.trim() && !urlValidationErrors[index]
-                          ? "border-green-500 bg-green-50"
+                          ? "border-green-500"
                           : "border-strokedark/20"
                     }`}
                   />
@@ -906,14 +917,20 @@ const CreateQuDemo = () => {
                       <XMarkIcon className="h-5 w-5" />
                     </button>
                   )}
+                  {urlValidationErrors[index] && (
+                    <Info className="size-4 text-red-400 absolute right-4 top-0 bottom-0 my-auto" />
+                  )}
+                  {url.trim() && !urlValidationErrors[index] && (
+                    <CircleCheck className="size-4 text-green-400 absolute right-4 top-0 bottom-0 my-auto" />
+                  )}
                 </div>
                 {urlValidationErrors[index] && (
-                  <p className="text-red-500 text-sm mt-1 ml-1">
+                  <p className="text-red-500 text-xs mt-1 ml-1 text-left">
                     {urlValidationErrors[index]}
                   </p>
                 )}
                 {url.trim() && !urlValidationErrors[index] && (
-                  <p className="text-green-600 text-sm mt-1 ml-1">
+                  <p className="text-green-600 text-xs mt-1 ml-1 text-left">
                     ✓ Valid {url.includes("loom.com") ? "Loom" : "YouTube"} URL
                   </p>
                 )}
@@ -1030,14 +1047,12 @@ const CreateQuDemo = () => {
                 </div>
               </div>
             </div>
-            <div className="mb-6 p-4 border border-strokedark/10 rounded-lg">
-              <DocumentUpload
-                qudemoId={createdQudemoId}
-                companyName={company?.name}
-                onDocumentsChange={setDocuments}
-                onSelectedFilesChange={setSelectedFiles}
-              />
-            </div>
+            <DocumentUpload
+              qudemoId={createdQudemoId}
+              companyName={company?.name}
+              onDocumentsChange={setDocuments}
+              onSelectedFilesChange={setSelectedFiles}
+            />
           </div>
 
           {/* Presenter Photo Upload Section - Always visible */}
@@ -1147,9 +1162,10 @@ const CreateQuDemo = () => {
               </span>
             </label>
             <p className="text-xs text-gray-500 mb-3 text-left">
-              Choose a voice for your AI avatar videos. Click preview to hear the voice.
+              Choose a voice for your AI avatar videos. Click preview to hear
+              the voice.
             </p>
-            
+
             {voices.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1182,7 +1198,11 @@ const CreateQuDemo = () => {
                           )}
                           <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
                             <span className="flex items-center gap-1">
-                              {voice.gender === 'Male' ? '👨' : voice.gender === 'Female' ? '👩' : '👤'}
+                              {voice.gender === "Male"
+                                ? "👨"
+                                : voice.gender === "Female"
+                                  ? "👩"
+                                  : "👤"}
                               {voice.gender}
                             </span>
                             <span>•</span>
@@ -1202,37 +1222,63 @@ const CreateQuDemo = () => {
                               ? "bg-red-500 hover:bg-red-600"
                               : "bg-blue-500 hover:bg-blue-600"
                           }`}
-                          title={isPlayingVoice === voice.id ? "Stop preview" : "Play voice preview"}
+                          title={
+                            isPlayingVoice === voice.id
+                              ? "Stop preview"
+                              : "Play voice preview"
+                          }
                         >
                           {isPlayingVoice === voice.id ? (
                             <>
-                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                              <svg
+                                className="w-3.5 h-3.5"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
+                                  clipRule="evenodd"
+                                />
                               </svg>
                               Stop
                             </>
                           ) : (
                             <>
-                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                              <svg
+                                className="w-3.5 h-3.5"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
                                 <path d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" />
                               </svg>
                               Play
                             </>
                           )}
                         </button>
-                        
+
                         {/* Audio playing indicator */}
                         {isPlayingVoice === voice.id && (
                           <div className="mt-3 p-2 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg text-xs text-left">
                             <div className="flex items-start gap-2">
                               <div className="flex items-center gap-1 mt-0.5">
                                 <span className="w-1 h-3 bg-blue-500 rounded animate-pulse"></span>
-                                <span className="w-1 h-4 bg-blue-500 rounded animate-pulse" style={{ animationDelay: '0.2s' }}></span>
-                                <span className="w-1 h-3 bg-blue-500 rounded animate-pulse" style={{ animationDelay: '0.4s' }}></span>
+                                <span
+                                  className="w-1 h-4 bg-blue-500 rounded animate-pulse"
+                                  style={{ animationDelay: "0.2s" }}
+                                ></span>
+                                <span
+                                  className="w-1 h-3 bg-blue-500 rounded animate-pulse"
+                                  style={{ animationDelay: "0.4s" }}
+                                ></span>
                               </div>
                               <div className="flex-1">
-                                <p className="text-blue-900 font-semibold mb-1">🔊 Playing...</p>
-                                <p className="italic text-blue-700 leading-relaxed text-xs">"{voice.sample_text}"</p>
+                                <p className="text-blue-900 font-semibold mb-1">
+                                  🔊 Playing...
+                                </p>
+                                <p className="italic text-blue-700 leading-relaxed text-xs">
+                                  "{voice.sample_text}"
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -1241,19 +1287,30 @@ const CreateQuDemo = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {/* Show More Button */}
                 {visibleVoiceRows * 3 < voices.length && (
                   <div className="mt-4 text-center">
                     <button
                       type="button"
-                      onClick={() => setVisibleVoiceRows(prev => prev + 3)}
+                      onClick={() => setVisibleVoiceRows((prev) => prev + 3)}
                       className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all shadow-md hover:shadow-lg flex items-center gap-2 mx-auto"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
                       </svg>
-                      Show More Voices ({voices.length - (visibleVoiceRows * 3)} remaining)
+                      Show More Voices ({voices.length - visibleVoiceRows * 3}{" "}
+                      remaining)
                     </button>
                   </div>
                 )}
@@ -1282,7 +1339,7 @@ const CreateQuDemo = () => {
               value={calendlyLink}
               onChange={(e) => setCalendlyLink(e.target.value)}
               placeholder="https://calendly.com/your-username/meeting"
-              className={`w-full border px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+              className={`w-full text-[14px] border px-4 py-3 rounded-lg focus:border-blue-400 outline-none focus:ring-2 focus:ring-blue-500/40 ${
                 calendlyLink.trim() &&
                 !validateCalendlyUrl(calendlyLink).isValid
                   ? "border-red-500 bg-red-50"
@@ -1310,7 +1367,7 @@ const CreateQuDemo = () => {
           <button
             type="submit"
             disabled={isSubmitting || !areAllUrlsValid()}
-            className={`w-full font-bold h-10 px-6 rounded-lg transition-colors duration-200 ${
+            className={`w-full font-bold py-3 px-6 rounded-lg transition-colors duration-200 ${
               isSubmitting || !areAllUrlsValid()
                 ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                 : "bg-primary hover:bg-primary/90 text-white"

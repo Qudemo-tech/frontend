@@ -28,7 +28,7 @@ export default function AnalyticsPage() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-semibold">Insights & Analytics</h2>
         <Link to="/create">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2">
+          <button className="bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
             + Create Qudemo
           </button>
         </Link>
@@ -156,8 +156,8 @@ export default function AnalyticsPage() {
                           parseInt(comp) >= 75
                             ? "bg-green-500"
                             : parseInt(comp) >= 60
-                            ? "bg-yellow-400"
-                            : "bg-red-500"
+                              ? "bg-yellow-400"
+                              : "bg-red-500"
                         }`}
                       />
                       <span>{comp}</span>

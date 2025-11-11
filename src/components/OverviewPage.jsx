@@ -96,21 +96,21 @@ const OverviewPage = () => {
   }
 
   return (
-    <div className="bg-whiter min-h-screen">
+    <div className="bg-whiter min-h-screen dashboard-font">
       {/* Header */}
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex justify-between items-start mb-4">
         <div className="text-left">
-          <h1 className="text-3xl font-bold text-graydark text-left">
+          <h1 className="text-2xl font-bold text-graydark text-left">
             Overview
           </h1>
-          <p className="text-base text-bodydark mt-1 text-left">
+          <p className="text-base text-gray-500 text-left">
             Welcome back! Here's what's happening with your Qudemos.
           </p>
         </div>
 
         <button
           onClick={handleCreateQudemo}
-          className="bg-primary hover:bg-primary/90 text-white px-6 h-10 rounded-lg font-medium flex items-center gap-2 transition-all duration-200"
+          className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all duration-200"
         >
           <PlusIcon className="w-5 h-5" />
           Create Qudemo
@@ -118,53 +118,53 @@ const OverviewPage = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         {/* Total Demo Views */}
-        <div className="bg-white rounded-lg border border border-strokedark/10 p-6 transition-shadow duration-200">
+        <div className="bg-white rounded-2xl border border border-strokedark/10 p-6 transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div className="flex-1 text-left">
-              <h3 className="text-sm font-medium text-bodydark mb-2 text-left">
+              <h3 className="text-sm font-normal text-gray-500 mb-2 text-left">
                 Total Qudemo Views
               </h3>
               <p className="text-3xl font-bold text-graydark text-left">
                 {stats.totalViews.toLocaleString()}
               </p>
             </div>
-            <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10">
+            <div className="flex items-center justify-center w-11 h-11 rounded-[12px] bg-primary/10">
               <EyeIcon className="w-5 h-5 text-primary" />
             </div>
           </div>
         </div>
 
         {/* Questions Asked */}
-        <div className="bg-white rounded-lg border border border-strokedark/10 p-6 transition-shadow duration-200">
+        <div className="bg-white rounded-2xl border border border-strokedark/10 p-6 transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div className="flex-1 text-left">
-              <h3 className="text-sm font-medium text-bodydark mb-2 text-left">
+              <h3 className="text-sm font-medium text-gray-500 mb-2 text-left">
                 Questions Asked
               </h3>
               <p className="text-3xl font-bold text-graydark text-left">
                 {stats.questionsAsked.toLocaleString()}
               </p>
             </div>
-            <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-meta-3/10">
+            <div className="flex items-center justify-center w-11 h-11 rounded-[12px] bg-meta-3/10">
               <ChatBubbleLeftRightIcon className="w-5 h-5 text-meta-3" />
             </div>
           </div>
         </div>
 
         {/* Avg. Engagement */}
-        <div className="bg-white rounded-lg border border border-strokedark/10 p-6 transition-shadow duration-200">
+        <div className="bg-white rounded-2xl border border border-strokedark/10 p-6 transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div className="flex-1 text-left">
-              <h3 className="text-sm font-medium text-bodydark mb-2 text-left">
+              <h3 className="text-sm font-medium text-gray-500 mb-2 text-left">
                 Avg. Engagement
               </h3>
               <p className="text-3xl font-bold text-graydark text-left">
                 {stats.avgEngagement}%
               </p>
             </div>
-            <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-warning/10">
+            <div className="flex items-center justify-center w-11 h-11 rounded-[12px] bg-warning/10">
               <ChartBarIcon className="w-5 h-5 text-warning" />
             </div>
           </div>
@@ -172,14 +172,14 @@ const OverviewPage = () => {
       </div>
 
       {/* Recent Interactions Section */}
-      <div className="mt-8">
+      <div className="mt-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-graydark text-left">
+          <h2 className="text-2xl font-semibold text-graydark text-left">
             Recent Interactions
           </h2>
           <button
             onClick={() => navigate("/customer-interactions")}
-            className="bg-primary hover:bg-primary/90 text-white px-6 h-10 rounded-lg text-sm font-medium transition-colors duration-200"
+            className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors duration-200"
           >
             View in Detail
           </button>
@@ -195,7 +195,7 @@ const OverviewPage = () => {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                      <div className="w-10 h-10 bg-primary/10 rounded-[12px] flex items-center justify-center">
                         <ChatBubbleLeftRightIcon className="w-5 h-5 text-primary" />
                       </div>
                       <div className="text-left">

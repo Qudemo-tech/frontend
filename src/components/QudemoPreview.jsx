@@ -649,7 +649,7 @@ const QudemoPreview = ({ qudemo, onClose }) => {
 
   const currentVideo = qudemo?.videos?.[currentVideoIndex];
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-[9999] flex items-center justify-center p-4 dashboard-font">
       <div className="w-full max-w-7xl h-full max-h-[85vh] bg-white rounded-lg shadow-2xl flex flex-col md:flex-row overflow-hidden relative">
         {/* Video Section */}
         <div
@@ -1013,7 +1013,7 @@ const QudemoPreview = ({ qudemo, onClose }) => {
             <button
               onClick={handleScheduleMeeting}
               disabled={loadingCalendly}
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 shadow-sm hover:border disabled:opacity-50 disabled:cursor-not-allowed
+              className={`inline-flex w-full justify-center items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-200 shadow-sm border disabled:opacity-50 disabled:cursor-not-allowed
                 bg-blue-600 text-white hover:bg-blue-700`}
             >
               {loadingCalendly ? (

@@ -775,7 +775,7 @@ const Qudemos = () => {
     if (!company?.id) {
       setLoading(false);
       setError("No company found. Please create a company first.");
-      setQudemos([]);
+      // setQudemos([]);
       return;
     }
     try {
@@ -833,11 +833,11 @@ const Qudemos = () => {
         }
       } else {
         setError(data.error || "Failed to fetch qudemos");
-        setQudemos([]);
+        // setQudemos([]);
       }
     } catch (err) {
       setError("Network error. Please try again.");
-      setQudemos([]);
+      // setQudemos([]);
     } finally {
       setLoading(false);
     }
@@ -1055,7 +1055,7 @@ const Qudemos = () => {
         {isNoCompanyError ? (
           <button
             onClick={() => navigate("/company-management")}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+            className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
             Create Company
           </button>
@@ -1071,7 +1071,7 @@ const Qudemos = () => {
     );
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 dashboard-font">
       {/* Header */}
       <div className="flex justify-end items-center">
         <div className="flex items-center space-x-2">
@@ -1115,14 +1115,14 @@ const Qudemos = () => {
           {qudemos.map((qudemo) => (
             <div
               key={qudemo.id}
-              className={`bg-white rounded-lg border hover:border transition-shadow border border-strokedark/10 ${
+              className={`bg-white rounded-2xl border hover:border transition-shadow border border-strokedark/10 ${
                 deletingQudemoId === qudemo.id
                   ? "opacity-50 pointer-events-none"
                   : ""
               }`}
             >
               {/* Video Thumbnail */}
-              <div className="relative h-48 bg-whiten rounded-t-lg overflow-hidden">
+              <div className="relative h-48 bg-whiten rounded-t-2xl overflow-hidden">
                 {/* Delete Loading Overlay */}
                 {deletingQudemoId === qudemo.id && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-t-lg">
@@ -1294,7 +1294,7 @@ const Qudemos = () => {
                         {qudemo.title}
                       </h3>
                       {qudemo.isDemo && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 my-auto rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
                           Demo
                         </span>
                       )}
@@ -1314,7 +1314,7 @@ const Qudemos = () => {
                         <EllipsisVerticalIcon className="w-5 h-5 text-gray-500" />
                       </button>
                       {dropdownOpen === qudemo.id && (
-                        <div className="absolute right-0 top-8 bg-white border border-strokedark/10 rounded-lg border z-10 min-w-[160px]">
+                        <div className="absolute right-0 top-8 bg-white border border-strokedark/10 rounded-lg border z-10 min-w-[220px]">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1331,7 +1331,7 @@ const Qudemos = () => {
                               e.stopPropagation();
                               handleDropdownAction("edit", qudemo);
                             }}
-                            className="w-full px-4 py-2 text-left hover:bg-whiter flex items-center space-x-2"
+                            className="w-full px-4 py-3 text-left hover:bg-whiter flex items-center space-x-2"
                           >
                             <PencilIcon className="w-4 h-4" />
                             <span>View</span>
@@ -1356,7 +1356,7 @@ const Qudemos = () => {
                               handleDropdownAction("interactions", qudemo);
                               // }
                             }}
-                            className="w-full px-4 py-2 text-left hover:bg-whiter flex items-center space-x-2 text-bodydark"
+                            className="w-full px-4 py-3 text-left hover:bg-whiter flex items-center space-x-2 text-bodydark"
                           >
                             {/* COMMENTED OUT FOR TESTING - Always show ChartBar icon */}
                             {/* {!isPro ? <LockClosedIcon className="w-4 h-4" /> : <ChartBarIcon className="w-4 h-4" />} */}
@@ -1383,7 +1383,7 @@ const Qudemos = () => {
                               handleDropdownAction("share", qudemo);
                               // }
                             }}
-                            className="w-full px-4 py-2 text-left hover:bg-whiter flex items-center space-x-2 text-bodydark"
+                            className="w-full px-4 py-3 text-left hover:bg-whiter flex items-center space-x-2 text-bodydark"
                           >
                             <ShareIcon className="w-4 h-4" />
                             {/* COMMENTED OUT FOR TESTING - No lock icon shown */}
@@ -1395,19 +1395,19 @@ const Qudemos = () => {
                               e.stopPropagation();
                               handleDropdownAction("generate-widget", qudemo);
                             }}
-                            className="w-full px-4 py-2 text-left hover:bg-whiter flex items-center space-x-2 text-purple-600"
+                            className="w-full px-4 py-3 text-left hover:bg-whiter flex items-center space-x-2 text-purple-600"
                           >
                             <CodeBracketIcon className="w-4 h-4" />
                             <span>Generate Widget</span>
                           </button>
-                          <hr className="my-1" />
+                          <hr className="my-0" />
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDropdownAction("delete", qudemo);
                             }}
                             disabled={deletingQudemoId === qudemo.id}
-                            className={`w-full px-4 py-2 text-left hover:bg-red-50 text-red-600 flex items-center space-x-2 ${
+                            className={`w-full px-4 py-3 text-left hover:bg-red-50 text-red-600 flex items-center space-x-2 ${
                               deletingQudemoId === qudemo.id
                                 ? "opacity-50 cursor-not-allowed"
                                 : ""
@@ -1438,7 +1438,7 @@ const Qudemos = () => {
                         e.stopPropagation();
                         setPreviewingQudemo(qudemo);
                       }}
-                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 h-10 px-3 rounded-lg border text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 px-4 py-3 rounded-lg border text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
                     >
                       <PlayIcon className="w-4 h-4" />
                       <span className="text-sm font-medium">
@@ -1451,7 +1451,7 @@ const Qudemos = () => {
                         e.stopPropagation();
                         handleShareQudemo(qudemo);
                       }}
-                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 h-10 px-3 rounded-lg border text-green-600 hover:text-green-800 hover:bg-green-50 border-green-200"
+                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 px-4 py-3 rounded-lg border text-green-600 hover:text-green-800 hover:bg-green-50 border-green-200"
                     >
                       <ShareIcon className="w-4 h-4" />
                       <span className="text-sm font-medium">Share Qudemo</span>
@@ -1480,7 +1480,7 @@ const Qudemos = () => {
                         handleViewQudemoInteractions(qudemo);
                         // }
                       }}
-                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 h-10 px-3 rounded-lg border text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                      className="w-full flex items-center justify-center space-x-2 transition-colors duration-200 px-4 py-3 rounded-lg border text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
                     >
                       {/* COMMENTED OUT FOR TESTING - Always show Eye icon */}
                       {/* {!isPro ? <LockClosedIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />} */}

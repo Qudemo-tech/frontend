@@ -236,61 +236,48 @@ const CustomerInteractionsPage = () => {
     );
   }
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-graydark">All Interactions</h1>
-        {/* Pagination Control */}
-        <div className="mt-4 sm:mt-0 flex items-center space-x-2">
-          <span className="text-sm text-bodydark">Show</span>
-          <select
-            value={itemsPerPage}
-            onChange={handleItemsPerPageChange}
-            className="border border-strokedark/20 rounded-md px-2 py-1 text-sm"
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <span className="text-sm text-bodydark">per page</span>
-        </div>
-      </div>
-      {/* Search Bar */}
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <MagnifyingGlassIcon className="h-5 w-5 text-bodydark2" />
-        </div>
-        <input
-          type="text"
-          placeholder="Search by name, email, company or demo watched..."
-          value={searchTerm}
-          onChange={handleSearch}
-          className="block w-full pl-10 pr-3 py-2 border border-strokedark/20 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+    <div className="space-y-6 dashboard-font">
       {/* Interactions Table */}
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <div className="overflow-x-auto">
+          <div className="flex gap-4 p-6 py-4 justify-between items-center border-b">
+            <h1 className="text-xl font-bold text-graydark">
+              All Interactions
+            </h1>
+            {/* Search Bar */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <MagnifyingGlassIcon className="h-5 w-5 text-bodydark22" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by name, email, company or demo watched..."
+                value={searchTerm}
+                onChange={handleSearch}
+                className="block min-w-[340px] w-full pl-10 pr-3 py-3 border border-strokedark/20 rounded-md text-sm leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-whiter">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-6 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   Customer
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-6 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   Company
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-6 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   Demo watched
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-6 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-6 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   <ClockIcon className="h-4 w-4" />
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-normal text-bodydark22 tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -341,7 +328,7 @@ const CustomerInteractionsPage = () => {
                     <td className="pl-6 pr-1 py-4 whitespace-nowrap text-left text-sm font-medium">
                       <button
                         onClick={() => handleViewDetails(interaction)}
-                        className="inline-flex items-center px-3 py-1 border border-strokedark/20 text-sm font-medium rounded text-bodydark bg-white hover:bg-whiter focus:outline-none"
+                        className="inline-flex items-center px-3 py-1 border border-strokedark/20 text-sm font-medium rounded text-bodydark2 bg-white hover:bg-whiter focus:outline-none"
                       >
                         View Details
                       </button>
@@ -351,117 +338,132 @@ const CustomerInteractionsPage = () => {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-strokedark/10 bg-white px-4 h-10 sm:px-6">
-          <div className="flex flex-1 justify-between sm:hidden">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center rounded-md border border-strokedark/20 bg-white px-4 py-2 text-sm font-medium text-bodydark hover:bg-whiter disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages}
-              className="relative ml-3 inline-flex items-center rounded-md border border-strokedark/20 bg-white px-4 py-2 text-sm font-medium text-bodydark hover:bg-whiter disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-bodydark">
-                Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
-                <span className="font-medium">
-                  {Math.min(endIndex, filteredInteractions.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium">
-                  {filteredInteractions.length}
-                </span>{" "}
-                results
-              </p>
-            </div>
-            <div>
-              <nav
-                className="isolate inline-flex -space-x-px rounded-md border"
-                aria-label="Pagination"
-              >
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white p-4 px-6 border-t">
+              <div className="flex flex-1 justify-between sm:hidden">
                 <button
                   onClick={() =>
                     setCurrentPage((prev) => Math.max(prev - 1, 1))
                   }
                   disabled={currentPage === 1}
-                  className="relative inline-flex items-center rounded-l-md px-2 py-2 text-bodydark2 ring-1 ring-inset ring-gray-300 hover:bg-whiter focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="relative inline-flex items-center rounded-md border border-strokedark/20 bg-white px-4 py-2 text-sm font-medium text-bodydark2 hover:bg-whiter disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="sr-only">Previous</span>
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  Previous
                 </button>
-                {/* Page numbers */}
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum =
-                    Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                  if (pageNum > totalPages) return null;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                        pageNum === currentPage
-                          ? "z-10 bg-primary text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                          : "text-graydark ring-1 ring-inset ring-gray-300 hover:bg-whiter focus:z-20 focus:outline-offset-0"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
                 <button
                   onClick={() =>
                     setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                   }
                   disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center rounded-r-md px-2 py-2 text-bodydark2 ring-1 ring-inset ring-gray-300 hover:bg-whiter focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="relative ml-3 inline-flex items-center rounded-md border border-strokedark/20 bg-white px-4 py-2 text-sm font-medium text-bodydark2 hover:bg-whiter disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="sr-only">Next</span>
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  Next
                 </button>
-              </nav>
+              </div>
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div className="mt-4 sm:mt-0 flex items-center space-x-2">
+                  <span className="text-sm text-bodydark2">Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                    className="border border-strokedark/20 rounded-md px-2 py-1 text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="text-sm text-bodydark2">per page, </span>
+                  <p className="text-sm text-bodydark2">
+                    showing{" "}
+                    <span className="font-medium">{startIndex + 1}</span> to{" "}
+                    <span className="font-medium">
+                      {Math.min(endIndex, filteredInteractions.length)}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-medium">
+                      {filteredInteractions.length}
+                    </span>{" "}
+                    results
+                  </p>
+                </div>
+                <div>
+                  <nav
+                    className="isolate inline-flex -space-x-px rounded-md gap-2"
+                    aria-label="Pagination"
+                  >
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center rounded-md px-2 py-2 text-bodydark22 ring-1 ring-inset ring-gray-300 hover:bg-whiter focus:z-20 focus:outline-offset-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <svg
+                        className="h-5 w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                    {/* Page numbers */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const pageNum =
+                        Math.max(1, Math.min(totalPages - 4, currentPage - 2)) +
+                        i;
+                      if (pageNum > totalPages) return null;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`relative inline-flex items-center rounded-md px-4 py-2 text-sm font-normal ${
+                            pageNum === currentPage
+                              ? "z-10 bg-blue-400/10 text-blue-400 focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                              : "text-graydark hover:bg-blue-400/10 focus:z-20 focus:outline-offset-0"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center rounded-md px-2 py-2 text-bodydark22 ring-1 ring-inset ring-gray-300 hover:bg-whiter focus:z-20 focus:outline-offset-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Next</span>
+                      <svg
+                        className="h-5 w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
       {/* Details Modal */}
       {showDetailsModal && selectedInteraction && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-50 pt-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-50 pt-20 -top-10 dashboard-font">
           <div className="bg-white rounded-lg border max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex flex-col h-full">
               {/* Header */}
@@ -469,7 +471,7 @@ const CustomerInteractionsPage = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     {/* Avatar */}
-                    <div className="w-12 h-10 bg-primary rounded-full flex items-center justify-center">
+                    <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
                       <span className="text-white font-semibold text-lg">
                         {selectedInteraction.client_name
                           ?.charAt(0)
@@ -482,11 +484,11 @@ const CustomerInteractionsPage = () => {
                         {selectedInteraction.client_name || "Unknown Customer"}{" "}
                         - Customer Interaction Details
                       </h3>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-bodydark">
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-bodydark2">
                         {selectedInteraction.client_email && (
                           <div className="flex items-center space-x-2">
                             <svg
-                              className="w-4 h-4 text-bodydark2"
+                              className="w-4 h-4 text-bodydark22"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -504,7 +506,7 @@ const CustomerInteractionsPage = () => {
                         {selectedInteraction.client_company && (
                           <div className="flex items-center space-x-2">
                             <svg
-                              className="w-4 h-4 text-bodydark2"
+                              className="w-4 h-4 text-bodydark22"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -522,7 +524,7 @@ const CustomerInteractionsPage = () => {
                         {selectedInteraction.last_accessed_at && (
                           <div className="flex items-center space-x-2">
                             <svg
-                              className="w-4 h-4 text-bodydark2"
+                              className="w-4 h-4 text-bodydark22"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -554,7 +556,7 @@ const CustomerInteractionsPage = () => {
                   {/* Close Button */}
                   <button
                     onClick={() => setShowDetailsModal(false)}
-                    className="text-bodydark2 hover:text-bodydark"
+                    className="text-bodydark22 hover:text-bodydark2 mb-6"
                   >
                     <svg
                       className="w-6 h-6"
@@ -573,14 +575,14 @@ const CustomerInteractionsPage = () => {
                 </div>
               </div>
               {/* Tabs */}
-              <div className="bg-whiten p-1.5">
+              <div className="bg-white mt-4 px-6">
                 <nav className="flex gap-1.5">
                   <button
                     onClick={() => handleTabClick("overview")}
                     className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeTab === "overview"
-                        ? "bg-white text-graydark border"
-                        : "bg-transparent text-bodydark hover:text-graydark"
+                        ? "bg-blue-400/10 text-graydark border"
+                        : "bg-gray-100 text-bodydark2 hover:text-blue-400 hover:bg-blue-400/10"
                     }`}
                   >
                     Overview
@@ -589,8 +591,8 @@ const CustomerInteractionsPage = () => {
                     onClick={() => handleTabClick("questions")}
                     className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeTab === "questions"
-                        ? "bg-white text-graydark border"
-                        : "bg-transparent text-bodydark hover:text-graydark"
+                        ? "bg-blue-400/10 text-graydark border"
+                        : "bg-gray-100 text-bodydark2 hover:text-blue-400 hover:bg-blue-400/10"
                     }`}
                   >
                     Questions asked
@@ -599,8 +601,8 @@ const CustomerInteractionsPage = () => {
                     onClick={() => handleTabClick("past-interactions")}
                     className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeTab === "past-interactions"
-                        ? "bg-white text-graydark border"
-                        : "bg-transparent text-bodydark hover:text-graydark"
+                        ? "bg-blue-400/10 text-graydark border"
+                        : "bg-gray-100 text-bodydark2 hover:text-blue-400 hover:bg-blue-400/10"
                     }`}
                   >
                     Past interactions
@@ -633,11 +635,11 @@ const CustomerInteractionsPage = () => {
                     {/* Interaction Metrics */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                       {/* Demo Watched */}
-                      <div className="bg-white border border-strokedark/10 rounded-lg p-4">
-                        <div className="flex items-center space-x-3">
+                      <div className="bg-white border border-strokedark/10 rounded-xl p-4">
+                        <div className="flex items-start flex-col gap-3">
                           <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                             <svg
-                              className="w-5 h-5 text-primary"
+                              className="w-5 h-5 text-primary m-auto"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -650,8 +652,8 @@ const CustomerInteractionsPage = () => {
                               />
                             </svg>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-bodydark">
+                          <div className="flex flex-col items-start text-left">
+                            <p className="text-sm font-medium text-bodydark2">
                               Demo Watched
                             </p>
                             <p className="text-lg font-semibold text-graydark">
@@ -662,8 +664,8 @@ const CustomerInteractionsPage = () => {
                         </div>
                       </div>
                       {/* Time Spent */}
-                      <div className="bg-white border border-strokedark/10 rounded-lg p-4">
-                        <div className="flex items-center space-x-3">
+                      <div className="bg-white border border-strokedark/10 rounded-xl p-4">
+                        <div className="flex items-start flex-col gap-3">
                           <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                             <svg
                               className="w-5 h-5 text-purple-600"
@@ -679,8 +681,8 @@ const CustomerInteractionsPage = () => {
                               />
                             </svg>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-bodydark">
+                          <div className="flex flex-col items-start text-left">
+                            <p className="text-sm font-medium text-bodydark2">
                               Time Spent
                             </p>
                             <p className="text-lg font-semibold text-graydark">
@@ -692,8 +694,8 @@ const CustomerInteractionsPage = () => {
                         </div>
                       </div>
                       {/* Questions Asked */}
-                      <div className="bg-white border border-strokedark/10 rounded-lg p-4">
-                        <div className="flex items-center space-x-3">
+                      <div className="bg-white border border-strokedark/10 rounded-xl p-4">
+                        <div className="flex items-start flex-col gap-3">
                           <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                             <svg
                               className="w-5 h-5 text-green-600"
@@ -709,8 +711,8 @@ const CustomerInteractionsPage = () => {
                               />
                             </svg>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-bodydark">
+                          <div className="flex flex-col items-start text-left">
+                            <p className="text-sm font-medium text-bodydark2">
                               Questions Asked
                             </p>
                             <p className="text-lg font-semibold text-graydark">
@@ -742,14 +744,14 @@ const CustomerInteractionsPage = () => {
                       </div>
                       <div className="space-y-3 text-left">
                         <div className="flex items-center justify-between text-left">
-                          <span className="text-sm text-primary font-medium">
+                          <span className="text-sm py-1 text-primary font-medium">
                             Link Type:
                           </span>
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary">
                             Unique Customer Link
                           </span>
                         </div>
-                        <div className="flex items-start space-x-2 text-left">
+                        <div className="flex items-center space-x-2 text-left">
                           <span className="text-sm text-primary font-medium whitespace-nowrap">
                             URL:
                           </span>
@@ -846,12 +848,12 @@ const CustomerInteractionsPage = () => {
                             {/* Answer */}
                             <div className="flex items-start space-x-3 bg-white rounded-lg p-3">
                               <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-bodydark text-xs font-medium">
+                                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-bodydark2 text-xs font-medium">
                                   AI
                                 </div>
                               </div>
                               <div className="flex-1 text-left">
-                                <div className="text-sm text-bodydark whitespace-pre-wrap text-left">
+                                <div className="text-sm text-bodydark2 whitespace-pre-wrap text-left">
                                   {qa.answer
                                     .replace(/\*\*(.*?)\*\*/g, "$1")
                                     .replace(/\*(.*?)\*/g, "$1")
@@ -894,7 +896,7 @@ const CustomerInteractionsPage = () => {
                       ) : (
                         <div className="text-center py-8">
                           <svg
-                            className="mx-auto h-10 w-10 text-bodydark2"
+                            className="mx-auto h-10 w-10 text-bodydark22"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -919,23 +921,20 @@ const CustomerInteractionsPage = () => {
                 )}
                 {activeTab === "past-interactions" && (
                   <div className="min-h-96">
-                    <h4 className="font-medium text-graydark mb-4">
-                      Past Interactions History
-                    </h4>
                     <div className="bg-white rounded-lg border border-strokedark/10 overflow-hidden">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-whiter">
                           <tr>
-                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark2 tracking-wider">
                               Date
                             </th>
-                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark2 tracking-wider">
                               Demo
                             </th>
-                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark2 tracking-wider">
                               Questions
                             </th>
-                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark tracking-wider">
+                            <th className="px-6 py-3 text-left text-sm font-bold text-bodydark2 tracking-wider">
                               Time spent
                             </th>
                           </tr>
@@ -1078,7 +1077,7 @@ const CustomerInteractionsPage = () => {
               </h3>
             </div>
 
-            <p className="text-bodydark mb-6 text-left">
+            <p className="text-bodydark2 mb-6 text-left">
               Your Pro plan is currently inactive. To view detailed interaction
               analytics and insights, please upgrade to Pro or reactivate your
               subscription.
@@ -1087,7 +1086,7 @@ const CustomerInteractionsPage = () => {
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowUpgradeModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-bodydark bg-whiten hover:bg-gray-200 rounded-md transition-colors"
+                className="flex-1 px-4 py-2 text-sm font-medium text-bodydark2 bg-whiten hover:bg-gray-200 rounded-md transition-colors"
               >
                 Cancel
               </button>

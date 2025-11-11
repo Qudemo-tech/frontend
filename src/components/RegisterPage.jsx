@@ -206,7 +206,7 @@ const RegisterPage = () => {
           type="button"
           onClick={handleGoogleSignUp}
           disabled={isGoogleLoading}
-          className="w-full flex justify-center h-10 px-4 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 font-medium mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 font-medium mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isGoogleLoading ? (
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600 mr-2"></div>
