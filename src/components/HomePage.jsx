@@ -604,18 +604,18 @@ const HomePage = () => {
                   </div>
                 </SpotlightCard>
               </div>
-              <div className="flex gap-10 text-gray-300 items-center mx-auto">
-                <div className="flex gap-4">
+              <div className="flex flex-wrap gap-10 text-gray-300 items-center mx-auto">
+                <div className="flex gap-4 max-md:w-full justify-center">
                   <Pointer className="text-blue-400" />
                   <p>Instant Engagement</p>
                 </div>
-                <div className="w-[2px] h-6 bg-gray-600" />
-                <div className="flex gap-4">
+                <div className="w-[2px] h-6 max-md:hidden bg-gray-600" />
+                <div className="flex gap-4 max-md:w-full justify-center">
                   <User2 className="text-blue-400" />
                   <p>Qualified Leads</p>
                 </div>
-                <div className="w-[2px] h-6 bg-gray-600" />
-                <div className="flex gap-4">
+                <div className="w-[2px] h-6 max-md:hidden bg-gray-600" />
+                <div className="flex gap-4 max-md:w-full justify-center">
                   <Eye className="text-blue-400" />
                   <p>Founder Experience</p>
                 </div>
