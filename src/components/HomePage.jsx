@@ -428,7 +428,7 @@ const HomePage = () => {
 
               {/* CTA Button */}
               <div
-                className="flex items-center justify-center mb-8 sm:mb-10"
+                className="flex items-center justify-center"
                 style={{
                   animation: isMobile ? "none" : "fadeInUp 0.8s ease-out 0.5s both",
                 }}
@@ -445,36 +445,29 @@ const HomePage = () => {
                 </button>
               </div>
 
-              {/* Infinite Scrolling Logos */}
+              {/* Infinite Scrolling Logos - COMMENTED OUT */}
             </div>
-            <div
+            {/*<div
               style={{
                 animation: isMobile ? "none" : "fadeInUp 0.8s ease-out 0.6s both",
               }}
             >
               <InfiniteScroll />
-            </div>
+            </div>*/}
           </div>
         </FadeInSection>
 
         {/* Why Choose Us Section */}
         <FadeInSection delay={0.1} className="flex flex-col relative" disableAnimation={isMobile}>
           <div
-            className={`w-full h-32 relative overflow-hidden z-50 ${isMobile ? '' : 'bg-black/20'}`}
+            className={`w-full h-px relative overflow-hidden z-50 ${isMobile ? '' : 'bg-black/20'}`}
             style={{
               backdropFilter: isMobile ? "none" : "blur(100%)",
             }}
           >
-            {/* Horizontal glow lines - hidden on mobile */}
+            {/* Single horizontal glow line separator - hidden on mobile */}
             <div
-              className="absolute top-0 -translate-y-1/2 left-0 right-0 h-px hidden md:block"
-              style={{
-                background:
-                  "linear-gradient(90deg, transparent 0%, rgba(100, 150, 255, 0.2) 20%, rgba(150, 180, 255, 0.3) 50%, rgba(100, 150, 255, 0.2) 80%, transparent 100%)",
-              }}
-            />
-            <div
-              className="absolute bottom-0 -translate-y-1/2 left-0 right-0 h-px hidden md:block"
+              className="absolute top-0 left-0 right-0 h-px hidden md:block"
               style={{
                 background:
                   "linear-gradient(90deg, transparent 0%, rgba(100, 150, 255, 0.2) 20%, rgba(150, 180, 255, 0.3) 50%, rgba(100, 150, 255, 0.2) 80%, transparent 100%)",
@@ -482,7 +475,7 @@ const HomePage = () => {
             />
           </div>
           <div
-            className="sm:px-6 md:px-8 py-20 sm:py-32 md:py-40 relative my-auto flex flex-col justify-center overflow-x-hidden"
+            className="sm:px-6 md:px-8 py-20 sm:py-32 md:py-40 relative my-auto flex flex-col justify-center overflow-hidden"
             id="benefits"
           >
             {!isMobile && (
