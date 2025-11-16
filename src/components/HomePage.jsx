@@ -428,7 +428,7 @@ const HomePage = () => {
 
               {/* CTA Button */}
               <div
-                className="flex items-center justify-center"
+                className="flex items-center justify-center mb-8 sm:mb-16"
                 style={{
                   animation: isMobile ? "none" : "fadeInUp 0.8s ease-out 0.5s both",
                 }}
@@ -460,7 +460,7 @@ const HomePage = () => {
         {/* Why Choose Us Section */}
         <FadeInSection delay={0.1} className="flex flex-col relative" disableAnimation={isMobile}>
           <div
-            className={`w-full h-px relative overflow-hidden z-50 ${isMobile ? '' : 'bg-black/20'}`}
+            className={`w-full h-32 relative overflow-hidden z-50 ${isMobile ? '' : 'bg-black/20'}`}
             style={{
               backdropFilter: isMobile ? "none" : "blur(100%)",
             }}
