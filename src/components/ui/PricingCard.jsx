@@ -11,6 +11,7 @@ const PricingCard = ({
   buttonText,
   onButtonClick,
   customPrice = false,
+  customPriceText = "Custom",
   className,
 }) => {
   return (
@@ -42,7 +43,7 @@ const PricingCard = ({
       {/* Price */}
       <div className="mb-8">
         {customPrice ? (
-          <div className="text-5xl font-bold text-white">Custom</div>
+          <div className="text-5xl font-bold text-white">{customPriceText}</div>
         ) : (
           <>
             <div className="flex items-baseline gap-1">

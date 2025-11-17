@@ -4,20 +4,20 @@ const InfiniteBadges = ({ right = false }) => {
   // Logo items - you can replace these with your actual logo URLs
 
   const logos = [
-    { name: "Customizable Plans", opacity: 0.4 },
-    { name: "Smart Insights", opacity: 0.4 },
-    { name: "Instant Savings", opacity: 0.7 },
-    { name: "Flexible Payments", opacity: 0.4 },
-    { name: "Customizable Plans", opacity: 0.5 },
-    { name: "Smart Insights", opacity: 0.4 },
-    { name: "Instant Savings", opacity: 0.4 },
-    { name: "Customizable Plans", opacity: 0.4 },
-    { name: "Smart Insights", opacity: 0.4 },
-    { name: "Instant Savings", opacity: 0.7 },
-    { name: "Flexible Payments", opacity: 0.4 },
-    { name: "Customizable Plans", opacity: 0.5 },
-    { name: "Smart Insights", opacity: 0.4 },
-    { name: "Instant Savings", opacity: 0.4 },
+    { name: "Interactive Video", opacity: 0.4 },
+    { name: "Founder Face", opacity: 0.4 },
+    { name: "Real Time Answers", opacity: 0.7 },
+    { name: "Visitor Engagement", opacity: 0.4 },
+    { name: "Personalized Feel", opacity: 0.5 },
+    { name: "Interactive Video", opacity: 0.4 },
+    { name: "Founder Face", opacity: 0.4 },
+    { name: "Real Time Answers", opacity: 0.4 },
+    { name: "Visitor Engagement", opacity: 0.4 },
+    { name: "Personalized Feel", opacity: 0.7 },
+    { name: "Interactive Video", opacity: 0.4 },
+    { name: "Founder Face", opacity: 0.5 },
+    { name: "Real Time Answers", opacity: 0.4 },
+    { name: "Personalized Feel", opacity: 0.4 },
   ];
 
   return (
