@@ -1252,7 +1252,7 @@ export const AIChatWidget = () => {
                       }}
                     />
                     <p style={{ fontSize: "14px" }}>
-                      Connecting to LiveAvatar...
+                      Qudemo Connecting
                     </p>
                   </div>
                 ) : hasLiveVideo || room ? (
@@ -1815,9 +1815,6 @@ export const AIChatWidget = () => {
                       overflowY: "auto",
                     }}
                   >
-                    <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-                      Recent Transcripts:
-                    </div>
                     {transcripts.slice(-3).map((transcript, i) => (
                       <div
                         key={i}
@@ -1827,6 +1824,7 @@ export const AIChatWidget = () => {
                           style={{
                             display: "flex",
                             alignItems: "center",
+                            justifyContent: "center",
                             gap: "4px",
                           }}
                         >
@@ -1847,7 +1845,7 @@ export const AIChatWidget = () => {
                               }}
                             />
                           )}
-                          <span>{transcript.text}</span>
+                          <span style={{ textAlign: "center" }}>{transcript.text}</span>
                         </div>
                       </div>
                     ))}

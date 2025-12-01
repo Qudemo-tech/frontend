@@ -266,12 +266,16 @@ const HomePage = () => {
             >
               Pricing
             </button> */}
-            <a
-  href="mailto:mail@qudemo.com"
-  className="hover:text-blue-400 transition-colors duration-200 font-thin"
->
-              Contact Us
-            </a>
+            <button
+              onClick={() => window.open('https://cal.com/jazeem-choori-7jbaio/qudemo-intro', '_blank')}
+              className="text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group"
+              style={{
+                background: "rgba(59, 130, 246, 1)",
+                boxShadow: "0 8px 32px rgba(59, 130, 246, 0.5)",
+              }}
+            >
+              <span className="relative z-10">Talk to Us</span>
+            </button>
           </div>
 
           {/* Auth Buttons */}
