@@ -8,7 +8,7 @@ import {
   ConnectionQuality,
   Language
 } from '@heygen/liveavatar-web-sdk';
-import { getVideoApiUrl } from '../config/api';
+import { getVideoApiUrl, getNodeApiUrl } from '../config/api';
 
 /**
  * LiveAvatarManager - Manages HeyGen StreamingAvatar SDK integration
@@ -69,17 +69,17 @@ const LiveAvatarManager = ({
       console.log('🎬 Initializing LiveAvatar session...');
       console.log('📋 Config:', { qudemoId, companyName, avatarId, voiceId, quality });
       
-      // Step 1: Create session token from backend
+      // Step 1: Create session token from backend (Node.js endpoint)
       const tokenResponse = await fetch(
-        getVideoApiUrl('/liveavatar/create-token'),
+        `${getNodeApiUrl()}/api/liveavatar/create-session`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             qudemo_id: qudemoId,
+            company_name: companyName,
             avatar_id: avatarId,
             voice_id: voiceId,
-            quality: quality,
           }),
         }
       );
@@ -113,14 +113,22 @@ const LiveAvatarManager = ({
         throw new Error(errorMsg);
       }
       
-      console.log('✅ Session token created:', tokenData.data.session_id);
+      console.log('✅ Session created:', tokenData.data);
       setSessionData(tokenData.data);
       
-      // Step 2: Initialize LiveAvatar SDK
-      console.log('🎬 Initializing LiveAvatarSession with token');
+      // Step 2: Initialize LiveAvatar SDK with LiveKit client token
+      // The Node backend returns livekitClientToken which is what we need for the SDK
+      const livekitToken = tokenData.data.livekitClientToken || tokenData.data.token;
+      
+      if (!livekitToken) {
+        throw new Error('Missing LiveKit client token from backend');
+      }
+      
+      console.log('🎬 Initializing LiveAvatarSession with LiveKit token');
       
       const avatar = new LiveAvatarSession({
-        token: tokenData.data.token,
+        token: livekitToken,
+        url: tokenData.data.livekitUrl, // LiveKit server URL
       });
       
       avatarRef.current = avatar;
@@ -185,8 +193,35 @@ const LiveAvatarManager = ({
       setIsConnected(true);
       onConnectionChange(true);
       
-      // Provide speak function to parent
-      onReady(async (text) => {
+      // Provide functions to parent:
+      // 1. sendMessage - Send user's text message to avatar for chat (avatar will respond)
+      // 2. speak - Make avatar repeat/speak text (for answers from backend)
+      onReady({
+        // Send user message to avatar - avatar will process and respond
+        sendMessage: async (userMessage) => {
+          if (!avatarRef.current || !isConnected) {
+            console.error('❌ Avatar not ready to receive message');
+            return false;
+          }
+          
+          try {
+            console.log('💬 Sending user message to avatar:', userMessage.substring(0, 50) + '...');
+            // Send user's message - avatar will process it using context and respond
+            // In FULL mode, LiveAvatar handles conversational elements
+            // Just send the text - avatar will process and respond
+            await avatarRef.current.speak({
+              text: userMessage
+              // No taskType needed - in FULL mode, avatar handles conversation
+            });
+            return true;
+          } catch (err) {
+            console.error('❌ Error sending message to avatar:', err);
+            onError(err);
+            return false;
+          }
+        },
+        // Make avatar speak/repeat text (for pre-generated answers)
+        speak: async (text) => {
         if (!avatarRef.current || !isConnected) {
           console.error('❌ Avatar not ready to speak');
           return false;
@@ -203,6 +238,7 @@ const LiveAvatarManager = ({
           console.error('❌ Error speaking:', err);
           onError(err);
           return false;
+          }
         }
       });
       

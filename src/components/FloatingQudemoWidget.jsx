@@ -60,6 +60,7 @@ const FloatingQudemoWidget = ({
   const [useLiveAvatar, setUseLiveAvatar] = useState(false);
   const [liveAvatarConfig, setLiveAvatarConfig] = useState(null);
   const liveAvatarSpeakRef = useRef(null); // Store speak function from LiveAvatarManager
+  const liveAvatarSendMessageRef = useRef(null); // Store sendMessage function for chat
   const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false);
   
   // User data collection states
@@ -590,16 +591,22 @@ const FloatingQudemoWidget = ({
           });
           
           // Check for LiveAvatar configuration (NEW)
-          if (qudemo.use_live_avatar) {
+          // Check both use_live_avatar flag and live_avatar_id/liveavatar_avatar_id
+          const hasLiveAvatar = qudemo.use_live_avatar || 
+                                qudemo.live_avatar_id || 
+                                qudemo.liveavatar_avatar_id;
+          
+          if (hasLiveAvatar) {
             console.log('🎬 LiveAvatar enabled for this QuDemo');
             setUseLiveAvatar(true);
+            const avatarId = qudemo.live_avatar_id || qudemo.liveavatar_avatar_id;
             setLiveAvatarConfig({
-              avatarId: qudemo.live_avatar_id,
+              avatarId: avatarId,
               voiceId: qudemo.live_avatar_voice_id,
               quality: qudemo.avatar_quality || 'medium'
             });
             console.log('📋 LiveAvatar config:', {
-              avatarId: qudemo.live_avatar_id,
+              avatarId: avatarId,
               voiceId: qudemo.live_avatar_voice_id,
               quality: qudemo.avatar_quality || 'medium'
             });
@@ -1121,32 +1128,57 @@ const FloatingQudemoWidget = ({
           text: data.answer
         }]);
 
-        // NEW: Check if using LiveAvatar streaming (takes priority)
-        if (data.use_live_avatar && useLiveAvatar && liveAvatarSpeakRef.current) {
-          console.log('🎤 Streaming answer to LiveAvatar...');
-          console.log('📋 LiveAvatar response:', {
+        // NEW: Check if using LiveAvatar for chat (takes priority)
+        // For chat, send user's question directly to LiveAvatar - it will respond using context
+        // For pre-generated answers, use speak() to repeat the answer
+        const shouldUseLiveAvatarChat = data.use_live_avatar && 
+                                        useLiveAvatar && 
+                                        liveAvatarSendMessageRef.current;
+        
+        if (shouldUseLiveAvatarChat) {
+          console.log('💬 Sending user question to LiveAvatar for chat...');
+          console.log('📋 LiveAvatar config:', {
             use_live_avatar: data.use_live_avatar,
-            avatar_id: data.live_avatar_id,
+            avatar_id: data.live_avatar_id || data.liveavatar_avatar_id,
             voice_id: data.live_avatar_voice_id
           });
           
-          // Speak the answer through live avatar
-          const speakSuccess = await liveAvatarSpeakRef.current(data.answer);
-          
-          if (speakSuccess) {
-            console.log('✅ LiveAvatar speaking answer');
-            setIsAvatarSpeaking(true);
+          try {
+            // Send user's question to LiveAvatar - it will process and respond using context
+            const sendSuccess = await liveAvatarSendMessageRef.current(userQuestion);
             
-            // Submit interaction to backend
-            submitInteraction(userQuestion, data.answer, data.faq_id || 'live_avatar');
-            
-            // Pause any playing video
-            setIsPlaying(false);
-            setIsTyping(false);
-            return;
-          } else {
-            console.warn('⚠️ LiveAvatar failed to speak, falling back to pre-recorded video');
-            // Fall through to pre-recorded video logic
+            if (sendSuccess) {
+              console.log('✅ Question sent to LiveAvatar - waiting for response');
+              setIsAvatarSpeaking(true);
+              
+              // Don't show the backend answer in chat - let LiveAvatar respond
+              // Remove the bot message we just added since LiveAvatar will speak
+              setChatMessages(prev => prev.slice(0, -1));
+              
+              // Submit interaction will be handled when LiveAvatar responds
+              // For now, just mark that we sent the question
+              submitInteraction(userQuestion, 'LiveAvatar processing...', 'live_avatar_chat');
+              
+              // Pause any playing video
+              setIsPlaying(false);
+              setIsTyping(false);
+              return;
+            } else {
+              console.warn('⚠️ LiveAvatar failed to receive message, falling back to backend answer');
+              // Fall through to show backend answer
+            }
+          } catch (avatarError) {
+            console.error('❌ LiveAvatar sendMessage error:', avatarError);
+            // Fall through to show backend answer
+          }
+        } else {
+          // Log why LiveAvatar chat isn't being used
+          if (data.use_live_avatar) {
+            console.log('ℹ️ LiveAvatar available but chat not initialized:', {
+              useLiveAvatar,
+              hasSendMessageRef: !!liveAvatarSendMessageRef.current,
+              data_use_live_avatar: data.use_live_avatar
+            });
           }
         }
 
@@ -2289,9 +2321,17 @@ const FloatingQudemoWidget = ({
                       voiceId={liveAvatarConfig.voiceId}
                       quality={liveAvatarConfig.quality}
                       isMaximized={isMaximized}
-                      onReady={(speakFn) => {
-                        liveAvatarSpeakRef.current = speakFn;
-                        console.log('✅ LiveAvatar ready to speak');
+                      onReady={(avatarFunctions) => {
+                        // Store both sendMessage (for chat) and speak (for repeating answers)
+                        if (avatarFunctions && typeof avatarFunctions === 'object') {
+                          liveAvatarSendMessageRef.current = avatarFunctions.sendMessage;
+                          liveAvatarSpeakRef.current = avatarFunctions.speak;
+                          console.log('✅ LiveAvatar ready for chat and speak');
+                        } else {
+                          // Backward compatibility - if it's just a function, treat as speak
+                          liveAvatarSpeakRef.current = avatarFunctions;
+                          console.log('✅ LiveAvatar ready to speak (legacy mode)');
+                        }
                       }}
                       onStartTalking={() => {
                         setIsAvatarSpeaking(true);
