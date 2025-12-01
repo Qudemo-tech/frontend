@@ -1,3 +1,4 @@
+// AIChatWidget component for interactive chat with live avatar
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
