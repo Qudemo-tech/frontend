@@ -517,10 +517,30 @@ export const AIChatWidget = () => {
       // AIDEV-NOTE: Step 7 - Auto-enable user microphone after session initialization
       // AIDEV-NOTE: 1500ms delay ensures room is fully connected before publishing local audio track
       // AIDEV-NOTE: Why: Better UX - user can start talking immediately without clicking mic button
+      // AIDEV-FIX: Check and request microphone permission before creating track to fix mobile permission timing issue
       setTimeout(async () => {
         if (mountedRef.current && r) {
           console.log("Auto-enabling microphone, room state:", r.state);
           try {
+            // AIDEV-FIX: Check if microphone permission is already granted (especially important on mobile)
+            try {
+              const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+              console.log("Microphone permission status:", permissionStatus.state);
+              
+              if (permissionStatus.state === 'prompt') {
+                // Permission not granted yet - request it first and wait for user response
+                console.log("Requesting microphone permission from user...");
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Stop the stream immediately - we just needed to request permission
+                stream.getTracks().forEach(track => track.stop());
+                console.log("Microphone permission granted");
+              }
+            } catch (permError) {
+              // Permissions API might not be supported in all browsers, continue anyway
+              console.log("Permissions API not supported, attempting direct access:", permError);
+            }
+            
+            // Now create the track with proper audio processing (permission should be granted by now)
             const track = await createLocalAudioTrack({
               echoCancellation: true,
               noiseSuppression: true,
@@ -533,6 +553,10 @@ export const AIChatWidget = () => {
           } catch (e) {
             console.error("Failed to auto-enable microphone:", e);
             setIsMuted(true);
+            // AIDEV-FIX: Provide user-friendly feedback on mobile when permission is denied
+            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+              console.warn("Microphone access denied by user. They can enable it manually using the mic button.");
+            }
           }
         }
       }, 1500);
@@ -665,7 +689,11 @@ export const AIChatWidget = () => {
         setIsMuted(false);
       } catch (e) {
         console.error("Failed to publish audio:", e);
-        // AIDEV-TODO: Show user-facing error if microphone permission denied
+        setIsMuted(true);
+        // AIDEV-FIX: Show user-friendly error message on mobile when permission is denied
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+          alert("Microphone access denied. Please enable microphone permissions in your browser settings to use voice chat.");
+        }
       }
     }
   };
