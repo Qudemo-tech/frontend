@@ -464,7 +464,9 @@ export const AIChatWidget = () => {
       }
 
       setRoom(r);
-      setHasLiveVideo(true);
+      // AIDEV-FIX: Don't set hasLiveVideo here - wait for actual video track to attach
+      // This prevents "Waiting for video..." from showing prematurely
+      // hasLiveVideo will be set in attachTrackToDom when video is actually ready (line ~608)
 
       // AIDEV-NOTE: Step 4 - Wire all room events (data channel, participant attributes, state changes)
       wireRoomEvents(r);
@@ -596,6 +598,7 @@ export const AIChatWidget = () => {
       videoEl.autoplay = true;
       videoEl.playsInline = true; // AIDEV-NOTE: Required for iOS Safari to play inline without fullscreen
       videoEl.muted = false;       // AIDEV-NOTE: Not muted - we want to hear avatar audio
+      videoEl.playbackRate = 1.0;  // AIDEV-FIX: Force normal playback speed (fixes "too fast" issue on mobile)
       videoEl.style.width = "100%";
       videoEl.style.height = "100%";
       videoEl.style.objectFit = "cover"; // AIDEV-NOTE: Fills container while maintaining aspect ratio
@@ -605,7 +608,13 @@ export const AIChatWidget = () => {
     }
 
     track.attach(videoEl); // AIDEV-NOTE: LiveKit method - connects MediaStreamTrack to <video> element
+    
+    // AIDEV-FIX: Set hasLiveVideo and hide connecting screen ONLY after video is attached
+    // This prevents "Waiting for video..." from showing and ensures smooth transition
     setHasLiveVideo(true);
+    
+    // AIDEV-FIX: Ensure playback rate is normal (fixes mobile speed issues)
+    videoEl.playbackRate = 1.0;
 
     // AIDEV-NOTE: Force video to play - sometimes autoplay is blocked by browser, explicit play() ensures playback
     videoEl.play().catch((e) => console.log("Video play failed:", e));
