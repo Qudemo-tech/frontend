@@ -520,6 +520,16 @@ export const AIChatWidget = () => {
         // This ensures user sees the avatar when it starts speaking the intro
         console.log("✅ Connection complete - avatar ready to display");
         setIsConnecting(false);
+        
+        // AIDEV-FIX: Wait 1 second AFTER video is visible before unmuting audio
+        // This gives user time to see the avatar before intro starts speaking
+        setTimeout(() => {
+          if (remoteAudioRef.current && audioEnabled && mountedRef.current) {
+            remoteAudioRef.current.muted = false;
+            remoteAudioRef.current.playbackRate = 1.0; // Ensure normal speed
+            console.log("🔊 Audio unmuted after 1s delay - intro starting now");
+          }
+        }, 1000);
       }, 1000);
 
       // AIDEV-NOTE: Step 7 - Auto-enable user microphone after session initialization
@@ -638,20 +648,27 @@ export const AIChatWidget = () => {
     if (!remoteAudioRef.current) {
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
+      audioEl.playbackRate = 1.0; // AIDEV-FIX: Force normal playback speed (fixes "too fast" audio on mobile)
       audioEl.style.display = "none"; // AIDEV-NOTE: Hidden - no visual representation needed for audio
       document.body.appendChild(audioEl); // AIDEV-NOTE: Attached to body, not container - survives UI changes
       remoteAudioRef.current = audioEl;
       console.log("Audio element created");
     }
+    
+    // AIDEV-FIX: Start with audio MUTED during connection to prevent intro from starting too early
+    // Audio will be unmuted when connection screen hides (after video is visible)
+    const shouldMute = isConnecting || !audioEnabled;
+    
     track.attach(remoteAudioRef.current); // AIDEV-NOTE: LiveKit method - connects audio MediaStreamTrack
     setHasAudio(true);
-    remoteAudioRef.current.muted = !audioEnabled; // AIDEV-NOTE: Respects user's audio toggle state
+    remoteAudioRef.current.muted = shouldMute; // AIDEV-FIX: Muted during connection, respects audioEnabled after
+    remoteAudioRef.current.playbackRate = 1.0; // AIDEV-FIX: Ensure normal playback speed
 
     // AIDEV-NOTE: Force audio to play - ensures playback even if autoplay is blocked by browser policy
     remoteAudioRef.current
       .play()
       .catch((e) => console.log("Audio play failed:", e));
-    console.log("Audio track attached, audio enabled:", audioEnabled);
+    console.log("Audio track attached, muted:", shouldMute, "audioEnabled:", audioEnabled, "isConnecting:", isConnecting);
   };
 
   // AIDEV-NOTE: Detaches audio track and removes element from DOM
