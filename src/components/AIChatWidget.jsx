@@ -499,6 +499,7 @@ export const AIChatWidget = () => {
 
       // AIDEV-NOTE: Step 6 - Attach already-existing tracks (handles race condition where tracks arrive before listeners)
       // AIDEV-NOTE: 1000ms delay ensures both DOM and LiveKit room are fully ready
+      // AIDEV-FIX: Hide "Qudemo Connecting" AFTER tracks are attached so user sees avatar from the start
       setTimeout(() => {
         const existingParticipants = Array.from(r.remoteParticipants.values());
         existingParticipants.forEach((participant) => {
@@ -512,6 +513,11 @@ export const AIChatWidget = () => {
             }
           });
         });
+        
+        // AIDEV-FIX: Connection UI complete - hide "Qudemo Connecting" now that video/audio are ready
+        // This ensures user sees the avatar when it starts speaking the intro
+        console.log("✅ Connection complete - avatar ready to display");
+        setIsConnecting(false);
       }, 1000);
 
       // AIDEV-NOTE: Step 7 - Auto-enable user microphone after session initialization
@@ -562,9 +568,12 @@ export const AIChatWidget = () => {
       }, 1500);
     } catch (err) {
       console.error("Failed to start live session:", err);
+      // AIDEV-FIX: Also hide connecting screen on error
+      setIsConnecting(false);
       // AIDEV-TODO: Show error modal to user instead of silent failure
     }
-    setIsConnecting(false);
+    // AIDEV-FIX: Don't set isConnecting false here - it's now set after tracks attach (line ~516)
+    // This prevents hiding "Qudemo Connecting" before avatar video/audio are ready
   };
 
   // AIDEV-NOTE: Attaches LiveKit video track to DOM - creates <video> element if needed and connects avatar video stream
