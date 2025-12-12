@@ -827,12 +827,10 @@ const VideoChatPage = () => {
   };
 
   // ========== CALENDLY BOOKING ==========
+  // Note: This is a standalone demo page - calendly_link should come from database
+  // No hardcoded fallback - show message that meeting booking requires a real Qudemo
   const handleBookMeeting = () => {
-    window.open(
-      "https://calendly.com/jazeemchoori/30min",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    alert('Meeting booking is available when viewing a specific Qudemo with a configured Calendly link. Please contact us at info@qudemo.com');
     setShowBookingPrompt(false);
   };
 

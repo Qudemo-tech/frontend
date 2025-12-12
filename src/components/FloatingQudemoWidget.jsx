@@ -37,6 +37,7 @@ const FloatingQudemoWidget = ({
   const [inputMessage, setInputMessage] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
+  const [showCalendlyError, setShowCalendlyError] = useState(false); // Error when no calendly link in database
   const [isPlaying, setIsPlaying] = useState(lockedExpanded); // Start playing if locked expanded
   const [isMuted, setIsMuted] = useState(true); // Start muted for reliable autoplay across all browsers
   const [videoRefreshKey, setVideoRefreshKey] = useState(0);
@@ -846,7 +847,15 @@ const FloatingQudemoWidget = ({
   };
 
   const handleBookMeeting = () => {
-    window.open('https://calendly.com/jazeemchoori/30min', '_blank', 'noopener,noreferrer');
+    // Always use calendly_link from database - no hardcoded fallback
+    if (qudemoData?.calendly_link) {
+      console.log('📅 Opening Calendly link from database:', qudemoData.calendly_link);
+      window.open(qudemoData.calendly_link, '_blank', 'noopener,noreferrer');
+    } else {
+      console.log('⚠️ No calendly_link configured for this Qudemo in database');
+      setShowCalendlyError(true);
+      setTimeout(() => setShowCalendlyError(false), 5000);
+    }
   };
 
   // ========== USER INPUT HANDLING ==========
@@ -2362,6 +2371,18 @@ const FloatingQudemoWidget = ({
                      <span className="relative z-10 font-semibold text-xs md:text-sm">Book a Meeting</span>
                   </button>
                   
+                  {/* Calendly Error Message */}
+                  {showCalendlyError && (
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p className="text-xs text-amber-800">Meeting link not configured. Please contact support.</p>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Powered by Qudemo text */}
                   <div className="mt-1.5 mb-0.5 text-center text-[10px] text-gray-400 flex items-center justify-center gap-1">
                     powered by{" "}
@@ -2659,6 +2680,18 @@ const FloatingQudemoWidget = ({
                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                      </svg>
                   </button>
+                  
+                  {/* Calendly Error Message */}
+                  {showCalendlyError && (
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p className="text-xs text-amber-800">Meeting link not configured. Please contact support.</p>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Powered by Qudemo text */}
                   <div className="mt-1.5 md:mt-1 mb-0.5 text-center text-[10px] text-gray-400 flex items-center justify-center gap-1">
