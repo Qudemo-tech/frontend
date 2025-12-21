@@ -94,3 +94,4 @@ To test PDF/image display:
 - **PDF Display**: `frontend/src/v2-avatar/components/TavusAvatarWidget.jsx:1276-1307`
 - **Tool Setup Guide**: `frontend/src/v2-avatar/TAVUS-TOOLS-SETUP.md`
 
+

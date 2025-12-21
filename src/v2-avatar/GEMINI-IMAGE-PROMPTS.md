@@ -131,3 +131,4 @@ Create an educational illustration for school children (ages 8-14) showing the t
 Make it colorful, friendly, and easy to understand. Include simple labels and a timeline showing millions of years. Style: cartoon-like, educational, engaging. Format: PNG, 1920x1080 resolution, high quality.
 ```
 
+

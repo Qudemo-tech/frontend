@@ -17,12 +17,14 @@ import {
   User,
   Bot,
   Video,
+  Award,
 } from "lucide-react";
 import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
 import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
+import LearningModules from './LearningModules';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -59,6 +61,43 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [showPdf, setShowPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState('');
   const [pendingPdfUrl, setPendingPdfUrl] = useState(null);
+  
+  // Learning modules state
+  const [activeModule, setActiveModule] = useState(null);
+  const [completedModules, setCompletedModules] = useState([]);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [showLearningModules, setShowLearningModules] = useState(true);
+  
+  // Quiz state - for conversation-based quiz
+  const [quizState, setQuizState] = useState({
+    isActive: false,
+    currentQuestionIndex: 0,
+    questions: [
+      {
+        question: "What is natural selection?",
+        correctAnswer: "natural selection",
+        keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"]
+      },
+      {
+        question: "What is genetic drift?",
+        correctAnswer: "genetic drift",
+        keywords: ["genetic drift", "random", "chance", "population", "random chance"]
+      },
+      {
+        question: "What does the fossil record show us?",
+        correctAnswer: "fossil record",
+        keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"]
+      },
+      {
+        question: "How long did human evolution take?",
+        correctAnswer: "millions of years",
+        keywords: ["millions", "years", "long time", "evolution", "millions of years"]
+      }
+    ],
+    score: 0,
+    waitingForAnswer: false,
+    lastQuestionAsked: null
+  });
 
   const mountedRef = useRef(true);
   const lastAvatarSpeechRef = useRef('');
@@ -240,10 +279,94 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     });
   }, [log, triggerProactiveContinuation]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Check if answer is correct (fuzzy matching)
+  const checkAnswer = (userAnswer, correctAnswer, keywords) => {
+    const userLower = userAnswer.toLowerCase().trim();
+    const correctLower = correctAnswer.toLowerCase().trim();
+    
+    // Exact match
+    if (userLower === correctLower) {
+      return true;
+    }
+    
+    // Check if answer contains keywords
+    for (const keyword of keywords) {
+      if (userLower.includes(keyword.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    // Check if answer contains correct answer
+    if (userLower.includes(correctLower) || correctLower.includes(userLower)) {
+      return true;
+    }
+    
+    return false;
+  };
+
   // Handle user speech
   const handleUserSpeech = (text, source) => {
     if (!text) return;
     log('USER_SPEECH', `User said (${source})`, { text });
+    
+    // Check if we're in quiz mode and waiting for an answer
+    if (quizState.isActive && quizState.waitingForAnswer && quizState.currentQuestionIndex < quizState.questions.length) {
+      const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
+      const isCorrect = checkAnswer(text, currentQuestion.correctAnswer, currentQuestion.keywords);
+      
+      // Update score
+      const newScore = isCorrect ? quizState.score + 1 : quizState.score;
+      
+      // Send feedback to avatar
+      if (isCorrect) {
+        sendMessageToReplica(
+          `Correct! Great answer! The student said: "${text}". ` +
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `Now ask the next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `That was the last question! Tell the student they completed the quiz with a score of ${newScore} out of ${quizState.questions.length}.`)
+        );
+      } else {
+        sendMessageToReplica(
+          `The student answered: "${text}". That's not quite right. ` +
+          `The answer relates to: ${currentQuestion.correctAnswer}. ` +
+          `Provide a helpful hint and then ` +
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `ask the next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `tell them that was the last question and they scored ${newScore} out of ${quizState.questions.length}.`)
+        );
+      }
+      
+      // Move to next question or complete quiz
+      if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+        setQuizState(prev => ({
+          ...prev,
+          currentQuestionIndex: prev.currentQuestionIndex + 1,
+          score: newScore,
+          waitingForAnswer: true,
+          lastQuestionAsked: quizState.questions[quizState.currentQuestionIndex + 1].question
+        }));
+      } else {
+        // Quiz completed
+        const percentage = Math.round((newScore / quizState.questions.length) * 100);
+        setQuizState(prev => ({
+          ...prev,
+          isActive: false,
+          score: newScore,
+          waitingForAnswer: false
+        }));
+        setCompletedModules(prev => [...prev, 'final-quiz']);
+        setShowLearningModules(true);
+        
+        sendMessageToReplica(
+          `Quiz complete! The student scored ${newScore} out of ${quizState.questions.length} (${percentage}%). ` +
+          `${percentage >= 70 ? 'Excellent work! They understand the concepts well.' : 'Good effort! They can review the topics to improve.'} ` +
+          `Congratulate them and ask if they have any other questions about human evolution.`
+        );
+      }
+      
+      return; // Don't process as regular speech during quiz
+    }
+    
     // When user starts a new question, clear old transcripts and start fresh
     // Only show the current conversation: new user question (avatar response will be added when it speaks)
     setTranscripts([
@@ -260,6 +383,43 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const handleReplicaSpeech = (text, source) => {
     if (!text) return;
     log('REPLICA_SPEECH', `Replica said (${source})`, { text });
+    
+    // Check if avatar finished speaking about a module topic
+    // Mark module as completed when avatar finishes explaining
+    if (activeModule && !completedModules.includes(activeModule)) {
+      // Check if avatar's speech indicates completion of topic
+      const completionIndicators = [
+        'does that make sense',
+        'any questions',
+        'what would you like to know',
+        'let\'s discuss another',
+        'what else interests you',
+        'questions do you have'
+      ];
+      
+      const lowerText = text.toLowerCase();
+      const indicatesCompletion = completionIndicators.some(indicator => 
+        lowerText.includes(indicator)
+      );
+      
+      // Mark as completed after avatar finishes speaking
+      if (indicatesCompletion) {
+        // Use a ref to track if we've already scheduled completion
+        const moduleId = activeModule;
+        setTimeout(() => {
+          if (!completedModules.includes(moduleId)) {
+            setCompletedModules(prev => [...prev, moduleId]);
+            // Don't clear activeModule here - let user continue or select next
+          }
+        }, 2000);
+      }
+    }
+    
+    // Check for quiz question detection
+    if (quizState.isActive) {
+      handleReplicaSpeechForQuiz(text);
+    }
+    
     // Update transcripts: keep the last user question and add/update current avatar response
     // Only show current conversation: last user question + current avatar response
     setTranscripts((prev) => {
@@ -972,6 +1132,102 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   };
 
+  // Handle learning module selection
+  const handleModuleSelect = (moduleId) => {
+    setActiveModule(moduleId);
+    
+    // Clear any existing transcripts when selecting a new module
+    setTranscripts([]);
+    
+    // Module-specific prompts for the avatar
+    const modulePrompts = {
+      'natural-selection': "Let's discuss natural selection! This is how living things change over time. Animals that are better at surviving pass on their traits to their babies. Can you think of an example of natural selection?",
+      'genetic-drift': "Great! Let's explore genetic drift. This happens when random chance affects which traits get passed down in a population. It's like flipping a coin - sometimes you get heads, sometimes tails. What questions do you have about genetic drift?",
+      'fossil-record': "Excellent choice! The fossil record shows us evidence of evolution over millions of years. Fossils are like nature's history book. What would you like to know about fossils?",
+      'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned. Are you ready to begin?"
+    };
+
+    const prompt = modulePrompts[moduleId];
+    
+    if (moduleId === 'final-quiz') {
+      // Define quiz questions
+      const quizQuestions = [
+        {
+          question: "What is natural selection?",
+          correctAnswer: "natural selection",
+          keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"]
+        },
+        {
+          question: "What is genetic drift?",
+          correctAnswer: "genetic drift",
+          keywords: ["genetic drift", "random", "chance", "population", "random chance"]
+        },
+        {
+          question: "What does the fossil record show us?",
+          correctAnswer: "fossil record",
+          keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"]
+        },
+        {
+          question: "How long did human evolution take?",
+          correctAnswer: "millions of years",
+          keywords: ["millions", "years", "long time", "evolution", "millions of years"]
+        }
+      ];
+      
+      // Initialize quiz state
+      setQuizState({
+        isActive: true,
+        currentQuestionIndex: 0,
+        questions: quizQuestions,
+        score: 0,
+        waitingForAnswer: false,
+        lastQuestionAsked: null
+      });
+      
+      // Send message to avatar to start quiz with first question
+      const firstQuestion = quizQuestions[0].question;
+      sendMessageToReplica(
+        `${prompt} Now ask the first question: "${firstQuestion}" Wait for the student to answer by speaking, then check if their answer is correct and provide feedback before asking the next question.`
+      );
+      
+      // Set waiting for answer after avatar finishes speaking (detected via transcript)
+    } else {
+      // Send message to avatar to discuss the topic
+      if (prompt) {
+        sendMessageToReplica(prompt);
+      }
+      // Mark module as completed after avatar finishes (handled via transcript)
+    }
+  };
+
+  // Handle replica speech - detect when avatar asks quiz questions
+  const handleReplicaSpeechForQuiz = (text) => {
+    if (!quizState.isActive) return;
+    
+    const lowerText = text.toLowerCase();
+    const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
+    
+    if (!currentQuestion) return;
+    
+    // Check if avatar is asking the current quiz question
+    // Look for question keywords or the question text itself
+    const questionKeywords = currentQuestion.question.toLowerCase().split(' ').filter(w => w.length > 3);
+    const isAskingQuestion = questionKeywords.some(keyword => lowerText.includes(keyword)) ||
+                             lowerText.includes('?') && 
+                             (lowerText.includes(currentQuestion.question.split(' ')[0].toLowerCase()) ||
+                              lowerText.includes('what is') || lowerText.includes('how long'));
+    
+    if (isAskingQuestion && !quizState.waitingForAnswer) {
+      // Avatar just asked the question, now wait for answer
+      setQuizState(prev => ({
+        ...prev,
+        waitingForAnswer: true,
+        lastQuestionAsked: currentQuestion.question
+      }));
+      log('QUIZ', `Avatar asked question ${quizState.currentQuestionIndex + 1}: ${currentQuestion.question}`);
+    }
+  };
+
   // Interrupt replica
   const interruptReplica = () => {
     if (dailyEventManagerRef.current) {
@@ -1478,6 +1734,32 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {/* Overlay states on top of video container */}
         {isConnecting && renderConnectingState()}
         {connectionError && renderErrorState()}
+
+        {/* Learning Modules - show when connected and not in overlays */}
+        {!isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-30">
+            <LearningModules
+              onModuleSelect={handleModuleSelect}
+              activeModule={activeModule}
+              completedModules={completedModules}
+            />
+          </div>
+        )}
+
+        {/* Quiz indicator - show when quiz is active (no popup, just indicator) */}
+        {quizState.isActive && !isDemoPlaying && !showCalendly && !showPdf && (
+          <div className="absolute top-20 left-4 z-30 bg-blue-600/90 text-white px-4 py-2 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5" />
+              <span className="font-semibold">
+                Quiz: Question {quizState.currentQuestionIndex + 1} of {quizState.questions.length}
+              </span>
+              <span className="text-sm opacity-80">
+                (Score: {quizState.score}/{quizState.currentQuestionIndex})
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Control bar - only show when connected and NOT in PIP mode (demo/calendly/pdf) */}
         {!isConnecting && !connectionError && !isDemoPlaying && !showCalendly && !showPdf && renderControlBar()}
