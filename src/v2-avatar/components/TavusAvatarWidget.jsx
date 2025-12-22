@@ -18,6 +18,7 @@ import {
   Bot,
   Video,
   Award,
+  Menu,
 } from "lucide-react";
 import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
@@ -593,7 +594,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     
     // Check if avatar finished speaking about a module topic
     // Mark module as completed when avatar finishes explaining
-    if (activeModule && !completedModules.includes(activeModule)) {
+    if (activeModule && activeModule !== 'final-quiz' && !completedModules.includes(activeModule)) {
       // Check if avatar's speech indicates completion of topic
       const completionIndicators = [
         'does that make sense',
@@ -601,7 +602,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         'what would you like to know',
         'let\'s discuss another',
         'what else interests you',
-        'questions do you have'
+        'questions do you have',
+        'think of an example',
+        'can you think',
+        'what questions do you have',
+        'ready to move on',
+        'next topic',
+        'another topic'
       ];
       
       const lowerText = text.toLowerCase();
@@ -614,10 +621,48 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Use a ref to track if we've already scheduled completion
         const moduleId = activeModule;
         setTimeout(() => {
-          if (!completedModules.includes(moduleId)) {
-            setCompletedModules(prev => [...prev, moduleId]);
-            // Don't clear activeModule here - let user continue or select next
-          }
+          setCompletedModules(prev => {
+            // Check if already completed to avoid duplicates
+            if (prev.includes(moduleId)) {
+              return prev;
+            }
+            
+            // Add completed module
+            const updated = [...prev, moduleId];
+            
+            // Log completion for debugging
+            log('MODULE_COMPLETE', `Module ${moduleId} completed. Unlocking next module...`);
+            
+            // Determine next module to unlock
+            const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
+            const currentIndex = moduleOrder.indexOf(moduleId);
+            const nextModuleId = moduleOrder[currentIndex + 1];
+            
+            // Notify user about next module unlocking (if not quiz)
+            if (nextModuleId && nextModuleId !== 'final-quiz') {
+              const nextModuleNames = {
+                'genetic-drift': 'Genetic Drift',
+                'fossil-record': 'Fossil Record'
+              };
+              
+              setTimeout(() => {
+                sendMessageToReplica(
+                  `Great job completing ${moduleId === 'natural-selection' ? 'Natural Selection' : moduleId === 'genetic-drift' ? 'Genetic Drift' : 'Fossil Record'}! ` +
+                  `The next topic "${nextModuleNames[nextModuleId]}" is now unlocked. You can click on it in the sidebar to continue learning!`
+                );
+              }, 1000);
+            } else if (nextModuleId === 'final-quiz' && updated.length === 3) {
+              // All topics completed, quiz unlocked
+              setTimeout(() => {
+                sendMessageToReplica(
+                  `Excellent! You've completed all the learning topics. The Final Quiz is now unlocked! ` +
+                  `Click on "Final Quiz" in the sidebar when you're ready to test your knowledge.`
+                );
+              }, 1000);
+            }
+            
+            return updated;
+          });
         }, 2000);
       }
     }
@@ -1414,8 +1459,40 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   };
 
+  // Check if module is unlocked
+  const isModuleUnlocked = (moduleId) => {
+    const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
+    const moduleIndex = moduleOrder.indexOf(moduleId);
+    
+    if (moduleIndex === 0) {
+      // First module is always unlocked
+      return true;
+    }
+    
+    if (moduleId === 'final-quiz') {
+      // Quiz unlocks only when all 3 topics are completed
+      return completedModules.includes('natural-selection') &&
+             completedModules.includes('genetic-drift') &&
+             completedModules.includes('fossil-record');
+    }
+    
+    // Other modules unlock when previous module is completed
+    const previousModuleId = moduleOrder[moduleIndex - 1];
+    return completedModules.includes(previousModuleId);
+  };
+
   // Handle learning module selection
   const handleModuleSelect = (moduleId) => {
+    // Check if module is unlocked before proceeding
+    if (!isModuleUnlocked(moduleId)) {
+      // Send message to avatar explaining the module is locked
+      sendMessageToReplica(
+        `You need to complete the previous topics first before you can access this module. ` +
+        `Please complete the earlier topics in order.`
+      );
+      return;
+    }
+    
     setActiveModule(moduleId);
     
     // Clear any existing transcripts when selecting a new module
@@ -1731,7 +1808,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       {/* Main video container */}
       <div
         id="tavus-video-container"
-        className="absolute inset-0 bg-black"
+        className={`absolute inset-0 bg-black transition-all duration-300 ${
+          showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf
+            ? 'left-80' 
+            : 'left-0'
+        }`}
         style={{ zIndex: 0 }}
       />
 
@@ -1910,8 +1991,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   const renderControlBar = () => (
     <>
-      {/* State indicators - top left */}
-      <div className="absolute top-4 left-4 z-30 flex flex-col gap-2">
+      {/* State indicators - top right */}
+      <div className="absolute top-4 right-4 z-30 flex flex-col gap-2">
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md ${getStateColor()} text-white text-xs font-medium shadow-lg`}>
           {getStateIcon()}
           <span className="capitalize">{avatarState}</span>
@@ -1923,6 +2004,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           </div>
         )}
       </div>
+
+      {/* Toggle sidebar button - top left */}
+      {!isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
+        <button
+          onClick={() => setShowLearningModules(!showLearningModules)}
+          className="absolute top-4 left-4 z-30 p-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all shadow-lg"
+          title={showLearningModules ? "Hide Contents" : "Show Contents"}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Control buttons - bottom center */}
       <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 bg-gradient-to-t from-black/60 to-transparent z-30">
@@ -2027,13 +2119,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         {/* Learning Modules - show when connected and not in overlays */}
         {!isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
-          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-30">
-            <LearningModules
-              onModuleSelect={handleModuleSelect}
-              activeModule={activeModule}
-              completedModules={completedModules}
-            />
-          </div>
+          <LearningModules
+            onModuleSelect={handleModuleSelect}
+            activeModule={activeModule}
+            completedModules={completedModules}
+            onClose={() => setShowLearningModules(false)}
+          />
         )}
 
         {/* Quiz indicator - show when quiz is active (no popup, just indicator) */}
