@@ -76,27 +76,34 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       {
         question: "What is natural selection?",
         correctAnswer: "natural selection",
-        keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"]
+        keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"],
+        topic: "Natural Selection"
       },
       {
         question: "What is genetic drift?",
         correctAnswer: "genetic drift",
-        keywords: ["genetic drift", "random", "chance", "population", "random chance"]
+        keywords: ["genetic drift", "random", "chance", "population", "random chance"],
+        topic: "Genetic Drift"
       },
       {
         question: "What does the fossil record show us?",
         correctAnswer: "fossil record",
-        keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"]
+        keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"],
+        topic: "Fossil Record"
       },
       {
         question: "How long did human evolution take?",
         correctAnswer: "millions of years",
-        keywords: ["millions", "years", "long time", "evolution", "millions of years"]
+        keywords: ["millions", "years", "long time", "evolution", "millions of years"],
+        topic: "Evolution Timeline"
       }
     ],
     score: 0,
     waitingForAnswer: false,
-    lastQuestionAsked: null
+    waitingForConfirmation: false, // For partial answers
+    lastQuestionAsked: null,
+    questionResults: [], // Track correct/incorrect/unanswered for each question
+    isAskingQuestion: false // Track if avatar is currently asking a question
   });
 
   const mountedRef = useRef(true);
@@ -218,9 +225,60 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Ignoring avatar speech end - video is playing');
           return;
         }
+        
+        // Check if quiz question was interrupted
+        setQuizState(prev => {
+          if (prev.isActive && prev.isAskingQuestion && interrupted) {
+            // Quiz question was interrupted - re-ask it
+            addDebugLog('[QUIZ] Question was interrupted, re-asking...');
+            const currentQuestion = prev.questions[prev.currentQuestionIndex];
+            setTimeout(() => {
+              sendMessageToReplica(
+                `Let me ask that question again: "${currentQuestion.question}" Please wait for me to finish asking before you answer.`
+              );
+              // Keep isAskingQuestion true until question is fully asked
+              setQuizState(prevState => ({
+                ...prevState,
+                isAskingQuestion: true
+              }));
+            }, 300);
+            return prev; // Don't update state yet
+          }
+          return prev;
+        });
+        
         setIsAvatarSpeaking(false);
         isAvatarSpeakingRef.current = false;
         setAvatarState("listening");
+        
+        // Mark quiz question as complete if it wasn't interrupted
+        if (!interrupted) {
+          setQuizState(prev => {
+            if (prev.isActive && prev.isAskingQuestion) {
+              // Question was completed successfully
+              setTimeout(() => {
+                setQuizState(prevState => ({
+                  ...prevState,
+                  isAskingQuestion: false,
+                  waitingForAnswer: true
+                }));
+                addDebugLog('[QUIZ] Question completed, ready to accept answers');
+              }, 500);
+            }
+            return prev;
+          });
+        }
+        
+        // For quiz: Add a small delay before accepting answers to avoid noise right after avatar stops
+        setTimeout(() => {
+          setQuizState(prev => {
+            if (prev.isActive && prev.waitingForAnswer && !prev.isAskingQuestion) {
+              addDebugLog('[QUIZ] Avatar finished speaking, ready to accept answers (after noise filter delay)');
+            }
+            return prev; // Return unchanged state, just using it for the check
+          });
+        }, 500);
+        
         // Demo triggers are handled via tool calls in Tavus, no speech detection needed
         // Trigger proactive continuation after 5 seconds if user doesn't speak
         if (!interrupted) {
@@ -248,6 +306,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Ignore user transcripts when video is playing
         if (isDemoPlayingRef.current) {
           addDebugLog('[DEMO] Ignoring user transcript - video is playing');
+          return;
+        }
+        // Ignore user transcripts when avatar is speaking (especially important for quiz)
+        if (isAvatarSpeakingRef.current) {
+          addDebugLog('[QUIZ] Ignoring user transcript - avatar is speaking');
           return;
         }
         handleUserSpeech(text, source);
@@ -279,25 +342,71 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     });
   }, [log, triggerProactiveContinuation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check if answer is correct (fuzzy matching)
+  // Check if answer is correct (fuzzy matching) - returns: 'correct', 'partial', 'incorrect', 'dont_know'
   const checkAnswer = (userAnswer, correctAnswer, keywords) => {
     const userLower = userAnswer.toLowerCase().trim();
     const correctLower = correctAnswer.toLowerCase().trim();
     
-    // Exact match
-    if (userLower === correctLower) {
-      return true;
+    // Check for "I don't know" responses
+    const dontKnowPhrases = ["i don't know", "i don't know", "i dunno", "don't know", "no idea", "not sure", "unsure", "i'm not sure", "i have no idea"];
+    if (dontKnowPhrases.some(phrase => userLower.includes(phrase))) {
+      return 'dont_know';
     }
     
-    // Check if answer contains keywords
-    for (const keyword of keywords) {
-      if (userLower.includes(keyword.toLowerCase())) {
-        return true;
-      }
+    // Exact match
+    if (userLower === correctLower) {
+      return 'correct';
     }
     
     // Check if answer contains correct answer
     if (userLower.includes(correctLower) || correctLower.includes(userLower)) {
+      return 'correct';
+    }
+    
+    // Check how many keywords are present
+    let keywordMatches = 0;
+    for (const keyword of keywords) {
+      if (userLower.includes(keyword.toLowerCase())) {
+        keywordMatches++;
+      }
+    }
+    
+    // If more than half keywords match, it's partial
+    if (keywordMatches > 0) {
+      const keywordMatchRatio = keywordMatches / keywords.length;
+      if (keywordMatchRatio >= 0.5) {
+        return 'partial'; // Half correct, half wrong
+      } else if (keywordMatchRatio > 0) {
+        return 'partial'; // Some keywords but not enough
+      }
+    }
+    
+    return 'incorrect';
+  };
+
+  // Filter out noise and invalid speech
+  const isNoiseOrInvalid = (text) => {
+    if (!text) return true;
+    
+    const trimmed = text.trim();
+    
+    // Too short - likely noise (less than 2 characters)
+    if (trimmed.length < 2) {
+      return true;
+    }
+    
+    // Common noise patterns
+    const noisePatterns = [
+      /^[h]+$/i, // Just "h" or "hhh"
+      /^[a]+$/i, // Just "a" or "aaa"
+      /^[uh]+$/i, // Just "uh" or "uhh"
+      /^[mm]+$/i, // Just "mm" or "mmm"
+      /^[eh]+$/i, // Just "eh" or "ehh"
+      /^\s*$/, // Only whitespace
+      /^[\.\?\!]+$/, // Only punctuation
+    ];
+    
+    if (noisePatterns.some(pattern => pattern.test(trimmed))) {
       return true;
     }
     
@@ -307,61 +416,159 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Handle user speech
   const handleUserSpeech = (text, source) => {
     if (!text) return;
+    
+    // Filter out noise
+    if (isNoiseOrInvalid(text)) {
+      log('USER_SPEECH', `Ignored noise: "${text}"`, { text });
+      return;
+    }
+    
+    // IMPORTANT: Ignore user speech when avatar is speaking (especially during quiz)
+    if (isAvatarSpeakingRef.current) {
+      log('USER_SPEECH', `Ignored - avatar is speaking: "${text}"`, { text });
+      return;
+    }
+    
     log('USER_SPEECH', `User said (${source})`, { text });
     
     // Check if we're in quiz mode and waiting for an answer
     if (quizState.isActive && quizState.waitingForAnswer && quizState.currentQuestionIndex < quizState.questions.length) {
-      const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
-      const isCorrect = checkAnswer(text, currentQuestion.correctAnswer, currentQuestion.keywords);
-      
-      // Update score
-      const newScore = isCorrect ? quizState.score + 1 : quizState.score;
-      
-      // Send feedback to avatar
-      if (isCorrect) {
-        sendMessageToReplica(
-          `Correct! Great answer! The student said: "${text}". ` +
-          (quizState.currentQuestionIndex < quizState.questions.length - 1 
-            ? `Now ask the next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
-            : `That was the last question! Tell the student they completed the quiz with a score of ${newScore} out of ${quizState.questions.length}.`)
-        );
-      } else {
-        sendMessageToReplica(
-          `The student answered: "${text}". That's not quite right. ` +
-          `The answer relates to: ${currentQuestion.correctAnswer}. ` +
-          `Provide a helpful hint and then ` +
-          (quizState.currentQuestionIndex < quizState.questions.length - 1 
-            ? `ask the next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
-            : `tell them that was the last question and they scored ${newScore} out of ${quizState.questions.length}.`)
-        );
+      // Additional validation for quiz answers - must be meaningful length
+      if (text.trim().length < 3) {
+        log('QUIZ', `Ignored short answer (likely noise): "${text}"`);
+        return; // Too short, likely noise
       }
       
-      // Move to next question or complete quiz
-      if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
-        setQuizState(prev => ({
-          ...prev,
-          currentQuestionIndex: prev.currentQuestionIndex + 1,
-          score: newScore,
-          waitingForAnswer: true,
-          lastQuestionAsked: quizState.questions[quizState.currentQuestionIndex + 1].question
-        }));
-      } else {
-        // Quiz completed
-        const percentage = Math.round((newScore / quizState.questions.length) * 100);
-        setQuizState(prev => ({
-          ...prev,
-          isActive: false,
-          score: newScore,
-          waitingForAnswer: false
-        }));
-        setCompletedModules(prev => [...prev, 'final-quiz']);
-        setShowLearningModules(true);
+      // Double-check avatar is not speaking (safety check)
+      if (isAvatarSpeakingRef.current) {
+        log('QUIZ', `Ignored answer - avatar is speaking: "${text}"`);
+        return;
+      }
+      
+      const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
+      const answerStatus = checkAnswer(text, currentQuestion.correctAnswer, currentQuestion.keywords);
+      
+      let newScore = quizState.score;
+      let newResults = [...quizState.questionResults];
+      
+      // Handle different answer statuses
+      if (answerStatus === 'correct') {
+        newScore = quizState.score + 1;
+        newResults.push({ 
+          questionIndex: quizState.currentQuestionIndex, 
+          topic: currentQuestion.topic,
+          status: 'correct' 
+        });
         
         sendMessageToReplica(
-          `Quiz complete! The student scored ${newScore} out of ${quizState.questions.length} (${percentage}%). ` +
-          `${percentage >= 70 ? 'Excellent work! They understand the concepts well.' : 'Good effort! They can review the topics to improve.'} ` +
-          `Congratulate them and ask if they have any other questions about human evolution.`
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `That's correct! Next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `That's correct! That was the last question!`)
         );
+        
+        // Move to next question
+        if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+          const nextIndex = quizState.currentQuestionIndex + 1;
+          setQuizState(prev => ({
+            ...prev,
+            currentQuestionIndex: nextIndex,
+            score: newScore,
+            waitingForAnswer: false, // Not ready yet - avatar is asking
+            isAskingQuestion: true, // Avatar will ask next question
+            lastQuestionAsked: prev.questions[nextIndex].question,
+            questionResults: newResults
+          }));
+        } else {
+          completeQuiz(newResults, newScore);
+        }
+        
+      } else if (answerStatus === 'partial') {
+        // Partial answer - just mark as partial and move on (no explanation now)
+        newResults.push({ 
+          questionIndex: quizState.currentQuestionIndex, 
+          topic: currentQuestion.topic,
+          status: 'partial' 
+        });
+        
+        sendMessageToReplica(
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `Partially correct, but not quite right. Next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `Partially correct, but not quite right. That was the last question!`)
+        );
+        
+        // Move to next question immediately
+        if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+          const nextIndex = quizState.currentQuestionIndex + 1;
+          setQuizState(prev => ({
+            ...prev,
+            currentQuestionIndex: nextIndex,
+            score: newScore,
+            waitingForAnswer: false, // Not ready yet - avatar is asking
+            isAskingQuestion: true, // Avatar will ask next question
+            lastQuestionAsked: prev.questions[nextIndex].question,
+            questionResults: newResults
+          }));
+        } else {
+          completeQuiz(newResults, newScore);
+        }
+        
+      } else if (answerStatus === 'dont_know') {
+        // User doesn't know - just mark and move on (no explanation now)
+        newResults.push({ 
+          questionIndex: quizState.currentQuestionIndex, 
+          topic: currentQuestion.topic,
+          status: 'unanswered' 
+        });
+        
+        sendMessageToReplica(
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `That's okay. Next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `That's okay. That was the last question!`)
+        );
+        
+        // Move to next question immediately
+        if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+          const nextIndex = quizState.currentQuestionIndex + 1;
+          setQuizState(prev => ({
+            ...prev,
+            currentQuestionIndex: nextIndex,
+            waitingForAnswer: false, // Not ready yet - avatar is asking
+            isAskingQuestion: true, // Avatar will ask next question
+            lastQuestionAsked: prev.questions[nextIndex].question,
+            questionResults: newResults
+          }));
+        } else {
+          completeQuiz(newResults, newScore);
+        }
+        
+      } else {
+        // Incorrect answer - just mark and move on (no explanation now)
+        newResults.push({ 
+          questionIndex: quizState.currentQuestionIndex, 
+          topic: currentQuestion.topic,
+          status: 'incorrect' 
+        });
+        
+        sendMessageToReplica(
+          (quizState.currentQuestionIndex < quizState.questions.length - 1 
+            ? `That's not quite right. Next question: "${quizState.questions[quizState.currentQuestionIndex + 1].question}"`
+            : `That's not quite right. That was the last question!`)
+        );
+        
+        // Move to next question immediately
+        if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+          const nextIndex = quizState.currentQuestionIndex + 1;
+          setQuizState(prev => ({
+            ...prev,
+            currentQuestionIndex: nextIndex,
+            waitingForAnswer: false, // Not ready yet - avatar is asking
+            isAskingQuestion: true, // Avatar will ask next question
+            lastQuestionAsked: prev.questions[nextIndex].question,
+            questionResults: newResults
+          }));
+        } else {
+          completeQuiz(newResults, newScore);
+        }
       }
       
       return; // Don't process as regular speech during quiz
@@ -997,6 +1204,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             log('DEMO', 'Ignoring user transcript - video is playing');
             return;
           }
+          // Ignore user transcripts when avatar is speaking (especially important for quiz)
+          if (isAvatarSpeakingRef.current) {
+            log('QUIZ', 'Ignoring user transcript - avatar is speaking');
+            return;
+          }
           handleUserSpeech(text, source);
         },
         onReplicaTranscript: (text, source) => {
@@ -1121,6 +1333,76 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     });
   };
 
+  // Get topic explanation for teacher-like feedback
+  const getTopicExplanation = (topic) => {
+    const explanations = {
+      "Natural Selection": "Natural selection is the process where animals that are better adapted to their environment survive and pass on their traits to their offspring. It's like nature choosing the best traits over time.",
+      "Genetic Drift": "Genetic drift happens when random chance affects which traits get passed down in a small population. It's like flipping a coin - sometimes certain traits become more common just by luck.",
+      "Fossil Record": "The fossil record shows us evidence of evolution over millions of years. Fossils are like nature's history book, showing us how living things have changed over time.",
+      "Evolution Timeline": "Human evolution took millions of years. Our ancestors gradually changed from ape-like creatures to modern humans over a very long period of time."
+    };
+    return explanations[topic] || "This is an important concept in evolution.";
+  };
+
+  // Complete quiz with teacher-like summary
+  const completeQuiz = (questionResults, finalScore) => {
+    const totalQuestions = quizState.questions.length;
+    const correctCount = questionResults.filter(r => r.status === 'correct').length;
+    const incorrectCount = questionResults.filter(r => r.status === 'incorrect' || r.status === 'partial').length;
+    const unansweredCount = questionResults.filter(r => r.status === 'unanswered').length;
+    const percentage = Math.round((finalScore / totalQuestions) * 100);
+    
+    // Find all incorrect/unanswered questions with their details
+    const incorrectQuestions = questionResults
+      .filter(r => r.status !== 'correct')
+      .map(r => {
+        const question = quizState.questions[r.questionIndex];
+        return {
+          question: question.question,
+          correctAnswer: question.correctAnswer,
+          topic: question.topic,
+          explanation: getTopicExplanation(question.topic),
+          status: r.status
+        };
+      });
+    
+    let summaryMessage = `Great job completing the quiz! Let me give you a summary of how you did:\n\n`;
+    summaryMessage += `📊 **Quiz Results:**\n`;
+    summaryMessage += `- Total Questions: ${totalQuestions}\n`;
+    summaryMessage += `- Correct Answers: ${correctCount}\n`;
+    summaryMessage += `- Incorrect/Partial Answers: ${incorrectCount}\n`;
+    summaryMessage += `- Unanswered: ${unansweredCount}\n`;
+    summaryMessage += `- Final Score: ${finalScore} out of ${totalQuestions} (${percentage}%)\n\n`;
+    
+    if (incorrectQuestions.length > 0) {
+      summaryMessage += `📚 **Here are the correct answers and explanations for the questions you missed:**\n\n`;
+      incorrectQuestions.forEach((item, index) => {
+        summaryMessage += `${index + 1}. **${item.question}**\n`;
+        summaryMessage += `   ✅ Correct Answer: ${item.correctAnswer}\n`;
+        summaryMessage += `   💡 Explanation: ${item.explanation}\n\n`;
+      });
+      summaryMessage += `I recommend going back to the learning modules and reviewing these topics. Practice makes perfect!`;
+    } else {
+      summaryMessage += `🎉 **Excellent work!** You answered all questions correctly. You have a strong understanding of human evolution!`;
+    }
+    
+    summaryMessage += `\n\nDo you have any questions about what we covered, or would you like to review any specific topic?`;
+    
+    setQuizState(prev => ({
+      ...prev,
+      isActive: false,
+      score: finalScore,
+      waitingForAnswer: false,
+      waitingForConfirmation: false,
+      isAskingQuestion: false,
+      questionResults: questionResults
+    }));
+    setCompletedModules(prev => [...prev, 'final-quiz']);
+    setShowLearningModules(true);
+    
+    sendMessageToReplica(summaryMessage);
+  };
+
   // Send message to replica
   const sendMessageToReplica = (message, type = 'respond') => {
     if (!dailyEventManagerRef.current) return;
@@ -1155,22 +1437,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {
           question: "What is natural selection?",
           correctAnswer: "natural selection",
-          keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"]
+          keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"],
+          topic: "Natural Selection"
         },
         {
           question: "What is genetic drift?",
           correctAnswer: "genetic drift",
-          keywords: ["genetic drift", "random", "chance", "population", "random chance"]
+          keywords: ["genetic drift", "random", "chance", "population", "random chance"],
+          topic: "Genetic Drift"
         },
         {
           question: "What does the fossil record show us?",
           correctAnswer: "fossil record",
-          keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"]
+          keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"],
+          topic: "Fossil Record"
         },
         {
           question: "How long did human evolution take?",
           correctAnswer: "millions of years",
-          keywords: ["millions", "years", "long time", "evolution", "millions of years"]
+          keywords: ["millions", "years", "long time", "evolution", "millions of years"],
+          topic: "Evolution Timeline"
         }
       ];
       
@@ -1181,13 +1467,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         questions: quizQuestions,
         score: 0,
         waitingForAnswer: false,
-        lastQuestionAsked: null
+        waitingForConfirmation: false,
+        lastQuestionAsked: null,
+        questionResults: [],
+        isAskingQuestion: true // Avatar will ask first question
       });
       
       // Send message to avatar to start quiz with first question
       const firstQuestion = quizQuestions[0].question;
       sendMessageToReplica(
-        `${prompt} Now ask the first question: "${firstQuestion}" Wait for the student to answer by speaking, then check if their answer is correct and provide feedback before asking the next question.`
+        `${prompt} Now ask the first question: "${firstQuestion}" IMPORTANT: When the student answers, only say if it's correct, partially correct, or wrong. Do NOT explain the answer or provide corrections. Just say "That's correct!" or "That's not quite right" and immediately ask the next question. Save all explanations for the end of the quiz.`
       );
       
       // Set waiting for answer after avatar finishes speaking (detected via transcript)
@@ -1210,21 +1499,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (!currentQuestion) return;
     
     // Check if avatar is asking the current quiz question
-    // Look for question keywords or the question text itself
+    // Look for question patterns
     const questionKeywords = currentQuestion.question.toLowerCase().split(' ').filter(w => w.length > 3);
     const isAskingQuestion = questionKeywords.some(keyword => lowerText.includes(keyword)) ||
-                             lowerText.includes('?') && 
+                             (lowerText.includes('?') && 
                              (lowerText.includes(currentQuestion.question.split(' ')[0].toLowerCase()) ||
-                              lowerText.includes('what is') || lowerText.includes('how long'));
+                              lowerText.includes('what is') || lowerText.includes('how long') ||
+                              lowerText.includes('what does')));
     
-    if (isAskingQuestion && !quizState.waitingForAnswer) {
-      // Avatar just asked the question, now wait for answer
+    if (isAskingQuestion) {
+      // Avatar is asking the question - mark it
       setQuizState(prev => ({
         ...prev,
-        waitingForAnswer: true,
-        lastQuestionAsked: currentQuestion.question
+        isAskingQuestion: true,
+        waitingForAnswer: false // Not ready for answer yet
       }));
-      log('QUIZ', `Avatar asked question ${quizState.currentQuestionIndex + 1}: ${currentQuestion.question}`);
+      log('QUIZ', `Avatar is asking question ${quizState.currentQuestionIndex + 1}: ${currentQuestion.question}`);
     }
   };
 
