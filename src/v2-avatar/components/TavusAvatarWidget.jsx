@@ -26,6 +26,7 @@ import { useDemoVideo } from '../hooks/useDemoVideo';
 import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
+import EntriLearningModules from './EntriLearningModules';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -68,6 +69,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [completedModules, setCompletedModules] = useState([]);
   const [showQuiz, setShowQuiz] = useState(false);
   const [showLearningModules, setShowLearningModules] = useState(true);
+  
+  // Entri onboarding module order for proactive behavior
+  const entriModuleOrder = [
+    'welcome-intro',
+    'about-entri',
+    'posh-info',
+    'employee-benefits',
+    'lifestyle-benefits',
+    'company-rules',
+    'final-quiz'
+  ];
+  
+  // Track if Entri onboarding has started
+  const entriOnboardingStartedRef = useRef(false);
   
   // Quiz state - for conversation-based quiz
   const [quizState, setQuizState] = useState({
@@ -118,6 +133,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const prePdfWidgetStateRef = useRef(null);
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
+  const handleModuleSelectRef = useRef(null); // Ref to handleModuleSelect function
   const isUserSpeakingRef = useRef(false); // Ref for user speaking state
   const isAvatarSpeakingRef = useRef(false); // Ref for avatar speaking state
 
@@ -160,6 +176,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     proactiveTimeoutRef.current = setTimeout(() => {
       // Check if user hasn't spoken and avatar isn't speaking (use refs for current values)
       if (!isUserSpeakingRef.current && !isAvatarSpeakingRef.current && dailyEventManagerRef.current) {
+        const isEntriPersona = personaId === 'p54ceeb77022';
+        
+        if (isEntriPersona && activeModule && !quizState.isActive) {
+          // For Entri persona, move to next module when current is completed
+          const currentIndex = entriModuleOrder.indexOf(activeModule);
+          if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+            const nextModuleId = entriModuleOrder[currentIndex + 1];
+            addDebugLog(`[PROACTIVE] Moving to next Entri module: ${nextModuleId}`);
+            // Automatically move to next module using ref
+            if (handleModuleSelectRef.current) {
+              handleModuleSelectRef.current(nextModuleId);
+            }
+            return;
+          }
+        }
+        
         addDebugLog('[PROACTIVE] 5 seconds passed, triggering continuation');
         // Send a message to trigger proactive continuation
         // Using respond message to trigger LLM to continue conversation
@@ -167,7 +199,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
       proactiveTimeoutRef.current = null;
     }, 5000);
-  }, [addDebugLog]);
+  }, [addDebugLog, personaId, activeModule, quizState.isActive]);
 
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
@@ -588,6 +620,35 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   };
 
   // Handle replica speech
+  // Strip markdown formatting from text (remove #, **, ###, etc.)
+  const stripMarkdown = (text) => {
+    if (!text) return text;
+    return text
+      // Remove markdown headers (#, ##, ###, etc.)
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remove bold (**text** or __text__)
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      // Remove italic (*text* or _text_)
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/_([^_]+)_/g, '$1')
+      // Remove code blocks (```code```)
+      .replace(/```[\s\S]*?```/g, '')
+      // Remove inline code (`code`)
+      .replace(/`([^`]+)`/g, '$1')
+      // Remove links [text](url) -> text
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      // Remove images ![alt](url)
+      .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+      // Remove horizontal rules (---, ***)
+      .replace(/^[-*]{3,}$/gm, '')
+      // Remove blockquotes (> text)
+      .replace(/^>\s+/gm, '')
+      // Clean up extra whitespace
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   const handleReplicaSpeech = (text, source) => {
     if (!text) return;
     log('REPLICA_SPEECH', `Replica said (${source})`, { text });
@@ -633,32 +694,49 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             // Log completion for debugging
             log('MODULE_COMPLETE', `Module ${moduleId} completed. Unlocking next module...`);
             
-            // Determine next module to unlock
-            const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
-            const currentIndex = moduleOrder.indexOf(moduleId);
-            const nextModuleId = moduleOrder[currentIndex + 1];
-            
-            // Notify user about next module unlocking (if not quiz)
-            if (nextModuleId && nextModuleId !== 'final-quiz') {
-              const nextModuleNames = {
-                'genetic-drift': 'Genetic Drift',
-                'fossil-record': 'Fossil Record'
-              };
+            // Determine next module to unlock (only for evolution persona)
+            const isEntriPersona = personaId === 'p54ceeb77022';
+            if (!isEntriPersona) {
+              const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
+              const currentIndex = moduleOrder.indexOf(moduleId);
+              const nextModuleId = moduleOrder[currentIndex + 1];
               
-              setTimeout(() => {
-                sendMessageToReplica(
-                  `Great job completing ${moduleId === 'natural-selection' ? 'Natural Selection' : moduleId === 'genetic-drift' ? 'Genetic Drift' : 'Fossil Record'}! ` +
-                  `The next topic "${nextModuleNames[nextModuleId]}" is now unlocked. You can click on it in the sidebar to continue learning!`
-                );
-              }, 1000);
-            } else if (nextModuleId === 'final-quiz' && updated.length === 3) {
-              // All topics completed, quiz unlocked
-              setTimeout(() => {
-                sendMessageToReplica(
-                  `Excellent! You've completed all the learning topics. The Final Quiz is now unlocked! ` +
-                  `Click on "Final Quiz" in the sidebar when you're ready to test your knowledge.`
-                );
-              }, 1000);
+              // Notify user about next module unlocking (if not quiz)
+              if (nextModuleId && nextModuleId !== 'final-quiz') {
+                const nextModuleNames = {
+                  'genetic-drift': 'Genetic Drift',
+                  'fossil-record': 'Fossil Record'
+                };
+                
+                setTimeout(() => {
+                  sendMessageToReplica(
+                    `Great job completing ${moduleId === 'natural-selection' ? 'Natural Selection' : moduleId === 'genetic-drift' ? 'Genetic Drift' : 'Fossil Record'}! ` +
+                    `The next topic "${nextModuleNames[nextModuleId]}" is now unlocked. You can click on it in the sidebar to continue learning!`
+                  );
+                }, 1000);
+              } else if (nextModuleId === 'final-quiz' && updated.length === 3) {
+                // All topics completed, quiz unlocked
+                setTimeout(() => {
+                  sendMessageToReplica(
+                    `Excellent! You've completed all the learning topics. The Final Quiz is now unlocked! ` +
+                    `Click on "Final Quiz" in the sidebar when you're ready to test your knowledge.`
+                  );
+                }, 1000);
+              }
+            } else {
+              // For Entri persona, automatically move to next module after completion
+              const currentIndex = entriModuleOrder.indexOf(moduleId);
+              if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+                const nextModuleId = entriModuleOrder[currentIndex + 1];
+                addDebugLog(`[ENTRI-ONBOARDING] Module ${moduleId} completed, moving to ${nextModuleId}`);
+                
+                // Wait a bit then automatically move to next module
+                setTimeout(() => {
+                  if (mountedRef.current && !quizState.isActive) {
+                    handleModuleSelect(nextModuleId);
+                  }
+                }, 3000); // Wait 3 seconds after completion before moving to next
+              }
             }
             
             return updated;
@@ -678,11 +756,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Find the last user question (should be the most recent one)
       const lastUser = prev.filter(t => t.type === 'user_speech').slice(-1);
       // Keep only: last user question + current avatar response
+      // Strip markdown from transcript text before displaying
       return [
         ...lastUser,
         {
           type: "avatar_speech",
-          text: text,
+          text: stripMarkdown(text),
           timestamp: Date.now(),
         },
       ];
@@ -1124,6 +1203,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     pendingDemoVideoRef.current = null;
     prePdfWidgetStateRef.current = null;
     hasAutoExpandedRef.current = false;
+    entriOnboardingStartedRef.current = false;
 
     // Clear dynamic URLs and pending states
     setCalendlyUrl('');
@@ -1302,6 +1382,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }
         }
       }, 1500);
+      
+      // Step 6: Auto-start Entri onboarding if Entri persona
+      if (personaId === 'p54ceeb77022' && !entriOnboardingStartedRef.current) {
+        setTimeout(() => {
+          if (mountedRef.current && sessionManagerRef.current?.isInitialized) {
+            addDebugLog('[ENTRI-ONBOARDING] Starting proactive onboarding with welcome module');
+            entriOnboardingStartedRef.current = true;
+            // Start with welcome module
+            handleModuleSelect('welcome-intro');
+          }
+        }, 2000); // Wait 2 seconds after mic is enabled
+      }
 
     } catch (err) {
       const errorMsg = err.message || 'Failed to connect. Please try again.';
@@ -1452,15 +1544,25 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const sendMessageToReplica = (message, type = 'respond') => {
     if (!dailyEventManagerRef.current) return;
 
+    // Strip markdown formatting before sending to avatar
+    const cleanedMessage = stripMarkdown(message);
+
     if (type === 'echo') {
-      dailyEventManagerRef.current.sendEchoMessage(message);
+      dailyEventManagerRef.current.sendEchoMessage(cleanedMessage);
     } else {
-      dailyEventManagerRef.current.sendRespondMessage(message);
+      dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
     }
   };
 
   // Check if module is unlocked
   const isModuleUnlocked = (moduleId) => {
+    // Check if this is Entri persona - all modules are unlocked
+    const isEntriPersona = personaId === 'p54ceeb77022';
+    if (isEntriPersona) {
+      return true; // All Entri modules are unlocked
+    }
+    
+    // Evolution persona - progressive unlocking
     const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
     const moduleIndex = moduleOrder.indexOf(moduleId);
     
@@ -1482,7 +1584,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   };
 
   // Handle learning module selection
-  const handleModuleSelect = (moduleId) => {
+  const handleModuleSelect = useCallback((moduleId) => {
+    // Check if this is Entri persona
+    const isEntriPersona = personaId === 'p54ceeb77022';
+    
     // Check if module is unlocked before proceeding
     if (!isModuleUnlocked(moduleId)) {
       // Send message to avatar explaining the module is locked
@@ -1499,43 +1604,93 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     setTranscripts([]);
     
     // Module-specific prompts for the avatar
-    const modulePrompts = {
+    const evolutionPrompts = {
       'natural-selection': "Let's discuss natural selection! This is how living things change over time. Animals that are better at surviving pass on their traits to their babies. Can you think of an example of natural selection?",
       'genetic-drift': "Great! Let's explore genetic drift. This happens when random chance affects which traits get passed down in a population. It's like flipping a coin - sometimes you get heads, sometimes tails. What questions do you have about genetic drift?",
       'fossil-record': "Excellent choice! The fossil record shows us evidence of evolution over millions of years. Fossils are like nature's history book. What would you like to know about fossils?",
       'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned. Are you ready to begin?"
     };
-
+    
+    const entriPrompts = {
+      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams. Let me tell you more about Entri and what it means to be an Entripreneur.",
+      'about-entri': "Entri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers. As an Entripreneur, you're part of a team that's making a real difference in people's lives. What would you like to know about Entri?",
+      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect. Do you have any questions about POSH?",
+      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance. What would you like to know more about?",
+      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance. What interests you most?",
+      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect. Do you have questions about any specific policy?",
+      'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Are you ready to begin?"
+    };
+    
+    const modulePrompts = isEntriPersona ? entriPrompts : evolutionPrompts;
     const prompt = modulePrompts[moduleId];
     
     if (moduleId === 'final-quiz') {
-      // Define quiz questions
-      const quizQuestions = [
-        {
-          question: "What is natural selection?",
-          correctAnswer: "natural selection",
-          keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"],
-          topic: "Natural Selection"
-        },
-        {
-          question: "What is genetic drift?",
-          correctAnswer: "genetic drift",
-          keywords: ["genetic drift", "random", "chance", "population", "random chance"],
-          topic: "Genetic Drift"
-        },
-        {
-          question: "What does the fossil record show us?",
-          correctAnswer: "fossil record",
-          keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"],
-          topic: "Fossil Record"
-        },
-        {
-          question: "How long did human evolution take?",
-          correctAnswer: "millions of years",
-          keywords: ["millions", "years", "long time", "evolution", "millions of years"],
-          topic: "Evolution Timeline"
-        }
-      ];
+      // Define quiz questions based on persona
+      let quizQuestions;
+      
+      if (isEntriPersona) {
+        // Entri onboarding quiz questions
+        quizQuestions = [
+          {
+            question: "How many users does Entri have?",
+            correctAnswer: "1.4 crore",
+            keywords: ["1.4 crore", "1.4 crore+", "1.4", "crore", "14 million", "14 million users"],
+            topic: "About Entri"
+          },
+          {
+            question: "What does POSH stand for?",
+            correctAnswer: "Prevention of Sexual Harassment",
+            keywords: ["posh", "prevention", "sexual harassment", "workplace", "prevention of sexual harassment"],
+            topic: "POSH"
+          },
+          {
+            question: "What is the quarterly allowance for the Entri Book Club?",
+            correctAnswer: "500 rupees",
+            keywords: ["500", "₹500", "500 rupees", "five hundred", "quarterly"],
+            topic: "Employee Benefits"
+          },
+          {
+            question: "What should you do if you experience an uncomfortable situation at work?",
+            correctAnswer: "report to posh committee",
+            keywords: ["report", "posh", "committee", "contact", "reach out", "email", "report to posh"],
+            topic: "Company Rules"
+          },
+          {
+            question: "What does it mean to be an Entripreneur?",
+            correctAnswer: "entri employee",
+            keywords: ["entripreneur", "entri employee", "part of entri", "entri family", "team member"],
+            topic: "Work Culture"
+          }
+        ];
+      } else {
+        // Evolution quiz questions
+        quizQuestions = [
+          {
+            question: "What is natural selection?",
+            correctAnswer: "natural selection",
+            keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"],
+            topic: "Natural Selection"
+          },
+          {
+            question: "What is genetic drift?",
+            correctAnswer: "genetic drift",
+            keywords: ["genetic drift", "random", "chance", "population", "random chance"],
+            topic: "Genetic Drift"
+          },
+          {
+            question: "What does the fossil record show us?",
+            correctAnswer: "fossil record",
+            keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"],
+            topic: "Fossil Record"
+          },
+          {
+            question: "How long did human evolution take?",
+            correctAnswer: "millions of years",
+            keywords: ["millions", "years", "long time", "evolution", "millions of years"],
+            topic: "Evolution Timeline"
+          }
+        ];
+      }
       
       // Initialize quiz state
       setQuizState({
@@ -1564,7 +1719,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
       // Mark module as completed after avatar finishes (handled via transcript)
     }
-  };
+  }, [personaId, quizState.isActive, sendMessageToReplica, setQuizState, setActiveModule, setTranscripts, isModuleUnlocked]);
+  
+  // Store handleModuleSelect in ref for proactive continuation
+  useEffect(() => {
+    handleModuleSelectRef.current = handleModuleSelect;
+  }, [handleModuleSelect]);
 
   // Handle replica speech - detect when avatar asks quiz questions
   const handleReplicaSpeechForQuiz = (text) => {
@@ -2119,12 +2279,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         {/* Learning Modules - show when connected and not in overlays */}
         {!isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
-          <LearningModules
-            onModuleSelect={handleModuleSelect}
-            activeModule={activeModule}
-            completedModules={completedModules}
-            onClose={() => setShowLearningModules(false)}
-          />
+          personaId === 'p54ceeb77022' ? (
+            <EntriLearningModules
+              onModuleSelect={handleModuleSelect}
+              activeModule={activeModule}
+              completedModules={completedModules}
+              onClose={() => setShowLearningModules(false)}
+            />
+          ) : (
+            <LearningModules
+              onModuleSelect={handleModuleSelect}
+              activeModule={activeModule}
+              completedModules={completedModules}
+              onClose={() => setShowLearningModules(false)}
+            />
+          )
         )}
 
         {/* Quiz indicator - show when quiz is active (no popup, just indicator) */}
