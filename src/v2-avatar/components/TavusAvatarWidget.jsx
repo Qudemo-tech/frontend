@@ -317,7 +317,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           const isEntriPersona = personaId === 'p54ceeb77022';
           if (isEntriPersona && !completedModules.includes(activeModule)) {
             // Check if avatar has spoken about the topic (check last speech)
-            if (lastSpeech && lastSpeech.length > 50) {
+            // Clean markdown from lastSpeech before checking
+            const cleanedLastSpeech = lastSpeech ? stripMarkdown(lastSpeech) : '';
+            if (cleanedLastSpeech && cleanedLastSpeech.length > 50) {
               addDebugLog(`[ENTRI-ONBOARDING] Avatar finished speaking about ${activeModule}, marking as complete`);
               setTimeout(() => {
                 setCompletedModules(prev => {
@@ -645,7 +647,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   const handleReplicaSpeech = (text, source) => {
     if (!text) return;
-    log('REPLICA_SPEECH', `Replica said (${source})`, { text });
+    
+    // Strip markdown from avatar speech immediately
+    const cleanedText = stripMarkdown(text);
+    
+    log('REPLICA_SPEECH', `Replica said (${source})`, { text: cleanedText });
     
     // Check if avatar finished speaking about a module topic
     // Mark module as completed when avatar finishes explaining
@@ -676,14 +682,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         'make sense'
       ];
       
-      const lowerText = text.toLowerCase();
+      const lowerText = cleanedText.toLowerCase();
       const indicatesCompletion = completionIndicators.some(indicator => 
         lowerText.includes(indicator)
       );
       
       // For Entri persona, also check if avatar has been speaking for a while (more lenient completion)
       const isEntriPersona = personaId === 'p54ceeb77022';
-      const textLength = text.length;
+      const textLength = cleanedText.length;
       const hasSubstantialContent = textLength > 100; // Avatar has spoken a substantial amount
       
       // Mark as completed after avatar finishes speaking
@@ -758,7 +764,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     
     // Check for quiz question detection
     if (quizState.isActive) {
-      handleReplicaSpeechForQuiz(text);
+      handleReplicaSpeechForQuiz(cleanedText);
     }
     
     // Update transcripts: keep the last user question and add/update current avatar response
@@ -767,18 +773,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Find the last user question (should be the most recent one)
       const lastUser = prev.filter(t => t.type === 'user_speech').slice(-1);
       // Keep only: last user question + current avatar response
-      // Strip markdown from transcript text before displaying
+      // Use cleaned text (already has markdown stripped)
       return [
         ...lastUser,
         {
           type: "avatar_speech",
-          text: stripMarkdown(text),
+          text: cleanedText,
           timestamp: Date.now(),
         },
       ];
     });
-    lastAvatarSpeechRef.current = text;
-    detectIntent(text, { text }, "avatar");
+    lastAvatarSpeechRef.current = cleanedText;
+    detectIntent(cleanedText, { text: cleanedText }, "avatar");
   };
 
   // Handle tool calls from Tavus
