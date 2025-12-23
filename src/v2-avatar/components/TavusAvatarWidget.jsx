@@ -312,6 +312,40 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           });
         }, 500);
         
+        // For Entri persona: Mark module as completed when avatar finishes speaking (if not quiz)
+        if (!interrupted && !quizState.isActive && activeModule && activeModule !== 'final-quiz') {
+          const isEntriPersona = personaId === 'p54ceeb77022';
+          if (isEntriPersona && !completedModules.includes(activeModule)) {
+            // Check if avatar has spoken about the topic (check last speech)
+            if (lastSpeech && lastSpeech.length > 50) {
+              addDebugLog(`[ENTRI-ONBOARDING] Avatar finished speaking about ${activeModule}, marking as complete`);
+              setTimeout(() => {
+                setCompletedModules(prev => {
+                  if (prev.includes(activeModule)) {
+                    return prev;
+                  }
+                  const updated = [...prev, activeModule];
+                  
+                  // Automatically move to next module
+                  const currentIndex = entriModuleOrder.indexOf(activeModule);
+                  if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+                    const nextModuleId = entriModuleOrder[currentIndex + 1];
+                    addDebugLog(`[ENTRI-ONBOARDING] Moving to next module: ${nextModuleId}`);
+                    
+                    setTimeout(() => {
+                      if (mountedRef.current && !quizState.isActive) {
+                        handleModuleSelect(nextModuleId);
+                      }
+                    }, 2000); // Wait 2 seconds before moving to next
+                  }
+                  
+                  return updated;
+                });
+              }, 1000);
+            }
+          }
+        }
+        
         // Demo triggers are handled via tool calls in Tavus, no speech detection needed
         // Trigger proactive continuation after 5 seconds if user doesn't speak
         if (!interrupted) {
@@ -417,44 +451,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     return 'incorrect';
   };
 
-  // Filter out noise and invalid speech
-  const isNoiseOrInvalid = (text) => {
-    if (!text) return true;
-    
-    const trimmed = text.trim();
-    
-    // Too short - likely noise (less than 2 characters)
-    if (trimmed.length < 2) {
-      return true;
-    }
-    
-    // Common noise patterns
-    const noisePatterns = [
-      /^[h]+$/i, // Just "h" or "hhh"
-      /^[a]+$/i, // Just "a" or "aaa"
-      /^[uh]+$/i, // Just "uh" or "uhh"
-      /^[mm]+$/i, // Just "mm" or "mmm"
-      /^[eh]+$/i, // Just "eh" or "ehh"
-      /^\s*$/, // Only whitespace
-      /^[\.\?\!]+$/, // Only punctuation
-    ];
-    
-    if (noisePatterns.some(pattern => pattern.test(trimmed))) {
-      return true;
-    }
-    
-    return false;
-  };
 
   // Handle user speech
   const handleUserSpeech = (text, source) => {
     if (!text) return;
-    
-    // Filter out noise
-    if (isNoiseOrInvalid(text)) {
-      log('USER_SPEECH', `Ignored noise: "${text}"`, { text });
-      return;
-    }
     
     // IMPORTANT: Ignore user speech when avatar is speaking (especially during quiz)
     if (isAvatarSpeakingRef.current) {
@@ -466,12 +466,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     
     // Check if we're in quiz mode and waiting for an answer
     if (quizState.isActive && quizState.waitingForAnswer && quizState.currentQuestionIndex < quizState.questions.length) {
-      // Additional validation for quiz answers - must be meaningful length
-      if (text.trim().length < 3) {
-        log('QUIZ', `Ignored short answer (likely noise): "${text}"`);
-        return; // Too short, likely noise
-      }
-      
       // Double-check avatar is not speaking (safety check)
       if (isAvatarSpeakingRef.current) {
         log('QUIZ', `Ignored answer - avatar is speaking: "${text}"`);
@@ -669,7 +663,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         'what questions do you have',
         'ready to move on',
         'next topic',
-        'another topic'
+        'another topic',
+        'what would you like',
+        'do you have questions',
+        'anything else',
+        'anything specific',
+        'what interests you',
+        'what would you like to know more',
+        'questions about',
+        'understand',
+        'clear',
+        'make sense'
       ];
       
       const lowerText = text.toLowerCase();
@@ -677,8 +681,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         lowerText.includes(indicator)
       );
       
+      // For Entri persona, also check if avatar has been speaking for a while (more lenient completion)
+      const isEntriPersona = personaId === 'p54ceeb77022';
+      const textLength = text.length;
+      const hasSubstantialContent = textLength > 100; // Avatar has spoken a substantial amount
+      
       // Mark as completed after avatar finishes speaking
-      if (indicatesCompletion) {
+      // For Entri: be more lenient - if avatar has spoken substantially, consider it complete
+      // For Evolution: require completion indicators
+      if (indicatesCompletion || (isEntriPersona && hasSubstantialContent)) {
         // Use a ref to track if we've already scheduled completion
         const moduleId = activeModule;
         setTimeout(() => {
