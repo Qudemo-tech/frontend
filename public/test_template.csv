@@ -1,4 +1,0 @@
-video_url,question,expected_timestamp,expected_answer_snippet
-https://www.youtube.com/watch?v=example1,"What is the main feature?",45.2,"The main feature is"
-https://www.loom.com/share/example2,"How do I configure this?",120.5,"To configure this"
-https://www.youtube.com/watch?v=example3,"What are the benefits?",67.8,"The benefits include"

@@ -73,7 +73,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Entri onboarding module order for proactive behavior
   const entriModuleOrder = [
     'welcome-intro',
-    'about-entri',
     'posh-info',
     'employee-benefits',
     'lifestyle-benefits',
@@ -134,8 +133,30 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
   const handleModuleSelectRef = useRef(null); // Ref to handleModuleSelect function
+  const checkModuleCompletionRef = useRef(null); // Ref to checkModuleCompletion function
+  const finishModuleSpeechRef = useRef(null); // Ref to finishModuleSpeech function
+  const activeModuleRef = useRef(null); // Ref to track current active module
   const isUserSpeakingRef = useRef(false); // Ref for user speaking state
   const isAvatarSpeakingRef = useRef(false); // Ref for avatar speaking state
+  const listeningStateRef = useRef(null); // Track current listening state to prevent redundant calls ('enabled' | 'disabled' | null)
+  const playDemoVideoRef = useRef(null); // Ref to playDemoVideo function
+  
+  // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
+  const moduleSpeechLockRef = useRef(false);
+  
+  // 📝 Accumulates ALL agent speech for current module
+  const moduleSpeechAccumulatorRef = useRef({
+    text: '',
+    startedAt: null,
+    lastChunkAt: null,
+    completed: false,
+  });
+  
+  // 🎯 Prevent race conditions with speech epochs
+  const speechEpochRef = useRef(0);
+  
+  // 📝 Store current module prompt to detect and ignore matching user utterances
+  const currentModulePromptRef = useRef('');
 
   // Session manager and event manager refs
   const sessionManagerRef = useRef(null);
@@ -166,6 +187,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Trigger proactive continuation after 5 seconds of silence
   const triggerProactiveContinuation = useCallback(() => {
+    // 🔒 BLOCK proactive continuation when module lock is active
+    if (moduleSpeechLockRef.current) {
+      return; // Do not trigger any proactive continuation
+    }
+    
     // Clear any existing timeout
     if (proactiveTimeoutRef.current) {
       clearTimeout(proactiveTimeoutRef.current);
@@ -174,6 +200,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     // Set timeout for 5 seconds
     proactiveTimeoutRef.current = setTimeout(() => {
+      // 🔒 Check lock again before executing
+      if (moduleSpeechLockRef.current) {
+        return;
+      }
+      
       // Check if user hasn't spoken and avatar isn't speaking (use refs for current values)
       if (!isUserSpeakingRef.current && !isAvatarSpeakingRef.current && dailyEventManagerRef.current) {
         const isEntriPersona = personaId === 'p54ceeb77022';
@@ -204,6 +235,57 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
 
+  // Callback for when founder video stops - move to next module
+  const handleFounderVideoStop = useCallback(() => {
+    if (activeModuleRef.current === 'founder-video' && personaId === 'p54ceeb77022') {
+      addDebugLog('[DEMO] Founder video finished - moving to next module');
+      
+      // 🔇 Ensure microphone stays muted (should already be muted)
+      if (sessionManagerRef.current?.isInitialized) {
+        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+          addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
+        });
+        setIsMuted(true);
+      }
+      
+      // 🔴 Keep Tavus listening disabled
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
+      }
+      
+      // Unlock the module lock
+      moduleSpeechLockRef.current = false;
+      currentModulePromptRef.current = '';
+      
+      // Mark founder-video as complete
+      setCompletedModules(prev => {
+        if (prev.includes('founder-video')) {
+          return prev;
+        }
+        return [...prev, 'founder-video'];
+      });
+      
+      // Move to next main module (posh-info) - founder-video comes after welcome-intro
+      // So next module is posh-info (index 1 in entriModuleOrder)
+      const nextModuleId = entriModuleOrder[1]; // posh-info
+      addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
+      setTimeout(() => {
+        if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
+          addDebugLog(`[DEMO] ✅ Moving to next module after founder video: ${nextModuleId}`);
+          // Ensure microphone is still muted before moving to next module
+          if (sessionManagerRef.current?.isInitialized) {
+            sessionManagerRef.current.setMicrophoneMuted(true);
+            setIsMuted(true);
+          }
+          handleModuleSelectRef.current(nextModuleId);
+        } else {
+          addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
+        }
+      }, 500); // Reduced delay for faster transition
+    }
+  }, [personaId, entriModuleOrder, quizState.isActive, addDebugLog]);
+
   // Demo video hook
   const { isDemoPlaying, currentVideoUrl, isYouTube, youTubeEmbedUrl, demoVideoRef, playDemoVideo, stopDemoVideo } = useDemoVideo({
     sessionManager: sessionManagerRef.current,
@@ -221,12 +303,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Reset speaking state
       setIsAvatarSpeaking(false);
       isAvatarSpeakingRef.current = false;
-      setAvatarState("listening");
+      // Don't set to "listening" when microphone is muted - set to "idle" instead
+      setAvatarState(isMuted ? "idle" : "listening");
     },
     onVideoStop: () => {
       // Restore avatar audio when video stops
-      addDebugLog('[DEMO] Restoring avatar audio after video playback');
+      addDebugLog('[DEMO] Video stopped - restoring avatar audio');
       setAudioEnabled(true);
+      
+      // Handle founder video completion (video will be closed and next module will start)
+      handleFounderVideoStop();
     },
   });
 
@@ -234,6 +320,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   useEffect(() => {
     isDemoPlayingRef.current = isDemoPlaying;
   }, [isDemoPlaying]);
+
+  // Send message to replica - defined early so it can be used by other callbacks
+  const sendMessageToReplica = useCallback((message, type = 'respond') => {
+    if (!dailyEventManagerRef.current) return;
+
+    // Strip markdown formatting before sending to avatar
+    const cleanedMessage = stripMarkdown(message);
+
+    if (type === 'echo') {
+      dailyEventManagerRef.current.sendEchoMessage(cleanedMessage);
+    } else {
+      dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
+    }
+  }, []);
 
   // Setup DailyEventManager callbacks
   useEffect(() => {
@@ -248,15 +348,61 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Ignoring avatar speech - video is playing');
           return;
         }
+        
+        addDebugLog('[TAVUS] 🤖 TAVUS STARTED SPEAKING');
         setIsAvatarSpeaking(true);
         isAvatarSpeakingRef.current = true;
         setAvatarState("speaking");
+        
+        // If module lock is active, ensure Tavus listening is disabled
+        if (moduleSpeechLockRef.current && dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          addDebugLog('[MODULE-LOCK] 🔇 Re-confirmed Tavus listening disabled');
+        }
+        
+        // Mute microphone at Daily.co level (backup)
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+            addDebugLog(`[MIC] ❌ Failed to mute: ${err.message}`);
+          });
+          setIsMuted(true);
+        }
       },
       onReplicaStopSpeaking: (lastSpeech, interrupted) => {
         // Ignore avatar speech when video is playing
         if (isDemoPlayingRef.current) {
           addDebugLog('[DEMO] Ignoring avatar speech end - video is playing');
           return;
+        }
+        
+        // 🔍 CRITICAL LOGGING: Track if Tavus is interrupting itself
+        addDebugLog(`[TAVUS] 🛑 TAVUS STOPPED SPEAKING - interrupted: ${interrupted}`);
+        if (interrupted && moduleSpeechLockRef.current) {
+          addDebugLog('[TAVUS] ⚠️⚠️⚠️ CRITICAL: Tavus interrupted itself during module speech!');
+          addDebugLog('[TAVUS] This means Tavus listening was NOT properly disabled');
+        }
+        
+        // When avatar stops speaking during welcome module, transition to founder video immediately
+        // For other modules (non-welcome, non-founder-video), completion is handled by finishModuleSpeech
+        if (activeModuleRef.current === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
+          addDebugLog('[FOUNDER-VIDEO] ✅ Welcome module complete - transitioning to founder video');
+          const acc = moduleSpeechAccumulatorRef.current;
+          acc.completed = true;
+          if (finishModuleSpeechRef.current) {
+            addDebugLog('[FOUNDER-VIDEO] Calling finishModuleSpeech to transition to founder-video');
+            finishModuleSpeechRef.current();
+          } else {
+            addDebugLog('[FOUNDER-VIDEO] ❌ finishModuleSpeechRef.current is null!');
+          }
+        } else if (activeModuleRef.current && activeModuleRef.current !== 'welcome-intro' && activeModuleRef.current !== 'founder-video' && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+          // For other regular modules: Trigger completion check when avatar stops speaking
+          // This enables proactive flow - modules complete automatically and move to next
+          addDebugLog(`[MODULE-LOCK] Module ${activeModuleRef.current} avatar stopped speaking - triggering completion`);
+          const acc = moduleSpeechAccumulatorRef.current;
+          if (!acc.completed && finishModuleSpeechRef.current) {
+            acc.completed = true;
+            finishModuleSpeechRef.current();
+          }
         }
         
         // Check if quiz question was interrupted
@@ -282,7 +428,29 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         
         setIsAvatarSpeaking(false);
         isAvatarSpeakingRef.current = false;
+        
+        // REMOVED: Don't trigger transition when avatar stops speaking during welcome
+        // Wait for the full welcome script to complete (via duration check in checkModuleCompletion)
+        // This ensures step-by-step course learning flow
+        
+        // Don't set to "listening" when microphone is muted or module lock is active
+        if (moduleSpeechLockRef.current || isMuted) {
+          setAvatarState("idle");
+          addDebugLog('[AVATAR-STATE] Setting to "idle" - microphone muted or module lock active');
+        } else {
         setAvatarState("listening");
+        }
+        
+        // Unmute microphone after agent finishes speaking (with delay to filter background noise)
+        // Only unmute if not interrupted and session is still active
+        if (!interrupted && sessionManagerRef.current?.isInitialized) {
+          // Add delay to filter out background noise that might trigger right after agent stops
+          setTimeout(() => {
+            // DO NOT automatically unmute microphone - user must manually toggle it
+            // Microphone stays muted throughout onboarding flow
+            addDebugLog('[MIC] ⚠️ Keeping microphone muted - user must manually enable it');
+          }, 800); // 800ms delay to filter background noise
+        }
         
         // Mark quiz question as complete if it wasn't interrupted
         if (!interrupted) {
@@ -312,40 +480,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           });
         }, 500);
         
-        // For Entri persona: Mark module as completed when avatar finishes speaking (if not quiz)
-        if (!interrupted && !quizState.isActive && activeModule && activeModule !== 'final-quiz') {
-          const isEntriPersona = personaId === 'p54ceeb77022';
-          if (isEntriPersona && !completedModules.includes(activeModule)) {
-            // Check if avatar has spoken about the topic (check last speech)
-            // Clean markdown from lastSpeech before checking
-            const cleanedLastSpeech = lastSpeech ? stripMarkdown(lastSpeech) : '';
-            if (cleanedLastSpeech && cleanedLastSpeech.length > 50) {
-              addDebugLog(`[ENTRI-ONBOARDING] Avatar finished speaking about ${activeModule}, marking as complete`);
-              setTimeout(() => {
-                setCompletedModules(prev => {
-                  if (prev.includes(activeModule)) {
-                    return prev;
-                  }
-                  const updated = [...prev, activeModule];
-                  
-                  // Automatically move to next module
-                  const currentIndex = entriModuleOrder.indexOf(activeModule);
-                  if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-                    const nextModuleId = entriModuleOrder[currentIndex + 1];
-                    addDebugLog(`[ENTRI-ONBOARDING] Moving to next module: ${nextModuleId}`);
-                    
-                    setTimeout(() => {
-                      if (mountedRef.current && !quizState.isActive) {
-                        handleModuleSelect(nextModuleId);
-                      }
-                    }, 2000); // Wait 2 seconds before moving to next
-                  }
-                  
-                  return updated;
-                });
-              }, 1000);
-            }
-          }
+        // ❌ REMOVED: Old completion logic based on lastSpeech.length
+        // ✅ NEW: Completion is now handled by sentinel phrase detection in checkModuleCompletion()
+        // Module completion is detected when agent says "—END OF MODULE—"
+        
+        // 🔒 BLOCK proactive continuation when module lock is active
+        if (moduleSpeechLockRef.current) {
+          return; // Do not trigger any proactive continuation
         }
         
         // Demo triggers are handled via tool calls in Tavus, no speech detection needed
@@ -355,11 +496,23 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
       },
       onUserStartSpeaking: () => {
+        // 🔒 HARD BLOCK: Ignore ALL user speech when module lock is active
+        if (moduleSpeechLockRef.current) {
+          addDebugLog('[MODULE-LOCK] ⚠️ Ignoring user speech event (module lock active)');
+          return; // IGNORE COMPLETELY - no processing
+        }
+        
         // Ignore user speech when video is playing (mic is muted anyway)
         if (isDemoPlayingRef.current) {
           addDebugLog('[DEMO] Ignoring user speech - video is playing');
           return;
         }
+        
+        // If we reach here, module lock is not active, so user speech is valid
+        // DO NOT automatically unmute microphone when user starts speaking
+        // Microphone stays muted - user must manually toggle it to enable
+        addDebugLog('[MIC] ⚠️ User speech detected but microphone remains muted - user must manually enable it');
+        
         setIsUserSpeaking(true);
         isUserSpeakingRef.current = true;
       },
@@ -372,16 +525,24 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         isUserSpeakingRef.current = false;
       },
       onUserTranscript: (text, source) => {
+        // 🔒 HARD BLOCK: Ignore ALL user transcripts when module lock is active
+        if (moduleSpeechLockRef.current) {
+          // Additional check: Ignore if text matches module prompt (Tavus sometimes echoes prompts as user speech)
+          const promptText = currentModulePromptRef.current;
+          if (promptText && (text.includes(promptText.substring(0, 100)) || promptText.includes(text.substring(0, 100)))) {
+            addDebugLog('[MODULE-LOCK] ⚠️ Ignoring user transcript that matches module prompt (Tavus echo detected)');
+          } else {
+            addDebugLog('[MODULE-LOCK] ⚠️ Ignoring user transcript during module speech (lock active)');
+          }
+          return; // IGNORE COMPLETELY
+        }
+        
         // Ignore user transcripts when video is playing
         if (isDemoPlayingRef.current) {
           addDebugLog('[DEMO] Ignoring user transcript - video is playing');
           return;
         }
-        // Ignore user transcripts when avatar is speaking (especially important for quiz)
-        if (isAvatarSpeakingRef.current) {
-          addDebugLog('[QUIZ] Ignoring user transcript - avatar is speaking');
-          return;
-        }
+        
         handleUserSpeech(text, source);
       },
       onReplicaTranscript: (text, source) => {
@@ -390,6 +551,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Ignoring avatar transcript - video is playing');
           return;
         }
+        
+        // 📝 ACCUMULATE SPEECH when module lock is active
+        if (moduleSpeechLockRef.current) {
+          const acc = moduleSpeechAccumulatorRef.current;
+          const cleanedChunk = stripMarkdown(text);
+          acc.text += ' ' + cleanedChunk;
+          acc.lastChunkAt = Date.now();
+          if (!acc.startedAt) {
+            acc.startedAt = Date.now();
+          }
+          addDebugLog(`[MODULE-LOCK] Accumulated speech: ${acc.text.length} chars`);
+        }
+        
         handleReplicaSpeech(text, source);
       },
       onToolCall: (name, args, properties) => {
@@ -898,9 +1072,38 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   }, [isAvatarSpeaking, isUserSpeaking, state, log]);
 
   // Wait for both user and avatar to finish speaking before playing demo video
+  // EXCEPTION: For founder-video module, play immediately without waiting
   useEffect(() => {
-    if (pendingDemoVideoRef.current && !isAvatarSpeaking && !isUserSpeaking) {
+    if (pendingDemoVideoRef.current) {
       const videoUrl = pendingDemoVideoRef.current;
+      
+      // Special handling for founder-video: Play immediately without waiting
+      if (activeModule === 'founder-video') {
+        log('DEMO', 'Founder video - playing immediately without waiting', { hasPlayDemoVideo: !!playDemoVideo });
+        
+        // Save current state for restoration later
+        preDemoWidgetStateRef.current = state;
+
+        // Maximize if not already, then play immediately
+        if (state !== "maximized") {
+          setState("maximized");
+          setTimeout(() => {
+            if (mountedRef.current && playDemoVideo) {
+              playDemoVideo(videoUrl);
+              pendingDemoVideoRef.current = null;
+              log('DEMO', 'Founder video playback started (after maximize)');
+            }
+          }, 100); // Very short delay
+        } else {
+          // Play immediately
+          if (playDemoVideo) {
+            playDemoVideo(videoUrl);
+            pendingDemoVideoRef.current = null;
+            log('DEMO', 'Founder video playback started (immediate)');
+          }
+        }
+      } else if (!isAvatarSpeaking && !isUserSpeaking) {
+        // For other videos: Wait for both user and avatar to finish speaking
       log('DEMO', 'Both user and replica finished speaking - playing video now');
 
       // Save current state for restoration later
@@ -912,14 +1115,44 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         setState("maximized");
         setTimeout(() => {
           playDemoVideo(videoUrl);
+            pendingDemoVideoRef.current = null;
         }, 300);
       } else {
         playDemoVideo(videoUrl);
+          pendingDemoVideoRef.current = null;
+        }
       }
-
-      pendingDemoVideoRef.current = null;
     }
-  }, [isAvatarSpeaking, isUserSpeaking, state, log, playDemoVideo]);
+  }, [isAvatarSpeaking, isUserSpeaking, state, log, playDemoVideo, activeModule]);
+  
+  // Force play founder video immediately when module is selected (fallback)
+  useEffect(() => {
+    if (activeModule === 'founder-video' && pendingDemoVideoRef.current) {
+      const videoUrl = pendingDemoVideoRef.current;
+      log('DEMO', 'Founder video - force playing immediately (fallback useEffect)', { isDemoPlaying, hasPlayDemoVideo: !!playDemoVideo });
+      
+      // Play immediately without any conditions (don't check isDemoPlaying - force play)
+      setTimeout(() => {
+        if (mountedRef.current && pendingDemoVideoRef.current === videoUrl && playDemoVideo) {
+          preDemoWidgetStateRef.current = state;
+          if (state !== "maximized") {
+            setState("maximized");
+            setTimeout(() => {
+              if (mountedRef.current && playDemoVideo) {
+                playDemoVideo(videoUrl);
+                pendingDemoVideoRef.current = null;
+                log('DEMO', 'Founder video playback started (after maximize - fallback)');
+              }
+            }, 100);
+          } else {
+            playDemoVideo(videoUrl);
+            pendingDemoVideoRef.current = null;
+            log('DEMO', 'Founder video playback started (immediate - fallback)');
+          }
+        }
+      }, 100); // Reduced delay for faster playback
+    }
+  }, [activeModule, state, log, playDemoVideo]);
 
   // Wait for both user and avatar to finish speaking before showing PDF
   useEffect(() => {
@@ -1322,16 +1555,46 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             return;
           }
           setIsAvatarSpeaking(true);
+          isAvatarSpeakingRef.current = true;
           setAvatarState("speaking");
         },
-        onReplicaStopSpeaking: () => {
+        onReplicaStopSpeaking: (lastSpeech, interrupted) => {
           // Ignore avatar speech when video is playing
           if (isDemoPlayingRef.current) {
             log('DEMO', 'Ignoring avatar speech end - video is playing');
             return;
           }
           setIsAvatarSpeaking(false);
+          isAvatarSpeakingRef.current = false;
+          
+          // Proactive flow: When avatar stops speaking, trigger module completion
+          const currentModule = activeModuleRef.current;
+          
+          if (currentModule === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
+            // Welcome module: Transition to founder video
+            addDebugLog('[FOUNDER-VIDEO] ✅ Welcome module complete - transitioning to founder video');
+            const acc = moduleSpeechAccumulatorRef.current;
+            acc.completed = true;
+            if (finishModuleSpeechRef.current) {
+              finishModuleSpeechRef.current();
+            }
+          } else if (currentModule && currentModule !== 'welcome-intro' && currentModule !== 'founder-video' && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+            // Regular modules (posh-info, employee-benefits, etc.): Auto-complete and move to next
+            addDebugLog(`[MODULE-LOCK] ✅ Module ${currentModule} complete - triggering completion for proactive flow`);
+            const acc = moduleSpeechAccumulatorRef.current;
+            if (!acc.completed && finishModuleSpeechRef.current) {
+              acc.completed = true;
+              finishModuleSpeechRef.current();
+            }
+          }
+          
+          // Don't set to "listening" when microphone is muted or module lock is active
+          if (moduleSpeechLockRef.current || isMuted) {
+            setAvatarState("idle");
+            log('AVATAR-STATE', 'Setting to "idle" - microphone muted or module lock active');
+          } else {
           setAvatarState("listening");
+          }
         },
         onUserStartSpeaking: () => {
           if (isDemoPlayingRef.current) return;
@@ -1358,6 +1621,23 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             log('DEMO', 'Ignoring avatar transcript - video is playing');
             return;
           }
+          
+          // 📝 ACCUMULATE SPEECH when module lock is active
+          if (moduleSpeechLockRef.current) {
+            const acc = moduleSpeechAccumulatorRef.current;
+            const cleanedChunk = stripMarkdown(text);
+            acc.text += ' ' + cleanedChunk;
+            acc.lastChunkAt = Date.now();
+            if (!acc.startedAt) {
+              acc.startedAt = Date.now();
+            }
+            addDebugLog(`[MODULE-LOCK] 📝 Accumulated speech: ${acc.text.length} chars - chunk: "${cleanedChunk.substring(0, 50)}..."`);
+            console.log('[MODULE-LOCK] 📝 Accumulated speech:', { length: acc.text.length, chunk: cleanedChunk.substring(0, 50) });
+          } else {
+            addDebugLog(`[MODULE-LOCK] ⚠️ Transcript received but module lock is NOT active - not accumulating`);
+            console.log('[MODULE-LOCK] ⚠️ Transcript received but module lock inactive');
+          }
+          
           handleReplicaSpeech(text, source);
         },
         onToolCall: (name, args) => {
@@ -1376,6 +1656,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Attach to Daily
       dailyEventManagerRef.current.attachToDaily(daily, conversationId);
 
+      // 🔴 CRITICAL: Disable Tavus listening immediately to prevent any listening
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        listeningStateRef.current = 'disabled';
+        addDebugLog('[INIT] 🔇 Tavus listening disabled from start - will stay disabled until user enables mic');
+      }
+
       // Step 4: Wait for session to be ready
       addDebugLog('Waiting for session to be ready...');
       await sessionManagerRef.current.waitForReady();
@@ -1385,20 +1672,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       setIsConnecting(false);
       addDebugLog('Session fully ready!');
 
-      // Step 5: Auto-enable microphone
-      setTimeout(async () => {
-        if (mountedRef.current && sessionManagerRef.current?.isInitialized) {
-          addDebugLog('Auto-enabling microphone...');
-          try {
-            await sessionManagerRef.current.enableMicrophone();
-            setIsMuted(false);
-            addDebugLog('Microphone enabled!');
-          } catch (e) {
-            addDebugLog(`Mic failed: ${e.message}`);
+      // Step 5: DO NOT auto-enable microphone - keep it muted
+      // Microphone will only be enabled when user manually toggles it
+      addDebugLog('Microphone will remain muted - user must manually enable it');
             setIsMuted(true);
-          }
-        }
-      }, 1500);
       
       // Step 6: Auto-start Entri onboarding if Entri persona
       if (personaId === 'p54ceeb77022' && !entriOnboardingStartedRef.current) {
@@ -1406,10 +1683,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           if (mountedRef.current && sessionManagerRef.current?.isInitialized) {
             addDebugLog('[ENTRI-ONBOARDING] Starting proactive onboarding with welcome module');
             entriOnboardingStartedRef.current = true;
+            // Ensure microphone is muted before starting onboarding
+            sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+              addDebugLog(`[ENTRI-ONBOARDING] Failed to mute microphone: ${err.message}`);
+            });
+            setIsMuted(true);
             // Start with welcome module
             handleModuleSelect('welcome-intro');
           }
-        }, 2000); // Wait 2 seconds after mic is enabled
+        }, 2000); // Wait 2 seconds for session to stabilize
       }
 
     } catch (err) {
@@ -1449,6 +1731,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     await sessionManagerRef.current.setMicrophoneMuted(newMuted);
     setIsMuted(newMuted);
     addDebugLog(`Microphone ${newMuted ? 'muted' : 'unmuted'}`);
+    
+    // The useEffect will automatically sync Tavus listening with microphone state
+    // No need to manually call disableListening/enableListening here
   };
 
   // Intent detection
@@ -1557,19 +1842,266 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     sendMessageToReplica(summaryMessage);
   };
 
-  // Send message to replica
-  const sendMessageToReplica = (message, type = 'respond') => {
-    if (!dailyEventManagerRef.current) return;
+  // 🔒 Start module speech lock - MUST be called before sending module prompt
+  const startModuleSpeech = useCallback((moduleId) => {
+    addDebugLog(`[MODULE-LOCK] 🔒 Starting speech lock for module: ${moduleId}`);
+    moduleSpeechLockRef.current = true;
+    speechEpochRef.current += 1;
 
-    // Strip markdown formatting before sending to avatar
-    const cleanedMessage = stripMarkdown(message);
+    moduleSpeechAccumulatorRef.current = {
+      text: '',
+      startedAt: Date.now(),
+      lastChunkAt: Date.now(),
+      completed: false,
+    };
+    
+    // No timeout for welcome-intro - will complete when avatar stops speaking
 
-    if (type === 'echo') {
-      dailyEventManagerRef.current.sendEchoMessage(cleanedMessage);
-    } else {
-      dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
+    // Mute microphone at transport level (Daily.co)
+    // The useEffect will automatically disable Tavus listening when isMuted becomes true
+    if (sessionManagerRef.current?.isInitialized) {
+      sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+        addDebugLog(`[MODULE-LOCK] Failed to mute: ${err.message}`);
+      });
+      setIsMuted(true);
     }
-  };
+    
+    // Also explicitly disable listening immediately (useEffect will handle it, but this ensures immediate effect)
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.disableListening();
+      listeningStateRef.current = 'disabled'; // Update ref to prevent redundant calls
+      addDebugLog('[MODULE-LOCK] 🔇 Tavus listening disabled (barge-in prevented)');
+    }
+  }, [addDebugLog]);
+
+  // ✅ Finish module speech - ONLY place to unlock
+  const finishModuleSpeech = useCallback(() => {
+    const acc = moduleSpeechAccumulatorRef.current;
+    const currentModule = activeModuleRef.current || activeModule; // Use ref first, fallback to state
+    
+    // Get playDemoVideo from the hook - it should be in scope
+    // If not accessible, we'll use the ref-based approach in handleModuleSelect
+    
+    // ✅ Completion checks removed - allow immediate transition
+    addDebugLog('[MODULE-LOCK] ✅ Proceeding with module transition (completion checks disabled)');
+    acc.completed = true;
+    
+    // Special handling for welcome-intro: DO NOT unlock - transition directly to founder-video
+    if (currentModule === 'welcome-intro') {
+      addDebugLog('[MODULE-LOCK] Welcome complete - transitioning to founder video WITHOUT unlocking');
+      
+      // Mark welcome module as complete
+      if (!completedModules.includes(currentModule)) {
+        addDebugLog(`[MODULE-LOCK] Marking module complete: ${currentModule}`);
+        setCompletedModules(prev => {
+          if (prev.includes(currentModule)) {
+            return prev;
+          }
+          return [...prev, currentModule];
+        });
+      }
+      
+      // 🔒 KEEP LOCK ACTIVE and microphone muted during transition
+      // DO NOT unlock or unmute - transition immediately to founder-video
+      // This prevents the gap where microphone turns on and listening starts
+      
+      // Immediately transition to founder-video sub-module
+      console.log('[FOUNDER-VIDEO] Starting transition to founder-video', { 
+        mounted: mountedRef.current, 
+        hasHandleModuleSelect: !!handleModuleSelectRef.current 
+      });
+      addDebugLog('[MODULE-LOCK] 🎬 Immediately transitioning to founder-video sub-module');
+      
+      if (mountedRef.current && handleModuleSelectRef.current) {
+        console.log('[FOUNDER-VIDEO] Calling handleModuleSelect for founder-video NOW');
+        handleModuleSelectRef.current('founder-video');
+      } else {
+        console.error('[FOUNDER-VIDEO] ❌ Cannot transition - mounted:', mountedRef.current, 'handleModuleSelect:', !!handleModuleSelectRef.current);
+        // Fallback: Try to play video directly if transition fails
+        if (mountedRef.current && playDemoVideoRef.current) {
+          console.log('[FOUNDER-VIDEO] Fallback: Playing video directly');
+          const founderVideoUrl = 'https://www.youtube.com/watch?v=YtB5fjEO1zc';
+          pendingDemoVideoRef.current = founderVideoUrl;
+          playDemoVideoRef.current(founderVideoUrl);
+        }
+      }
+      return; // Exit early - don't unlock or unmute
+    }
+    
+    addDebugLog('[MODULE-LOCK] ✅ Finishing module speech - unlocking');
+    moduleSpeechLockRef.current = false;
+    
+    // Clear stored prompt
+    currentModulePromptRef.current = '';
+
+    // 🔴 DO NOT unmute microphone automatically
+    // Microphone stays muted throughout onboarding - user must manually enable it
+    addDebugLog('[MODULE-LOCK] ⚠️ Keeping microphone muted - user must manually enable');
+    
+    // Tavus listening is controlled by the useEffect that syncs with microphone state
+    // If microphone is muted → listening will be disabled
+    // If microphone is unmuted → listening will be enabled
+    // No need to manually control it here - the useEffect handles it
+
+    // Mark current module as complete
+    if (currentModule && !completedModules.includes(currentModule)) {
+      addDebugLog(`[MODULE-LOCK] Marking module complete: ${currentModule}`);
+      setCompletedModules(prev => {
+        if (prev.includes(currentModule)) {
+          return prev;
+        }
+        return [...prev, currentModule];
+      });
+    }
+
+    // Special handling for founder-video: After video completes, move to next main module
+    // NOTE: This logic is now handled by handleFounderVideoStop callback when video actually ends
+    // This code here is kept as a backup but should not execute since founder-video unlock
+    // happens via the video stop callback, not via finishModuleSpeech
+    if (currentModule === 'founder-video') {
+      // Founder video completion is handled by handleFounderVideoStop callback
+      // which is called when the video actually ends (via onVideoStop in useDemoVideo)
+      addDebugLog('[MODULE-LOCK] Founder video module unlocked - transition handled by video stop callback');
+      return; // Exit early, don't process further
+    }
+    
+    // For other modules: Automatically move to next module (proactive flow)
+    const isEntriPersona = personaId === 'p54ceeb77022';
+    if (isEntriPersona && currentModule && currentModule !== 'final-quiz') {
+      const currentIndex = entriModuleOrder.indexOf(currentModule);
+      if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+        const nextModuleId = entriModuleOrder[currentIndex + 1];
+        addDebugLog(`[MODULE-LOCK] 🎯 Proactive flow: Moving to next module: ${nextModuleId}`);
+        
+        // 🔇 Ensure microphone stays muted before transitioning
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
+        }
+        
+        // 🔴 Keep Tavus listening disabled
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+        }
+        
+        setTimeout(() => {
+          if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
+            addDebugLog(`[MODULE-LOCK] ✅ Transitioning to next module: ${nextModuleId}`);
+            handleModuleSelectRef.current(nextModuleId);
+          }
+        }, 1000); // Short delay for smooth transition
+      } else if (currentModule === entriModuleOrder[entriModuleOrder.length - 2]) {
+        // If we just completed the last module before quiz, transition to quiz
+        addDebugLog('[MODULE-LOCK] 🎯 All modules complete - transitioning to final quiz');
+        setTimeout(() => {
+          if (mountedRef.current && handleModuleSelectRef.current) {
+            handleModuleSelectRef.current('final-quiz');
+          }
+        }, 1000);
+      }
+    }
+  }, [activeModule, completedModules, personaId, quizState.isActive, addDebugLog, playDemoVideo, isDemoPlaying, sendMessageToReplica, entriModuleOrder]);
+
+  // 🧠 Check module completion based on sentinel phrase or content length
+  const checkModuleCompletion = useCallback(() => {
+    if (!moduleSpeechLockRef.current) return;
+
+    const acc = moduleSpeechAccumulatorRef.current;
+    if (acc.completed) return;
+
+    const text = acc.text.toLowerCase();
+    const duration = acc.startedAt ? (Date.now() - acc.startedAt) : 0;
+    
+    // Special handling for welcome-intro: Completion handled when avatar stops speaking (in onReplicaStopSpeaking callback)
+    if (activeModule === 'welcome-intro') {
+      // Don't trigger from periodic checks - completion happens when avatar stops speaking
+      return;
+    } else if (activeModule === 'founder-video' || activeModule === 'final-quiz') {
+      // Founder video: Complete when announcement is spoken (short phrase)
+      const hasFounderVideoAnnouncement = 
+        text.includes("founder's video") || 
+        text.includes('founder video') ||
+        text.includes("here is our founder");
+      
+      if (hasFounderVideoAnnouncement && text.length > 20) {
+        addDebugLog('[MODULE-LOCK] ✅ Founder video announcement complete detected');
+        acc.completed = true;
+        finishModuleSpeech();
+        return;
+      }
+    } else {
+      // For other modules: Check for sentinel phrase (case-insensitive, handles variations)
+      const sentinelPhrases = [
+        'end of module',
+        '—end of module—',
+        'end of module—',
+        '—end of module',
+        'endofmodule'
+      ];
+      
+      const foundSentinel = sentinelPhrases.some(phrase => text.includes(phrase));
+      if (foundSentinel) {
+        addDebugLog('[MODULE-LOCK] ✅ Sentinel phrase detected - module complete');
+        acc.completed = true;
+        finishModuleSpeech();
+      }
+    }
+  }, [finishModuleSpeech, addDebugLog, activeModule]);
+
+  // ⏰ Periodic completion check while lock is active - check more frequently for proactive flow
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (moduleSpeechLockRef.current) {
+        checkModuleCompletion();
+      }
+    }, 200); // Check every 200ms for faster, more proactive detection
+
+    return () => clearInterval(interval);
+  }, [checkModuleCompletion]);
+
+  // Store checkModuleCompletion in ref for use in callbacks
+  useEffect(() => {
+    checkModuleCompletionRef.current = checkModuleCompletion;
+  }, [checkModuleCompletion]);
+
+  // Store finishModuleSpeech in ref for use in callbacks
+  useEffect(() => {
+    finishModuleSpeechRef.current = finishModuleSpeech;
+  }, [finishModuleSpeech]);
+
+  // 🔴 Sync Tavus listening with microphone state
+  // Listening is ONLY enabled when microphone is unmuted (user manually enabled it)
+  useEffect(() => {
+    if (!dailyEventManagerRef.current) return;
+    
+    // Prevent redundant calls - only update if state actually changed
+    const targetState = isMuted ? 'disabled' : 'enabled';
+    if (listeningStateRef.current === targetState) {
+      return; // Already in the correct state, skip
+    }
+    
+    if (isMuted) {
+      // Microphone muted → disable listening
+      dailyEventManagerRef.current.disableListening();
+      listeningStateRef.current = 'disabled';
+      console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening disabled (microphone is muted)');
+      // Update avatar state to idle when mic is muted (if not speaking and no lock)
+      if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
+        setAvatarState("idle");
+        console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "idle" - microphone muted (sync)');
+      }
+    } else {
+      // Microphone unmuted → enable listening
+      dailyEventManagerRef.current.enableListening();
+      listeningStateRef.current = 'enabled';
+      console.log('[TAVUS-DEBUG] [SYNC] 👂 Tavus listening enabled (microphone is unmuted)');
+      // Update avatar state to listening when mic is unmuted (if not speaking and no lock)
+      if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
+        setAvatarState("listening");
+        console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "listening" - microphone unmuted (sync)');
+      }
+    }
+  }, [isMuted]); // Only depend on isMuted - refs don't need to be in deps
 
   // Check if module is unlocked
   const isModuleUnlocked = (moduleId) => {
@@ -1601,7 +2133,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   };
 
   // Handle learning module selection
-  const handleModuleSelect = useCallback((moduleId) => {
+  const handleModuleSelect = useCallback(async (moduleId) => {
     // Check if this is Entri persona
     const isEntriPersona = personaId === 'p54ceeb77022';
     
@@ -1616,9 +2148,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
     
     setActiveModule(moduleId);
+    activeModuleRef.current = moduleId; // Update ref immediately for callbacks
     
     // Clear any existing transcripts when selecting a new module
     setTranscripts([]);
+    
+    // 🔒 START MODULE SPEECH LOCK - MUST be called before sending prompt
+    startModuleSpeech(moduleId);
+    
+    // ⏳ CRITICAL: Delay to ensure Tavus processes disableListening before prompt
+    // This prevents Tavus from treating the prompt as user input
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // Module-specific prompts for the avatar
     const evolutionPrompts = {
@@ -1629,12 +2169,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     };
     
     const entriPrompts = {
-      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams. Let me tell you more about Entri and what it means to be an Entripreneur.",
-      'about-entri': "Entri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers. As an Entripreneur, you're part of a team that's making a real difference in people's lives. What would you like to know about Entri?",
-      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect. Do you have any questions about POSH?",
-      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance. What would you like to know more about?",
-      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance. What interests you most?",
-      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect. Do you have questions about any specific policy?",
+      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams.\n\nI am \"Ann\" your AI onboarding guide, and feel free to stop me at any time or ask any questions.\n\nEntri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers.\n\nBelow are the topics that we will cover in this course:\n\nFounder video\n\nUser Success Stories\n\nFunctions at Entri\n\nVertical Types Overview\n\nHR Policies\n\nPrevention of Sexual Harassment at Work\n\nEmployee Benefits\n\nFinally, we will also have a quiz, which you will need to pass to complete this module.\n\nLet's start our onboarding.",
+      'founder-video': "Here is our Founders video.",
+      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
+      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
+      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
+      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
       'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Are you ready to begin?"
     };
     
@@ -1723,16 +2263,62 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       });
       
       // Send message to avatar to start quiz with first question
+      // Use ECHO for quiz prompts too to prevent user speech detection
       const firstQuestion = quizQuestions[0].question;
       sendMessageToReplica(
-        `${prompt} Now ask the first question: "${firstQuestion}" IMPORTANT: When the student answers, only say if it's correct, partially correct, or wrong. Do NOT explain the answer or provide corrections. Just say "That's correct!" or "That's not quite right" and immediately ask the next question. Save all explanations for the end of the quiz.`
+        `${prompt} Now ask the first question: "${firstQuestion}" IMPORTANT: When the student answers, only say if it's correct, partially correct, or wrong. Do NOT explain the answer or provide corrections. Just say "That's correct!" or "That's not quite right" and immediately ask the next question. Save all explanations for the end of the quiz.`,
+        'echo' // Use echo to prevent treating as user input
       );
       
       // Set waiting for answer after avatar finishes speaking (detected via transcript)
-    } else {
-      // Send message to avatar to discuss the topic
+    } else if (moduleId === 'founder-video') {
+      // Special handling for founder-video: Announce and play video automatically
+      // 🔒 LOCK IS ALREADY ACTIVE from welcome-intro - keep it active
+      addDebugLog('[MODULE-LOCK] Founder video module - lock already active, announcing and playing video');
+      
+      const founderVideoUrl = 'https://www.youtube.com/watch?v=YtB5fjEO1zc';
+      
+      // 🔇 Ensure microphone is muted (should already be muted from welcome-intro)
+      if (sessionManagerRef.current?.isInitialized) {
+        addDebugLog('[MODULE-LOCK] 🔇 Ensuring microphone is muted for founder video');
+        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+          addDebugLog(`[MODULE-LOCK] Failed to mute microphone: ${err.message}`);
+        });
+        setIsMuted(true);
+      }
+      
+      // 🔴 Keep Tavus listening disabled (should already be disabled from welcome-intro)
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        addDebugLog('[MODULE-LOCK] 🔇 Keeping Tavus listening disabled for founder video');
+      }
+      
+      // Use the video tool mechanism to play the founder video
+      // Store video URL in pendingDemoVideoRef - this will trigger the useEffect that plays videos
+      // The useEffect at line 1086 has special handling for founder-video to play immediately
+      addDebugLog(`[MODULE-LOCK] 🎬 Queuing founder video for playback: ${founderVideoUrl}`);
+      pendingDemoVideoRef.current = founderVideoUrl;
+      addDebugLog('[MODULE-LOCK] ✅ Founder video queued - useEffect will play it immediately');
+      
+      // Send announcement message (non-blocking, don't wait for it)
       if (prompt) {
-        sendMessageToReplica(prompt);
+        currentModulePromptRef.current = prompt;
+        // Send announcement in background
+        setTimeout(() => {
+          if (mountedRef.current) {
+            addDebugLog(`[MODULE-LOCK] Sending founder video announcement as ECHO`);
+            sendMessageToReplica(prompt, 'echo');
+          }
+        }, 100);
+      }
+    } else {
+      // 🔴 CRITICAL: Send module prompt as ECHO (not RESPOND) to prevent Tavus from treating it as user input
+      // ECHO makes agent speak exactly what we send without processing it as user speech
+      if (prompt) {
+        // Store prompt text to detect and ignore matching user utterances
+        currentModulePromptRef.current = prompt;
+        addDebugLog(`[MODULE-LOCK] Sending module prompt as ECHO (not RESPOND) to prevent user speech detection`);
+        sendMessageToReplica(prompt, 'echo'); // Use 'echo' type for module prompts
       }
       // Mark module as completed after avatar finishes (handled via transcript)
     }
@@ -1742,6 +2328,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   useEffect(() => {
     handleModuleSelectRef.current = handleModuleSelect;
   }, [handleModuleSelect]);
+
+  // Store activeModule in ref for use in callbacks
+  useEffect(() => {
+    activeModuleRef.current = activeModule;
+    addDebugLog(`[REF] activeModuleRef updated to: ${activeModule}`);
+  }, [activeModule, addDebugLog]);
+
+  // Store playDemoVideo in ref
+  useEffect(() => {
+    playDemoVideoRef.current = playDemoVideo;
+  }, [playDemoVideo]);
 
   // Handle replica speech - detect when avatar asks quiz questions
   const handleReplicaSpeechForQuiz = (text) => {

@@ -346,6 +346,97 @@ class DailyEventManager {
   }
 
   /**
+   * Disable Tavus listening - prevents barge-in during module speech
+   * This is CRITICAL to prevent Tavus from interrupting its own speech
+   * Tries multiple message formats for compatibility
+   */
+  disableListening() {
+    if (!this.daily || !this.conversationId) {
+      this.log('SEND', '⚠️ Cannot disable listening - not connected');
+      return false;
+    }
+
+    this.log('SEND', '🔇 Disabling Tavus listening (preventing barge-in)');
+
+    // Try primary format: conversation.control
+    try {
+      this.daily.sendAppMessage({
+        message_type: 'conversation',
+        event_type: 'conversation.control',
+        conversation_id: this.conversationId,
+        properties: {
+          action: 'disable_listening',
+          listen_mode: false,
+          barge_in: false
+        }
+      }, '*');
+    } catch (e) {
+      this.log('SEND', `⚠️ Failed to send control message (format 1): ${e.message}`);
+    }
+
+    // Try alternative format: direct properties
+    try {
+      this.daily.sendAppMessage({
+        message_type: 'conversation',
+        event_type: 'conversation.set_listening',
+        conversation_id: this.conversationId,
+        properties: {
+          enabled: false
+        }
+      }, '*');
+    } catch (e) {
+      this.log('SEND', `⚠️ Failed to send control message (format 2): ${e.message}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Enable Tavus listening - re-enables barge-in after module completes
+   * Tries multiple message formats for compatibility
+   */
+  enableListening() {
+    if (!this.daily || !this.conversationId) {
+      this.log('SEND', '⚠️ Cannot enable listening - not connected');
+      return false;
+    }
+
+    this.log('SEND', '👂 Enabling Tavus listening (barge-in enabled)');
+
+    // Try primary format: conversation.control
+    try {
+      this.daily.sendAppMessage({
+        message_type: 'conversation',
+        event_type: 'conversation.control',
+        conversation_id: this.conversationId,
+        properties: {
+          action: 'enable_listening',
+          listen_mode: true,
+          barge_in: true
+        }
+      }, '*');
+    } catch (e) {
+      this.log('SEND', `⚠️ Failed to send control message (format 1): ${e.message}`);
+    }
+
+    // Try alternative format: direct properties
+    try {
+      this.daily.sendAppMessage({
+        message_type: 'conversation',
+        event_type: 'conversation.set_listening',
+        conversation_id: this.conversationId,
+        properties: {
+          enabled: true
+        }
+      }, '*');
+    } catch (e) {
+      this.log('SEND', `⚠️ Failed to send control message (format 2): ${e.message}`);
+    }
+
+    return true;
+  }
+
+  /**
    * Get last replica speech (for demo triggers, etc.)
    */
   getLastReplicaSpeech() {

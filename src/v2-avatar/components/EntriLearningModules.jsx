@@ -32,19 +32,13 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
           type: 'lesson',
           duration: '3m',
           icon: CheckCircle
-        }
-      ]
-    },
-    {
-      id: 'module-2',
-      title: '2. About Entri',
-      items: [
+        },
         {
-          id: 'about-entri',
-          title: 'Company Overview',
-          type: 'lesson',
+          id: 'founder-video',
+          title: "Founder's Video",
+          type: 'video',
           duration: '5m',
-          icon: Building2
+          icon: BookOpen
         }
       ]
     },
