@@ -17,6 +17,36 @@ const config = {
   }
 };
 
+// Persona ID mapping - friendly names to Tavus persona IDs
+// Usage: /v2-avatar/qatar instead of /v2-avatar/1765893169386
+export const PERSONA_MAP = {
+  'qatar': 'pf5e3d8bef4a',
+  'evolution': 'p99b6eb28083',
+  'entri': 'p54ceeb77022',
+  // Add more personas here as needed
+  // 'friendly-name': 'actual-persona-id',
+};
+
+// Resolve a persona identifier (either friendly name or raw ID) to the actual persona ID
+export const resolvePersonaId = (personaIdentifier) => {
+  if (!personaIdentifier) return null;
+  
+  // Check if it's a friendly name in our map
+  const mappedId = PERSONA_MAP[personaIdentifier.toLowerCase()];
+  if (mappedId) {
+    return mappedId;
+  }
+  
+  // Otherwise, assume it's already a raw persona ID
+  return personaIdentifier;
+};
+
+// Get the display name for a persona ID (reverse lookup)
+export const getPersonaDisplayName = (personaId) => {
+  const entry = Object.entries(PERSONA_MAP).find(([name, id]) => id === personaId);
+  return entry ? entry[0] : personaId;
+};
+
 // Helper function to get the Node API URL
 export const getApiUrl = () => {
   return config.NODE_API_URL;

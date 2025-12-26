@@ -1,15 +1,25 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { TavusAvatarWidget } from './TavusAvatarWidget';
+import { resolvePersonaId, getPersonaDisplayName } from '../config/api';
 import styles from './TavusAvatarPage.module.css';
 
 /**
  * TavusAvatarPage - Fullscreen Tavus avatar page for /v2-avatar route
  *
  * Equivalent to ExtendedAvatarPage but using Tavus/Daily.co instead of HeyGen/LiveKit
+ * 
+ * Supports friendly URL names via PERSONA_MAP in config/api.js
+ * Examples:
+ *   /v2-avatar/qatar     -> resolves to persona ID '1765893169386'
+ *   /v2-avatar/evolution -> resolves to persona ID 'p99b6eb28083'
+ *   /v2-avatar/p99b6eb28083 -> uses raw persona ID directly
  */
 const TavusAvatarPage = () => {
-  const { personaId } = useParams();
+  const { personaId: personaIdentifier } = useParams();
+  
+  // Resolve friendly name to actual persona ID
+  const personaId = useMemo(() => resolvePersonaId(personaIdentifier), [personaIdentifier]);
   const [isStarted, setIsStarted] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
