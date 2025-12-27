@@ -36,6 +36,12 @@ import EntriLearningModules from './EntriLearningModules';
 export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, personaId } = {}) => {
   console.log('[TAVUS-WIDGET] TavusAvatarWidget rendering - autoExpand:', autoExpand, 'personaId:', personaId, 'hasOnExpand:', !!onExpand);
 
+  // Helper function to check if persona should show learning modules (Entri and Evolution only)
+  const shouldShowLearningModules = (personaId) => {
+    const learningModulePersonas = ['p54ceeb77022', 'p99b6eb28083']; // Entri and Evolution
+    return learningModulePersonas.includes(personaId);
+  };
+
   const [state, setState] = useState(autoExpand ? "maximized" : "minimized");
   const [isMuted, setIsMuted] = useState(true);
   const [isVoiceMode, setIsVoiceMode] = useState(true);
@@ -64,11 +70,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [pdfUrl, setPdfUrl] = useState('');
   const [pendingPdfUrl, setPendingPdfUrl] = useState(null);
   
-  // Learning modules state
+  // Learning modules state - only show for Entri and Evolution personas
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [showLearningModules, setShowLearningModules] = useState(true);
+  const [showLearningModules, setShowLearningModules] = useState(shouldShowLearningModules(personaId));
   
   // Entri onboarding module order for proactive behavior
   const entriModuleOrder = [
@@ -1837,7 +1843,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       questionResults: questionResults
     }));
     setCompletedModules(prev => [...prev, 'final-quiz']);
-    setShowLearningModules(true);
+    // Only show learning modules if persona supports them
+    if (shouldShowLearningModules(personaId)) {
+      setShowLearningModules(true);
+    }
     
     sendMessageToReplica(summaryMessage);
   };
@@ -2583,7 +2592,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       <div
         id="tavus-video-container"
         className={`absolute inset-0 bg-black transition-all duration-300 ${
-          showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf
+          shouldShowLearningModules(personaId) && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf
             ? 'left-80' 
             : 'left-0'
         }`}
@@ -2779,8 +2788,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         )}
       </div>
 
-      {/* Toggle sidebar button - top left */}
-      {!isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
+      {/* Toggle sidebar button - top left (only for Entri and Evolution personas) */}
+      {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
         <button
           onClick={() => setShowLearningModules(!showLearningModules)}
           className="absolute top-4 left-4 z-30 p-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all shadow-lg"
@@ -2891,8 +2900,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {isConnecting && renderConnectingState()}
         {connectionError && renderErrorState()}
 
-        {/* Learning Modules - show when connected and not in overlays */}
-        {!isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
+        {/* Learning Modules - show only for Entri and Evolution personas when connected and not in overlays */}
+        {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
           personaId === 'p54ceeb77022' ? (
             <EntriLearningModules
               onModuleSelect={handleModuleSelect}
