@@ -169,6 +169,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const dailyEventManagerRef = useRef(null);
   const sessionInfoRef = useRef(null);
 
+  // 🔒 Lock to prevent multiple simultaneous startTavusSession calls (race condition fix)
+  const isStartingSessionRef = useRef(false);
+
+  // ⏱️ Timeout refs for pending operations (prevent stuck states)
+  const pendingVideoTimeoutRef = useRef(null);
+  const pendingPdfTimeoutRef = useRef(null);
+
+  // ⏱️ Visibility timeout - end session if user is away for 3 minutes
+  const visibilityTimeoutRef = useRef(null);
+  const hiddenTimestampRef = useRef(null);
+  const SESSION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+
+  // State to show "session ended due to inactivity" message
+  const [sessionTimedOut, setSessionTimedOut] = useState(false);
+
   // Event logging hook
   const { logs, log, clearLogs } = useEventLogger();
 
@@ -1004,6 +1019,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         if (args.url) {
           pendingDemoVideoRef.current = args.url;
           log('DEMO', 'Video pending - waiting for user and avatar to finish speaking');
+
+          // Set timeout to clear pending video after 30 seconds (prevent stuck state)
+          if (pendingVideoTimeoutRef.current) {
+            clearTimeout(pendingVideoTimeoutRef.current);
+          }
+          pendingVideoTimeoutRef.current = setTimeout(() => {
+            if (pendingDemoVideoRef.current) {
+              log('DEMO', 'Pending video timeout - clearing stuck pending state');
+              pendingDemoVideoRef.current = null;
+            }
+            pendingVideoTimeoutRef.current = null;
+          }, 30000);
         }
         break;
       case 'show_pdf':
@@ -1019,6 +1046,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         if (args.url) {
           setPendingPdfUrl(args.url);
           log('PDF', 'PDF pending - waiting for avatar to finish speaking');
+
+          // Set timeout to clear pending PDF after 30 seconds (prevent stuck state)
+          if (pendingPdfTimeoutRef.current) {
+            clearTimeout(pendingPdfTimeoutRef.current);
+          }
+          pendingPdfTimeoutRef.current = setTimeout(() => {
+            setPendingPdfUrl((current) => {
+              if (current) {
+                log('PDF', 'Pending PDF timeout - clearing stuck pending state');
+                return null;
+              }
+              return current;
+            });
+            pendingPdfTimeoutRef.current = null;
+          }, 30000);
         }
         break;
       default:
@@ -1317,99 +1359,179 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     sessionInfoRef.current = sessionInfo;
   }, [sessionInfo]);
 
+  // Track if cleanup has already been performed to prevent duplicate calls
+  const cleanupPerformedRef = useRef(false);
+
+  // Centralized cleanup function using sendBeacon for reliability
+  const performCleanup = useCallback((source) => {
+    // Prevent duplicate cleanup calls
+    if (cleanupPerformedRef.current) {
+      console.log(`[CLEANUP] Already performed, skipping (source: ${source})`);
+      return;
+    }
+
+    const currentSessionInfo = sessionInfoRef.current;
+    if (!currentSessionInfo?.conversationId) {
+      console.log(`[CLEANUP] No active session to cleanup (source: ${source})`);
+      return;
+    }
+
+    cleanupPerformedRef.current = true;
+    console.log(`[CLEANUP] Performing cleanup (source: ${source}), conversationId: ${currentSessionInfo.conversationId}`);
+
+    // Always use sendBeacon for reliability - works even when page is closing
+    const payload = JSON.stringify({
+      conversationId: currentSessionInfo.conversationId,
+    });
+
+    try {
+      const beaconSent = navigator.sendBeacon(
+        getEndConversationUrl(),
+        new Blob([payload], { type: 'application/json' })
+      );
+      console.log(`[CLEANUP] sendBeacon result: ${beaconSent}`);
+    } catch (e) {
+      console.log(`[CLEANUP] sendBeacon failed: ${e.message}, falling back to fetch`);
+      // Fallback to fetch (may not complete if page is closing)
+      fetch(getEndConversationUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true, // Allows request to outlive the page
+      }).catch(() => {});
+    }
+
+    // Cleanup session manager
+    if (sessionManagerRef.current) {
+      try {
+        sessionManagerRef.current.cleanup();
+      } catch (e) {
+        console.log(`[CLEANUP] Session manager cleanup error: ${e.message}`);
+      }
+    }
+
+    // Cleanup event manager
+    if (dailyEventManagerRef.current) {
+      try {
+        dailyEventManagerRef.current.detachFromDaily();
+      } catch (e) {
+        console.log(`[CLEANUP] Event manager cleanup error: ${e.message}`);
+      }
+    }
+  }, []);
+
   // Component lifecycle
   useEffect(() => {
     console.log('[TAVUS-LIFECYCLE] Component mounted');
     mountedRef.current = true;
+    cleanupPerformedRef.current = false; // Reset cleanup flag on mount
     addDebugLog('[LIFECYCLE] Component MOUNTED');
 
-    const handlePageUnload = () => {
-      addDebugLog('[PAGE-UNLOAD] handlePageUnload triggered');
+    // Handler for page unload (tab close, browser close, refresh)
+    const handlePageUnload = (event) => {
+      addDebugLog(`[PAGE-UNLOAD] ${event.type} triggered`);
+      performCleanup(event.type);
+    };
 
-      // End conversation via sendBeacon
-      const currentSessionInfo = sessionInfoRef.current;
-      if (currentSessionInfo?.conversationId) {
-        const payload = JSON.stringify({
-          conversationId: currentSessionInfo.conversationId,
-        });
-        navigator.sendBeacon(
-          getEndConversationUrl(),
-          new Blob([payload], { type: 'application/json' })
-        );
-      }
+    // Handler for visibility change (tab switch, mobile app switch, tab close on mobile)
+    // Instead of immediate cleanup, start a 3-minute timeout
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Only start timeout if we have an active session
+        if (sessionInfoRef.current?.conversationId) {
+          addDebugLog(`[VISIBILITY] Page hidden - starting ${SESSION_TIMEOUT_MS / 1000 / 60} minute timeout`);
+          hiddenTimestampRef.current = Date.now();
 
-      // Cleanup session manager
-      if (sessionManagerRef.current) {
-        sessionManagerRef.current.cleanup();
-      }
+          // Clear any existing timeout
+          if (visibilityTimeoutRef.current) {
+            clearTimeout(visibilityTimeoutRef.current);
+          }
 
-      // Cleanup event manager
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.detachFromDaily();
+          // Start new timeout - will end session after 3 minutes away
+          visibilityTimeoutRef.current = setTimeout(() => {
+            addDebugLog('[VISIBILITY-TIMEOUT] User away for 3 minutes - ending session');
+            performCleanup('visibility-timeout');
+            setSessionTimedOut(true);
+
+            // Reset UI state
+            setSessionInfo(null);
+            sessionInfoRef.current = null;
+            setHasLiveVideo(false);
+            setHasAudio(false);
+            setIsMuted(true);
+            setIsConnecting(false);
+            setAvatarState("idle");
+            setIsAvatarSpeaking(false);
+            setIsUserSpeaking(false);
+          }, SESSION_TIMEOUT_MS);
+        }
+      } else if (document.visibilityState === 'visible') {
+        // User returned - cancel the timeout if it hasn't fired yet
+        if (visibilityTimeoutRef.current) {
+          const awayDuration = hiddenTimestampRef.current
+            ? Math.round((Date.now() - hiddenTimestampRef.current) / 1000)
+            : 0;
+          addDebugLog(`[VISIBILITY] Page visible again - user was away for ${awayDuration}s, cancelling timeout`);
+          clearTimeout(visibilityTimeoutRef.current);
+          visibilityTimeoutRef.current = null;
+          hiddenTimestampRef.current = null;
+        }
       }
     };
 
+    // Handler for page freeze (mobile browsers may freeze tabs)
+    const handlePageFreeze = () => {
+      addDebugLog('[FREEZE] Page frozen - performing cleanup');
+      performCleanup('freeze');
+    };
+
+    // Add all event listeners
     window.addEventListener('beforeunload', handlePageUnload);
     window.addEventListener('pagehide', handlePageUnload);
+    window.addEventListener('unload', handlePageUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Page Lifecycle API (if supported) - for mobile tab freezing
+    if ('onfreeze' in document) {
+      document.addEventListener('freeze', handlePageFreeze);
+    }
 
     return () => {
       addDebugLog('[LIFECYCLE] Component UNMOUNTING');
       mountedRef.current = false;
 
+      // Remove all event listeners
       window.removeEventListener('beforeunload', handlePageUnload);
       window.removeEventListener('pagehide', handlePageUnload);
-
-      // Cleanup
-      if (sessionInfoRef.current?.conversationId) {
-        endConversation(sessionInfoRef.current.conversationId);
+      window.removeEventListener('unload', handlePageUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if ('onfreeze' in document) {
+        document.removeEventListener('freeze', handlePageFreeze);
       }
 
-      if (sessionManagerRef.current) {
-        sessionManagerRef.current.cleanup();
-      }
-
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.detachFromDaily();
-      }
+      // Perform cleanup on unmount (React Router navigation, conditional rendering, etc.)
+      performCleanup('unmount');
 
       // Clear proactive timeout
       if (proactiveTimeoutRef.current) {
         clearTimeout(proactiveTimeoutRef.current);
         proactiveTimeoutRef.current = null;
       }
-    };
-  }, []);
 
-  // End Tavus conversation
-  const endConversation = async (conversationId) => {
-    if (!conversationId) return;
-
-    try {
-      addDebugLog(`[END-CONVERSATION] Ending conversation: ${conversationId}`);
-      const response = await fetch(getEndConversationUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId }),
-      });
-
-      if (response.ok) {
-        addDebugLog('[END-CONVERSATION] Conversation ended successfully');
-      } else {
-        addDebugLog(`[END-CONVERSATION] Failed: ${response.status}`);
+      // Clear visibility timeout
+      if (visibilityTimeoutRef.current) {
+        clearTimeout(visibilityTimeoutRef.current);
+        visibilityTimeoutRef.current = null;
       }
-    } catch (error) {
-      addDebugLog(`[END-CONVERSATION] Error: ${error.message}`);
-    }
-  };
+    };
+  }, [performCleanup]);
 
-  // Handle disconnect
+  // Handle disconnect (user clicks disconnect button)
   const handleDisconnect = async () => {
     addDebugLog('[DISCONNECT] handleDisconnect called');
 
-    // End Tavus conversation
-    if (sessionInfo?.conversationId) {
-      await endConversation(sessionInfo.conversationId);
-    }
+    // Use centralized cleanup for Tavus conversation
+    performCleanup('disconnect-button');
 
     // Stop overlays
     if (isDemoPlaying) {
@@ -1422,19 +1544,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       setShowPdf(false);
     }
 
-    // Cleanup session manager
-    if (sessionManagerRef.current) {
-      addDebugLog('[DISCONNECT] Cleaning up TavusSessionManager');
-      await sessionManagerRef.current.cleanup();
-    }
-
-    // Cleanup event manager
-    if (dailyEventManagerRef.current) {
-      dailyEventManagerRef.current.detachFromDaily();
-    }
-
     // Reset state
     setSessionInfo(null);
+    sessionInfoRef.current = null;
     setHasLiveVideo(false);
     setHasAudio(false);
     setIsMuted(true);
@@ -1460,6 +1572,24 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     prePdfWidgetStateRef.current = null;
     hasAutoExpandedRef.current = false;
     entriOnboardingStartedRef.current = false;
+    sessionManagerRef.current = null;
+    dailyEventManagerRef.current = null;
+
+    // Reset cleanup flag so a new session can be started
+    cleanupPerformedRef.current = false;
+
+    // Reset session starting lock so a new session can be started
+    isStartingSessionRef.current = false;
+
+    // Clear pending operation timeouts
+    if (pendingVideoTimeoutRef.current) {
+      clearTimeout(pendingVideoTimeoutRef.current);
+      pendingVideoTimeoutRef.current = null;
+    }
+    if (pendingPdfTimeoutRef.current) {
+      clearTimeout(pendingPdfTimeoutRef.current);
+      pendingPdfTimeoutRef.current = null;
+    }
 
     // Clear dynamic URLs and pending states
     setCalendlyUrl('');
@@ -1479,12 +1609,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Start Tavus session
   const startTavusSession = async () => {
-    console.log('[START-SESSION] Called - isConnecting:', isConnecting);
+    console.log('[START-SESSION] Called - isConnecting:', isConnecting, 'isStartingSessionRef:', isStartingSessionRef.current);
 
-    if (isConnecting || sessionManagerRef.current?.isInitialized) {
+    // Use ref-based lock to prevent race condition (synchronous check)
+    if (isStartingSessionRef.current || isConnecting || sessionManagerRef.current?.isInitialized) {
       console.log('[START-SESSION] Aborting - already connecting or session exists');
       return;
     }
+
+    // Set lock immediately (synchronous - prevents race condition)
+    isStartingSessionRef.current = true;
 
     addDebugLog('Setting isConnecting=true');
     setIsConnecting(true);
@@ -1532,6 +1666,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       addDebugLog('Initializing TavusSessionManager...');
       sessionManagerRef.current = new TavusSessionManager();
       sessionManagerRef.current.setLogger(addDebugLog);
+
+      // Set error callback to handle Daily.co disconnection/errors
+      sessionManagerRef.current.setOnError((errorType, errorMessage) => {
+        addDebugLog(`[SESSION-ERROR] ${errorType}: ${errorMessage}`);
+
+        if (errorType === 'disconnected' || errorType === 'daily-error') {
+          // Critical error - show to user and trigger cleanup
+          setConnectionError(`Connection lost: ${errorMessage}`);
+          // Don't auto-cleanup here - let user decide to retry
+        } else if (errorType === 'network-warning') {
+          // Just log for now, could show a toast/warning
+          console.warn('[NETWORK] Poor connection quality:', errorMessage);
+        }
+      });
 
       const daily = await sessionManagerRef.current.initialize(
         conversationUrl,
@@ -1705,6 +1853,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       addDebugLog(`ERROR: ${errorMsg}`);
       setConnectionError(errorMsg);
       setIsConnecting(false);
+      // Reset lock on error so user can retry
+      isStartingSessionRef.current = false;
     }
   };
 
@@ -2082,17 +2232,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Listening is ONLY enabled when microphone is unmuted (user manually enabled it)
   useEffect(() => {
     if (!dailyEventManagerRef.current) return;
-    
+
     // Prevent redundant calls - only update if state actually changed
     const targetState = isMuted ? 'disabled' : 'enabled';
     if (listeningStateRef.current === targetState) {
       return; // Already in the correct state, skip
     }
-    
+
+    // 🔒 Set ref BEFORE making the call to prevent race condition
+    // If effect runs twice rapidly, second call will be blocked by the check above
+    listeningStateRef.current = targetState;
+
     if (isMuted) {
       // Microphone muted → disable listening
       dailyEventManagerRef.current.disableListening();
-      listeningStateRef.current = 'disabled';
       console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening disabled (microphone is muted)');
       // Update avatar state to idle when mic is muted (if not speaking and no lock)
       if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
@@ -2102,7 +2255,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     } else {
       // Microphone unmuted → enable listening
       dailyEventManagerRef.current.enableListening();
-      listeningStateRef.current = 'enabled';
       console.log('[TAVUS-DEBUG] [SYNC] 👂 Tavus listening enabled (microphone is unmuted)');
       // Update avatar state to listening when mic is unmuted (if not speaking and no lock)
       if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
@@ -2341,8 +2493,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Store activeModule in ref for use in callbacks
   useEffect(() => {
     activeModuleRef.current = activeModule;
-    addDebugLog(`[REF] activeModuleRef updated to: ${activeModule}`);
-  }, [activeModule, addDebugLog]);
+  }, [activeModule]);
 
   // Store playDemoVideo in ref
   useEffect(() => {
@@ -2586,6 +2737,44 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     </div>
   );
 
+  // Handler to restart session after timeout
+  const handleRestartSession = () => {
+    addDebugLog('[RESTART] User clicked restart after session timeout');
+    setSessionTimedOut(false);
+    cleanupPerformedRef.current = false; // Reset cleanup flag to allow new session
+    isStartingSessionRef.current = false; // Reset session start lock
+    // The existing auto-start logic will trigger a new session
+    startTavusSession();
+  };
+
+  const renderSessionTimedOutState = () => (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-gray-800 to-gray-900 text-white p-6">
+      {/* Icon */}
+      <div className="w-20 h-20 mb-6 rounded-full bg-amber-500/20 flex items-center justify-center">
+        <svg className="w-10 h-10 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+
+      {/* Message */}
+      <h3 className="text-xl font-semibold mb-2">Session Ended</h3>
+      <p className="text-gray-400 text-center text-sm mb-6 max-w-xs">
+        Your session was ended because the tab was inactive for more than 3 minutes.
+      </p>
+
+      {/* Restart button */}
+      <button
+        onClick={handleRestartSession}
+        className="px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-lg font-medium transition-colors flex items-center gap-2"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Start New Session
+      </button>
+    </div>
+  );
+
   const renderVideoContainer = () => (
     <>
       {/* Main video container */}
@@ -2789,7 +2978,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       </div>
 
       {/* Toggle sidebar button - top left (only for Entri and Evolution personas) */}
-      {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
+      {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
         <button
           onClick={() => setShowLearningModules(!showLearningModules)}
           className="absolute top-4 left-4 z-30 p-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all shadow-lg"
@@ -2899,9 +3088,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {/* Overlay states on top of video container */}
         {isConnecting && renderConnectingState()}
         {connectionError && renderErrorState()}
+        {sessionTimedOut && renderSessionTimedOutState()}
 
         {/* Learning Modules - show only for Entri and Evolution personas when connected and not in overlays */}
-        {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
+        {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
           personaId === 'p54ceeb77022' ? (
             <EntriLearningModules
               onModuleSelect={handleModuleSelect}
@@ -2920,7 +3110,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         )}
 
         {/* Quiz indicator - show when quiz is active (no popup, just indicator) */}
-        {quizState.isActive && !isDemoPlaying && !showCalendly && !showPdf && (
+        {quizState.isActive && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && (
           <div className="absolute top-20 left-4 z-30 bg-blue-600/90 text-white px-4 py-2 rounded-lg shadow-lg">
             <div className="flex items-center gap-2">
               <Award className="w-5 h-5" />
@@ -2935,7 +3125,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         )}
 
         {/* Control bar - only show when connected and NOT in PIP mode (demo/calendly/pdf) */}
-        {!isConnecting && !connectionError && !isDemoPlaying && !showCalendly && !showPdf && renderControlBar()}
+        {!isConnecting && !connectionError && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && renderControlBar()}
       </motion.div>
     );
   };

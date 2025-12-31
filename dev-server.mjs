@@ -14,7 +14,7 @@ import dotenv from 'dotenv';
 // Load .env.local file explicitly
 // IMPORTANT: override: true forces .env.local values to override system environment variables
 // This prevents stale system-level env vars from interfering with development
-const result = dotenv.config({ path: '.env', override: true });
+const result = dotenv.config({ path: '.env.local', override: true });
 
 if (result.error) {
   console.error('❌ Error loading .env.local:', result.error);

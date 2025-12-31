@@ -3,6 +3,9 @@
  * Ends a Tavus CVI conversation
  *
  * Endpoint: /api/tavus/end-conversation
+ *
+ * Supports both regular fetch and navigator.sendBeacon requests.
+ * sendBeacon may send with different content-types, so we handle both.
  */
 
 export default async function handler(req, res) {
@@ -27,8 +30,23 @@ export default async function handler(req, res) {
     console.log('\n========================================');
     console.log('📱 TAVUS END CONVERSATION REQUEST');
     console.log('========================================');
+    console.log('Content-Type:', req.headers['content-type']);
 
-    const { conversationId } = req.body;
+    // Parse body - handle both regular JSON and sendBeacon requests
+    // sendBeacon with Blob may come as text/plain or application/json
+    let body = req.body;
+
+    // If body is a string (text/plain from sendBeacon), try to parse it as JSON
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+        console.log('Parsed string body as JSON');
+      } catch (e) {
+        console.error('Failed to parse body as JSON:', e.message);
+      }
+    }
+
+    const { conversationId } = body || {};
 
     if (!conversationId) {
       console.error('❌ Missing conversationId in request body');

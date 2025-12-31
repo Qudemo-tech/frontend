@@ -40,6 +40,9 @@ class TavusSessionManager {
 
     // Bound event handlers (for cleanup)
     this._boundHandlers = {};
+
+    // Error callback for notifying React component of disconnection/errors
+    this.onErrorCallback = null;
   }
 
   /**
@@ -47,6 +50,14 @@ class TavusSessionManager {
    */
   setLogger(logFn) {
     this.logger = logFn;
+  }
+
+  /**
+   * Set error callback - called when Daily.co encounters errors or disconnects
+   * @param {Function} callback - (errorType, errorMessage) => void
+   */
+  setOnError(callback) {
+    this.onErrorCallback = callback;
   }
 
   log(message) {
@@ -174,9 +185,31 @@ class TavusSessionManager {
       this.log(`Track stopped: ${track?.kind} from ${participant?.user_id || 'unknown'}`);
     };
 
-    // Error handler
+    // Error handler - notify React component
     this._boundHandlers.error = (event) => {
       this.log(`❌ Daily.co error: ${event.errorMsg}`);
+      if (this.onErrorCallback) {
+        this.onErrorCallback('daily-error', event.errorMsg || 'Unknown Daily.co error');
+      }
+    };
+
+    // Left meeting handler - detect unexpected disconnection
+    this._boundHandlers.leftMeeting = (event) => {
+      this.log(`📴 Left meeting: ${event?.action || 'unknown reason'}`);
+      if (this.onErrorCallback) {
+        this.onErrorCallback('disconnected', `Left meeting: ${event?.action || 'unknown reason'}`);
+      }
+    };
+
+    // Network quality change - warn on poor connection
+    this._boundHandlers.networkQualityChange = (event) => {
+      const { quality, threshold } = event;
+      if (quality === 'low') {
+        this.log(`⚠️ Network quality low: ${quality} (threshold: ${threshold})`);
+        if (this.onErrorCallback) {
+          this.onErrorCallback('network-warning', 'Network quality is low, connection may be unstable');
+        }
+      }
     };
 
     // Register handlers
@@ -185,6 +218,8 @@ class TavusSessionManager {
     this.daily.on('track-started', this._boundHandlers.trackStarted);
     this.daily.on('track-stopped', this._boundHandlers.trackStopped);
     this.daily.on('error', this._boundHandlers.error);
+    this.daily.on('left-meeting', this._boundHandlers.leftMeeting);
+    this.daily.on('network-quality-change', this._boundHandlers.networkQualityChange);
   }
 
   /**
@@ -193,12 +228,18 @@ class TavusSessionManager {
   _attachVideoTrack(track, participant) {
     this.logWithStack(`[${this.instanceId}] _attachVideoTrack() called`);
 
+    // Null check for track object to prevent crashes
+    if (!track) {
+      this.log('⚠️ Received null/undefined track in _attachVideoTrack');
+      return false;
+    }
+
     if (this.hasVideo) {
       this.log('Video already attached, skipping');
       return false;
     }
 
-    this.log(`Attaching video track from ${participant.user_id}`);
+    this.log(`Attaching video track from ${participant?.user_id || 'unknown'}`);
 
     try {
       // Wait for video container if not ready
@@ -276,12 +317,18 @@ class TavusSessionManager {
   async _attachAudioTrack(track, participant) {
     this.logWithStack(`[${this.instanceId}] _attachAudioTrack() called`);
 
+    // Null check for track object to prevent crashes
+    if (!track) {
+      this.log('⚠️ Received null/undefined track in _attachAudioTrack');
+      return false;
+    }
+
     if (this.hasAudio) {
       this.log('Audio already attached, skipping');
       return false;
     }
 
-    this.log(`Attaching audio track from ${participant.user_id}`);
+    this.log(`Attaching audio track from ${participant?.user_id || 'unknown'}`);
 
     try {
       // Create audio element if it doesn't exist
@@ -591,6 +638,8 @@ class TavusSessionManager {
       this.daily.off('track-started', this._boundHandlers.trackStarted);
       this.daily.off('track-stopped', this._boundHandlers.trackStopped);
       this.daily.off('error', this._boundHandlers.error);
+      this.daily.off('left-meeting', this._boundHandlers.leftMeeting);
+      this.daily.off('network-quality-change', this._boundHandlers.networkQualityChange);
 
       // Leave room and destroy
       try {
@@ -600,6 +649,9 @@ class TavusSessionManager {
         this.log(`⚠️ Error leaving Daily room: ${e.message}`);
       }
     }
+
+    // Clear error callback
+    this.onErrorCallback = null;
 
     this.detachVideo();
     this.detachAudio();
