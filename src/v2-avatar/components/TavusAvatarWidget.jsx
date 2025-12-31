@@ -27,6 +27,8 @@ import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
 import EntriLearningModules from './EntriLearningModules';
+import MCQQuizOverlay from './MCQQuizOverlay';
+import { getModuleQuiz, hasModuleQuiz } from '../config/moduleQuizzes';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -84,6 +86,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     'lifestyle-benefits',
     'company-rules',
     'final-quiz'
+  ];
+
+  // Modules that require user confirmation before moving to next (pause for questions)
+  const modulesRequiringConfirmation = [
+    'posh-info',
+    'employee-benefits',
+    'lifestyle-benefits',
+    'company-rules'
   ];
   
   // Track if Entri onboarding has started
@@ -146,7 +156,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const isAvatarSpeakingRef = useRef(false); // Ref for avatar speaking state
   const listeningStateRef = useRef(null); // Track current listening state to prevent redundant calls ('enabled' | 'disabled' | null)
   const playDemoVideoRef = useRef(null); // Ref to playDemoVideo function
-  
+  const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
+
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
   
@@ -183,6 +194,29 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // State to show "session ended due to inactivity" message
   const [sessionTimedOut, setSessionTimedOut] = useState(false);
+
+  // State for module confirmation pause - waits for user to confirm before moving to next module
+  const [waitingForModuleConfirmation, setWaitingForModuleConfirmation] = useState(false);
+  const waitingForModuleConfirmationRef = useRef(false); // Ref for use in callbacks
+
+  // MCQ Quiz state - for module-specific quizzes
+  const [mcqQuizState, setMcqQuizState] = useState({
+    isActive: false,           // Whether MCQ quiz mode is active
+    moduleId: null,            // Which module's quiz is running
+    currentQuestionIndex: 0,   // Current question (0-based)
+    selectedIndex: null,       // User's selected option for current question
+    isAnswered: false,         // Whether current question has been answered
+    isCorrect: false,          // Whether selected answer is correct
+    score: { correct: 0, total: 0 }, // Running score
+    quizData: null,            // Quiz configuration from moduleQuizzes.js
+    waitingForAvatarToFinish: false, // Waiting for avatar to finish speaking before enabling selection
+  });
+  const mcqQuizStateRef = useRef(mcqQuizState); // Ref for use in callbacks
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    mcqQuizStateRef.current = mcqQuizState;
+  }, [mcqQuizState]);
 
   // Event logging hook
   const { logs, log, clearLogs } = useEventLogger();
@@ -259,26 +293,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Callback for when founder video stops - move to next module
   const handleFounderVideoStop = useCallback(() => {
     if (activeModuleRef.current === 'founder-video' && personaId === 'p54ceeb77022') {
-      addDebugLog('[DEMO] Founder video finished - moving to next module');
-      
-      // 🔇 Ensure microphone stays muted (should already be muted)
-      if (sessionManagerRef.current?.isInitialized) {
-        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-          addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
-        });
-        setIsMuted(true);
-      }
-      
-      // 🔴 Keep Tavus listening disabled
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
-      }
-      
+      addDebugLog('[DEMO] Founder video finished');
+
       // Unlock the module lock
       moduleSpeechLockRef.current = false;
       currentModulePromptRef.current = '';
-      
+
       // Mark founder-video as complete
       setCompletedModules(prev => {
         if (prev.includes('founder-video')) {
@@ -286,24 +306,63 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
         return [...prev, 'founder-video'];
       });
-      
-      // Move to next main module (posh-info) - founder-video comes after welcome-intro
-      // So next module is posh-info (index 1 in entriModuleOrder)
-      const nextModuleId = entriModuleOrder[1]; // posh-info
-      addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
-      setTimeout(() => {
-        if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
-          addDebugLog(`[DEMO] ✅ Moving to next module after founder video: ${nextModuleId}`);
-          // Ensure microphone is still muted before moving to next module
-          if (sessionManagerRef.current?.isInitialized) {
-            sessionManagerRef.current.setMicrophoneMuted(true);
-            setIsMuted(true);
-          }
-          handleModuleSelectRef.current(nextModuleId);
-        } else {
-          addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
+
+      // Check if founder-video has a quiz
+      if (hasModuleQuiz('founder-video')) {
+        addDebugLog('[DEMO] Founder video has quiz - starting MCQ quiz');
+
+        // Keep microphone muted during quiz
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
         }
-      }, 500); // Reduced delay for faster transition
+
+        // Keep Tavus listening disabled during quiz
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          listeningStateRef.current = 'disabled';
+        }
+
+        // Start the quiz after a short delay
+        setTimeout(() => {
+          if (mountedRef.current && startMcqQuizRef.current) {
+            startMcqQuizRef.current('founder-video');
+          }
+        }, 1000);
+      } else {
+        // No quiz - move to next module (posh-info)
+        addDebugLog('[DEMO] No quiz for founder video - moving to next module');
+
+        // 🔇 Ensure microphone stays muted
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+            addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
+          });
+          setIsMuted(true);
+        }
+
+        // 🔴 Keep Tavus listening disabled
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
+        }
+
+        // Move to next main module (posh-info)
+        const nextModuleId = entriModuleOrder[1]; // posh-info
+        addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
+        setTimeout(() => {
+          if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
+            addDebugLog(`[DEMO] ✅ Moving to next module after founder video: ${nextModuleId}`);
+            if (sessionManagerRef.current?.isInitialized) {
+              sessionManagerRef.current.setMicrophoneMuted(true);
+              setIsMuted(true);
+            }
+            handleModuleSelectRef.current(nextModuleId);
+          } else {
+            addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
+          }
+        }, 500);
+      }
     }
   }, [personaId, entriModuleOrder, quizState.isActive, addDebugLog]);
 
@@ -380,6 +439,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           dailyEventManagerRef.current.disableListening();
           addDebugLog('[MODULE-LOCK] 🔇 Re-confirmed Tavus listening disabled');
         }
+
+        // CRITICAL: If MCQ quiz is active, ensure Tavus listening is disabled
+        if (mcqQuizStateRef.current.isActive && dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          listeningStateRef.current = 'disabled';
+          addDebugLog('[MCQ-QUIZ] 🔇 Re-confirmed Tavus listening disabled during quiz');
+        }
         
         // Mute microphone at Daily.co level (backup)
         if (sessionManagerRef.current?.isInitialized) {
@@ -395,14 +461,36 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Ignoring avatar speech end - video is playing');
           return;
         }
-        
+
         // 🔍 CRITICAL LOGGING: Track if Tavus is interrupting itself
         addDebugLog(`[TAVUS] 🛑 TAVUS STOPPED SPEAKING - interrupted: ${interrupted}`);
         if (interrupted && moduleSpeechLockRef.current) {
           addDebugLog('[TAVUS] ⚠️⚠️⚠️ CRITICAL: Tavus interrupted itself during module speech!');
           addDebugLog('[TAVUS] This means Tavus listening was NOT properly disabled');
         }
-        
+
+        // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
+        if (mcqQuizStateRef.current.isActive) {
+          addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - quiz is in control`);
+
+          // Enable MCQ selection when avatar finishes speaking during quiz
+          if (mcqQuizStateRef.current.waitingForAvatarToFinish) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished speaking - enabling selection, keeping listening DISABLED');
+            setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
+
+            // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+            if (dailyEventManagerRef.current) {
+              dailyEventManagerRef.current.disableListening();
+              listeningStateRef.current = 'disabled';
+            }
+          }
+
+          setIsAvatarSpeaking(false);
+          isAvatarSpeakingRef.current = false;
+          setAvatarState("idle");
+          return; // Skip all module completion logic - quiz handles its own flow
+        }
+
         // When avatar stops speaking during welcome module, transition to founder video immediately
         // For other modules (non-welcome, non-founder-video), completion is handled by finishModuleSpeech
         if (activeModuleRef.current === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
@@ -416,16 +504,54 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             addDebugLog('[FOUNDER-VIDEO] ❌ finishModuleSpeechRef.current is null!');
           }
         } else if (activeModuleRef.current && activeModuleRef.current !== 'welcome-intro' && activeModuleRef.current !== 'founder-video' && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
-          // For other regular modules: Trigger completion check when avatar stops speaking
-          // This enables proactive flow - modules complete automatically and move to next
-          addDebugLog(`[MODULE-LOCK] Module ${activeModuleRef.current} avatar stopped speaking - triggering completion`);
-          const acc = moduleSpeechAccumulatorRef.current;
-          if (!acc.completed && finishModuleSpeechRef.current) {
-            acc.completed = true;
-            finishModuleSpeechRef.current();
+          // Skip module completion if MCQ quiz is active (quiz handles its own flow)
+          if (mcqQuizStateRef.current.isActive) {
+            addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active`);
+            // Don't process module completion - quiz is in control
+          } else {
+            // For other regular modules: Check if confirmation is required before completing
+            const currentModule = activeModuleRef.current;
+
+            // Check if this module requires user confirmation before advancing
+            if (modulesRequiringConfirmation.includes(currentModule)) {
+              addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
+
+              // Unlock module speech lock so user can respond
+              moduleSpeechLockRef.current = false;
+              currentModulePromptRef.current = '';
+
+              // Set waiting state
+              setWaitingForModuleConfirmation(true);
+              waitingForModuleConfirmationRef.current = true;
+
+              // Unmute microphone so user can respond
+              if (sessionManagerRef.current?.isInitialized) {
+                sessionManagerRef.current.setMicrophoneMuted(false).catch(err => {
+                  addDebugLog(`[MODULE-CONFIRM] Failed to unmute: ${err.message}`);
+                });
+                setIsMuted(false);
+              }
+
+              // Enable Tavus listening so it can hear user's response
+              if (dailyEventManagerRef.current) {
+                listeningStateRef.current = 'enabled';
+                dailyEventManagerRef.current.enableListening();
+                addDebugLog('[MODULE-CONFIRM] 🎤 Listening enabled - waiting for user confirmation');
+              }
+
+              // Do NOT call finishModuleSpeech - wait for user confirmation
+            } else {
+              // Module doesn't require confirmation - proceed with auto-completion
+              addDebugLog(`[MODULE-LOCK] Module ${currentModule} avatar stopped speaking - triggering completion`);
+              const acc = moduleSpeechAccumulatorRef.current;
+              if (!acc.completed && finishModuleSpeechRef.current) {
+                acc.completed = true;
+                finishModuleSpeechRef.current();
+              }
+            }
           }
         }
-        
+
         // Check if quiz question was interrupted
         setQuizState(prev => {
           if (prev.isActive && prev.isAskingQuestion && interrupted) {
@@ -547,7 +673,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       },
       onUserTranscript: (text, source) => {
         // 🔒 HARD BLOCK: Ignore ALL user transcripts when module lock is active
-        if (moduleSpeechLockRef.current) {
+        // EXCEPTION: Allow transcripts when waiting for module confirmation or MCQ quiz
+        if (moduleSpeechLockRef.current && !waitingForModuleConfirmationRef.current && !mcqQuizStateRef.current.isActive) {
           // Additional check: Ignore if text matches module prompt (Tavus sometimes echoes prompts as user speech)
           const promptText = currentModulePromptRef.current;
           if (promptText && (text.includes(promptText.substring(0, 100)) || promptText.includes(text.substring(0, 100)))) {
@@ -557,13 +684,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }
           return; // IGNORE COMPLETELY
         }
-        
+
         // Ignore user transcripts when video is playing
         if (isDemoPlayingRef.current) {
           addDebugLog('[DEMO] Ignoring user transcript - video is playing');
           return;
         }
-        
+
         handleUserSpeech(text, source);
       },
       onReplicaTranscript: (text, source) => {
@@ -797,7 +924,135 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       
       return; // Don't process as regular speech during quiz
     }
-    
+
+    // Check if we're waiting for module confirmation
+    if (waitingForModuleConfirmationRef.current) {
+      const lowerText = text.toLowerCase().trim();
+
+      // Keywords that indicate user wants to proceed
+      const confirmationKeywords = [
+        'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'clear', 'understood',
+        'got it', 'i understand', 'no questions', 'let\'s continue', 'continue',
+        'move on', 'next', 'proceed', 'go ahead', 'all clear', 'makes sense',
+        'i got it', 'perfect', 'great', 'good', 'fine', 'alright', 'right'
+      ];
+
+      // Check if user's response contains confirmation
+      const isConfirmation = confirmationKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      // Keywords that indicate user has questions or needs clarification
+      const questionKeywords = [
+        'question', 'what', 'how', 'why', 'can you', 'could you', 'explain',
+        'tell me more', 'clarify', 'not clear', 'confused', 'don\'t understand',
+        'repeat', 'again', 'no', 'wait', 'hold on'
+      ];
+
+      const hasQuestion = questionKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      if (isConfirmation && !hasQuestion) {
+        // User confirmed - check if module has quiz, otherwise proceed to next module
+        addDebugLog(`[MODULE-CONFIRM] ✅ User confirmed: "${text}"`);
+
+        // Reset confirmation state
+        setWaitingForModuleConfirmation(false);
+        waitingForModuleConfirmationRef.current = false;
+
+        // Get current module
+        const currentModule = activeModuleRef.current;
+
+        // Check if this module has a quiz
+        if (hasModuleQuiz(currentModule)) {
+          addDebugLog(`[MODULE-CONFIRM] Module ${currentModule} has quiz - starting MCQ quiz`);
+
+          // Mute microphone before starting quiz
+          if (sessionManagerRef.current?.isInitialized) {
+            sessionManagerRef.current.setMicrophoneMuted(true);
+            setIsMuted(true);
+          }
+
+          // Disable listening during quiz
+          if (dailyEventManagerRef.current) {
+            listeningStateRef.current = 'disabled';
+            dailyEventManagerRef.current.disableListening();
+          }
+
+          // Start the MCQ quiz for this module
+          setTimeout(() => {
+            startMcqQuiz(currentModule);
+          }, 500);
+
+          return; // Don't process as regular speech
+        }
+
+        // No quiz - advance to next module
+        const currentIndex = entriModuleOrder.indexOf(currentModule);
+
+        if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+          const nextModuleId = entriModuleOrder[currentIndex + 1];
+
+          // Mute microphone before transitioning
+          if (sessionManagerRef.current?.isInitialized) {
+            sessionManagerRef.current.setMicrophoneMuted(true);
+            setIsMuted(true);
+          }
+
+          // Disable listening
+          if (dailyEventManagerRef.current) {
+            listeningStateRef.current = 'disabled';
+            dailyEventManagerRef.current.disableListening();
+          }
+
+          // Send acknowledgment and transition
+          sendMessageToReplica(`Great! Let's move on to the next topic.`);
+
+          setTimeout(() => {
+            if (mountedRef.current && handleModuleSelectRef.current) {
+              addDebugLog(`[MODULE-CONFIRM] Transitioning to: ${nextModuleId}`);
+              handleModuleSelectRef.current(nextModuleId);
+            }
+          }, 2000); // Wait for acknowledgment to be spoken
+        }
+
+        return; // Don't process as regular speech
+      } else if (hasQuestion) {
+        // User has a question - let avatar respond naturally, then re-ask for confirmation
+        addDebugLog(`[MODULE-CONFIRM] 🤔 User has question: "${text}" - letting avatar respond`);
+
+        // Keep waiting for confirmation, but let the question go through to avatar
+        // The avatar will respond, and we'll still be in confirmation-waiting mode
+        // After avatar responds, user can confirm or ask more questions
+      }
+      // If neither clear confirmation nor question, let it fall through to normal processing
+    }
+
+    // Check if MCQ quiz is active - handle voice commands
+    if (mcqQuizStateRef.current.isActive) {
+      const lowerText = text.toLowerCase().trim();
+
+      // Skip/End quiz commands
+      if (lowerText.includes('skip') || lowerText.includes('end quiz') || lowerText.includes('stop quiz') || lowerText.includes('exit quiz')) {
+        addDebugLog(`[MCQ-QUIZ] Voice command: skip/end quiz - "${text}"`);
+        skipMcqQuiz();
+        return;
+      }
+
+      // Repeat question commands
+      if (lowerText.includes('repeat') || lowerText.includes('say again') || lowerText.includes('again please') || lowerText.includes('one more time')) {
+        addDebugLog(`[MCQ-QUIZ] Voice command: repeat question - "${text}"`);
+        repeatMcqQuestion();
+        return;
+      }
+
+      // Any other voice input during quiz - remind user to click
+      addDebugLog(`[MCQ-QUIZ] Unrecognized voice during quiz: "${text}" - reminding to click`);
+      sendMessageToReplica("Please select your answer by clicking one of the options on screen. You can say 'repeat' to hear the question again, or 'skip' to move on.");
+      return;
+    }
+
     // When user starts a new question, clear old transcripts and start fresh
     // Only show the current conversation: new user question (avatar response will be added when it speaks)
     setTranscripts([
@@ -1581,6 +1836,23 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Reset session starting lock so a new session can be started
     isStartingSessionRef.current = false;
 
+    // Reset module confirmation state
+    setWaitingForModuleConfirmation(false);
+    waitingForModuleConfirmationRef.current = false;
+
+    // Reset MCQ quiz state
+    setMcqQuizState({
+      isActive: false,
+      moduleId: null,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: null,
+      waitingForAvatarToFinish: false,
+    });
+
     // Clear pending operation timeouts
     if (pendingVideoTimeoutRef.current) {
       clearTimeout(pendingVideoTimeoutRef.current);
@@ -1718,12 +1990,35 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             log('DEMO', 'Ignoring avatar speech end - video is playing');
             return;
           }
+
+          // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
+          if (mcqQuizStateRef.current.isActive) {
+            addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - quiz is in control`);
+
+            // Enable MCQ selection when avatar finishes speaking during quiz
+            if (mcqQuizStateRef.current.waitingForAvatarToFinish) {
+              addDebugLog('[MCQ-QUIZ] Avatar finished speaking - enabling selection, keeping listening DISABLED');
+              setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
+
+              // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+              if (dailyEventManagerRef.current) {
+                dailyEventManagerRef.current.disableListening();
+                listeningStateRef.current = 'disabled';
+              }
+            }
+
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
+            return; // Skip all module completion logic - quiz handles its own flow
+          }
+
           setIsAvatarSpeaking(false);
           isAvatarSpeakingRef.current = false;
-          
+
           // Proactive flow: When avatar stops speaking, trigger module completion
           const currentModule = activeModuleRef.current;
-          
+
           if (currentModule === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
             // Welcome module: Transition to founder video
             addDebugLog('[FOUNDER-VIDEO] ✅ Welcome module complete - transitioning to founder video');
@@ -1733,15 +2028,45 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
               finishModuleSpeechRef.current();
             }
           } else if (currentModule && currentModule !== 'welcome-intro' && currentModule !== 'founder-video' && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
-            // Regular modules (posh-info, employee-benefits, etc.): Auto-complete and move to next
-            addDebugLog(`[MODULE-LOCK] ✅ Module ${currentModule} complete - triggering completion for proactive flow`);
-            const acc = moduleSpeechAccumulatorRef.current;
-            if (!acc.completed && finishModuleSpeechRef.current) {
-              acc.completed = true;
-              finishModuleSpeechRef.current();
+            // Regular modules: Check if confirmation is required before completing
+            if (modulesRequiringConfirmation.includes(currentModule)) {
+              addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
+
+              // Unlock module speech lock so user can respond
+              moduleSpeechLockRef.current = false;
+              currentModulePromptRef.current = '';
+
+              // Set waiting state
+              setWaitingForModuleConfirmation(true);
+              waitingForModuleConfirmationRef.current = true;
+
+              // Unmute microphone so user can respond
+              if (sessionManagerRef.current?.isInitialized) {
+                sessionManagerRef.current.setMicrophoneMuted(false).catch(err => {
+                  addDebugLog(`[MODULE-CONFIRM] Failed to unmute: ${err.message}`);
+                });
+                setIsMuted(false);
+              }
+
+              // Enable Tavus listening
+              if (dailyEventManagerRef.current) {
+                listeningStateRef.current = 'enabled';
+                dailyEventManagerRef.current.enableListening();
+                addDebugLog('[MODULE-CONFIRM] 🎤 Listening enabled - waiting for user confirmation');
+              }
+
+              // Do NOT call finishModuleSpeech - wait for user confirmation
+            } else {
+              // Module doesn't require confirmation - proceed with auto-completion
+              addDebugLog(`[MODULE-LOCK] ✅ Module ${currentModule} complete - triggering completion for proactive flow`);
+              const acc = moduleSpeechAccumulatorRef.current;
+              if (!acc.completed && finishModuleSpeechRef.current) {
+                acc.completed = true;
+                finishModuleSpeechRef.current();
+              }
             }
           }
-          
+
           // Don't set to "listening" when microphone is muted or module lock is active
           if (moduleSpeechLockRef.current || isMuted) {
             setAvatarState("idle");
@@ -2001,6 +2326,244 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     sendMessageToReplica(summaryMessage);
   };
 
+  // ========== MCQ QUIZ FUNCTIONS ==========
+
+  // Start MCQ quiz for a module
+  const startMcqQuiz = useCallback((moduleId) => {
+    const quizData = getModuleQuiz(moduleId);
+    if (!quizData || !quizData.questions || quizData.questions.length === 0) {
+      addDebugLog(`[MCQ-QUIZ] No quiz found for module: ${moduleId}`);
+      return false;
+    }
+
+    addDebugLog(`[MCQ-QUIZ] Starting quiz for module: ${moduleId} with ${quizData.questions.length} questions`);
+
+    // Initialize quiz state
+    setMcqQuizState({
+      isActive: true,
+      moduleId: moduleId,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: quizData,
+      waitingForAvatarToFinish: true, // Wait for avatar to read the question
+    });
+
+    // Mute microphone during quiz - user clicks options, not speaks
+    if (sessionManagerRef.current?.isInitialized) {
+      sessionManagerRef.current.setMicrophoneMuted(true);
+      setIsMuted(true);
+    }
+
+    // CRITICAL: Disable Tavus listening during MCQ quiz - avatar should NOT respond to audio
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.disableListening();
+      listeningStateRef.current = 'disabled';
+      addDebugLog('[MCQ-QUIZ] Disabled Tavus listening - waiting for button clicks only');
+    }
+
+    // Send quiz intro and first question to avatar using ECHO mode (not respond)
+    // Echo mode makes avatar speak exactly this text without LLM processing
+    const firstQuestion = quizData.questions[0];
+    const introMessage = `${quizData.intro} Question 1: ${firstQuestion.question} Your options are: A: ${firstQuestion.options[0]}. B: ${firstQuestion.options[1]}. C: ${firstQuestion.options[2]}. D: ${firstQuestion.options[3]}.`;
+
+    sendMessageToReplica(introMessage, 'echo');
+    return true;
+  }, [addDebugLog, sendMessageToReplica]);
+
+  // Update ref for startMcqQuiz
+  startMcqQuizRef.current = startMcqQuiz;
+
+  // Handle MCQ option selection
+  const handleMcqSelect = useCallback((selectedIndex) => {
+    const state = mcqQuizStateRef.current;
+    if (!state.isActive || state.isAnswered || state.waitingForAvatarToFinish) {
+      addDebugLog(`[MCQ-QUIZ] Selection ignored - isActive: ${state.isActive}, isAnswered: ${state.isAnswered}, waiting: ${state.waitingForAvatarToFinish}`);
+      return;
+    }
+
+    const currentQuestion = state.quizData.questions[state.currentQuestionIndex];
+    const isCorrect = selectedIndex === currentQuestion.correctIndex;
+    const optionLabels = ['A', 'B', 'C', 'D'];
+
+    addDebugLog(`[MCQ-QUIZ] User selected option ${optionLabels[selectedIndex]}: "${currentQuestion.options[selectedIndex]}" - ${isCorrect ? 'CORRECT' : 'INCORRECT'}`);
+
+    // Update state with answer
+    setMcqQuizState(prev => ({
+      ...prev,
+      selectedIndex: selectedIndex,
+      isAnswered: true,
+      isCorrect: isCorrect,
+      score: {
+        correct: prev.score.correct + (isCorrect ? 1 : 0),
+        total: prev.score.total + 1,
+      },
+      waitingForAvatarToFinish: true, // Wait for avatar feedback before next question
+    }));
+
+    // Send feedback to avatar
+    let feedbackMessage;
+    if (isCorrect) {
+      feedbackMessage = `That's correct! ${currentQuestion.explanation}`;
+    } else {
+      const correctAnswer = currentQuestion.options[currentQuestion.correctIndex];
+      feedbackMessage = `That's not quite right. The correct answer is ${optionLabels[currentQuestion.correctIndex]}: ${correctAnswer}. ${currentQuestion.explanation}`;
+    }
+
+    // Check if there are more questions
+    const isLastQuestion = state.currentQuestionIndex >= state.quizData.questions.length - 1;
+    if (!isLastQuestion) {
+      feedbackMessage += " Let me read the next question.";
+    }
+
+    // Use ECHO mode - avatar speaks exactly this feedback without LLM processing
+    sendMessageToReplica(feedbackMessage, 'echo');
+
+    // If not last question, prepare next question after a delay
+    if (!isLastQuestion) {
+      setTimeout(() => {
+        askNextMcqQuestion();
+      }, 4000); // Wait for avatar to finish feedback
+    } else {
+      // Last question - complete quiz after delay
+      setTimeout(() => {
+        completeMcqQuiz();
+      }, 4000);
+    }
+  }, [addDebugLog, sendMessageToReplica]);
+
+  // Ask the next MCQ question
+  const askNextMcqQuestion = useCallback(() => {
+    setMcqQuizState(prev => {
+      const nextIndex = prev.currentQuestionIndex + 1;
+      const nextQuestion = prev.quizData.questions[nextIndex];
+
+      if (!nextQuestion) {
+        return prev; // No more questions
+      }
+
+      // Send next question to avatar using ECHO mode
+      const questionMessage = `Question ${nextIndex + 1}: ${nextQuestion.question} Your options are: A: ${nextQuestion.options[0]}. B: ${nextQuestion.options[1]}. C: ${nextQuestion.options[2]}. D: ${nextQuestion.options[3]}.`;
+      sendMessageToReplica(questionMessage, 'echo');
+
+      return {
+        ...prev,
+        currentQuestionIndex: nextIndex,
+        selectedIndex: null,
+        isAnswered: false,
+        isCorrect: false,
+        waitingForAvatarToFinish: true,
+      };
+    });
+  }, [sendMessageToReplica]);
+
+  // Complete the MCQ quiz
+  const completeMcqQuiz = useCallback(() => {
+    const state = mcqQuizStateRef.current;
+    const { score, quizData, moduleId } = state;
+    const passed = quizData.passingScore ? score.correct >= quizData.passingScore : true;
+
+    addDebugLog(`[MCQ-QUIZ] Quiz complete for ${moduleId} - Score: ${score.correct}/${score.total}, Passed: ${passed}`);
+
+    // Send completion message
+    let completionMessage = quizData.completionMessage || "You've completed the quiz!";
+    completionMessage += ` You scored ${score.correct} out of ${score.total}.`;
+
+    if (!passed && quizData.passingScore) {
+      completionMessage += ` You needed ${quizData.passingScore} correct answers to pass. Don't worry, the important thing is that you're learning!`;
+    }
+
+    // Use ECHO mode for completion message
+    sendMessageToReplica(completionMessage, 'echo');
+
+    // Reset quiz state
+    setMcqQuizState({
+      isActive: false,
+      moduleId: null,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: null,
+      waitingForAvatarToFinish: false,
+    });
+
+    // Advance to next module after quiz completion
+    const currentIndex = entriModuleOrder.indexOf(moduleId);
+    if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+      const nextModuleId = entriModuleOrder[currentIndex + 1];
+      addDebugLog(`[MCQ-QUIZ] Advancing to next module: ${nextModuleId}`);
+
+      setTimeout(() => {
+        if (mountedRef.current && handleModuleSelectRef.current) {
+          handleModuleSelectRef.current(nextModuleId);
+        }
+      }, 3000); // Wait for completion message to be spoken
+    }
+  }, [addDebugLog, sendMessageToReplica, entriModuleOrder]);
+
+  // Skip/End MCQ quiz
+  const skipMcqQuiz = useCallback(() => {
+    const state = mcqQuizStateRef.current;
+    if (!state.isActive) return;
+
+    addDebugLog(`[MCQ-QUIZ] Quiz skipped for module: ${state.moduleId}`);
+
+    // Use ECHO mode
+    sendMessageToReplica("Okay, let's skip the quiz and move on to the next topic.", 'echo');
+
+    // Reset quiz state
+    setMcqQuizState({
+      isActive: false,
+      moduleId: null,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: null,
+      waitingForAvatarToFinish: false,
+    });
+
+    // Advance to next module
+    const currentIndex = entriModuleOrder.indexOf(state.moduleId);
+    if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
+      const nextModuleId = entriModuleOrder[currentIndex + 1];
+      setTimeout(() => {
+        if (mountedRef.current && handleModuleSelectRef.current) {
+          handleModuleSelectRef.current(nextModuleId);
+        }
+      }, 2000);
+    }
+  }, [addDebugLog, sendMessageToReplica, entriModuleOrder]);
+
+  // Repeat current MCQ question
+  const repeatMcqQuestion = useCallback(() => {
+    const state = mcqQuizStateRef.current;
+    if (!state.isActive || !state.quizData) return;
+
+    const currentQuestion = state.quizData.questions[state.currentQuestionIndex];
+    const questionMessage = `Let me repeat that. Question ${state.currentQuestionIndex + 1}: ${currentQuestion.question} Your options are: A: ${currentQuestion.options[0]}. B: ${currentQuestion.options[1]}. C: ${currentQuestion.options[2]}. D: ${currentQuestion.options[3]}.`;
+
+    // Use ECHO mode
+    sendMessageToReplica(questionMessage, 'echo');
+    addDebugLog(`[MCQ-QUIZ] Repeated question ${state.currentQuestionIndex + 1}`);
+  }, [sendMessageToReplica, addDebugLog]);
+
+  // Enable selection after avatar finishes speaking the question
+  const enableMcqSelection = useCallback(() => {
+    setMcqQuizState(prev => ({
+      ...prev,
+      waitingForAvatarToFinish: false,
+    }));
+    addDebugLog('[MCQ-QUIZ] Selection enabled - avatar finished speaking');
+  }, [addDebugLog]);
+
+  // ========== END MCQ QUIZ FUNCTIONS ==========
+
   // 🔒 Start module speech lock - MUST be called before sending module prompt
   const startModuleSpeech = useCallback((moduleId) => {
     addDebugLog(`[MODULE-LOCK] 🔒 Starting speech lock for module: ${moduleId}`);
@@ -2124,25 +2687,29 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       return; // Exit early, don't process further
     }
     
-    // For other modules: Automatically move to next module (proactive flow)
+    // For other modules: Auto-advance to next module
+    // NOTE: Modules requiring confirmation are handled in onReplicaStopSpeaking callback
+    // and should NOT reach this function. This is only for non-confirmation modules.
     const isEntriPersona = personaId === 'p54ceeb77022';
     if (isEntriPersona && currentModule && currentModule !== 'final-quiz') {
       const currentIndex = entriModuleOrder.indexOf(currentModule);
+
+      // Auto-advance to next module
       if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
         const nextModuleId = entriModuleOrder[currentIndex + 1];
         addDebugLog(`[MODULE-LOCK] 🎯 Proactive flow: Moving to next module: ${nextModuleId}`);
-        
+
         // 🔇 Ensure microphone stays muted before transitioning
         if (sessionManagerRef.current?.isInitialized) {
           sessionManagerRef.current.setMicrophoneMuted(true);
           setIsMuted(true);
         }
-        
+
         // 🔴 Keep Tavus listening disabled
         if (dailyEventManagerRef.current) {
           dailyEventManagerRef.current.disableListening();
         }
-        
+
         setTimeout(() => {
           if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
             addDebugLog(`[MODULE-LOCK] ✅ Transitioning to next module: ${nextModuleId}`);
@@ -2253,13 +2820,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "idle" - microphone muted (sync)');
       }
     } else {
-      // Microphone unmuted → enable listening
-      dailyEventManagerRef.current.enableListening();
-      console.log('[TAVUS-DEBUG] [SYNC] 👂 Tavus listening enabled (microphone is unmuted)');
-      // Update avatar state to listening when mic is unmuted (if not speaking and no lock)
-      if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
-        setAvatarState("listening");
-        console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "listening" - microphone unmuted (sync)');
+      // Microphone unmuted → enable listening (but NOT during MCQ quiz)
+      if (mcqQuizStateRef.current.isActive) {
+        // During MCQ quiz, keep listening disabled even if mic is unmuted
+        dailyEventManagerRef.current.disableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (MCQ quiz active)');
+        setAvatarState("idle");
+      } else {
+        dailyEventManagerRef.current.enableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 👂 Tavus listening enabled (microphone is unmuted)');
+        // Update avatar state to listening when mic is unmuted (if not speaking and no lock)
+        if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
+          setAvatarState("listening");
+          console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "listening" - microphone unmuted (sync)');
+        }
       }
     }
   }, [isMuted]); // Only depend on isMuted - refs don't need to be in deps
@@ -2330,12 +2904,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     };
     
     const entriPrompts = {
-      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams.\n\nI am \"Ann\" your AI onboarding guide, and feel free to stop me at any time or ask any questions.\n\nEntri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers.\n\nBelow are the topics that we will cover in this course:\n\n First, we'll start with an introduction from our founders.\n\nNext, we’ll share some inspiring user success stories, followed by a look at the different functions here at Entri.\n\nMoving on, we’ll provide an overview of our vertical types and cover important HR policies.\n\nWe will also discuss our standards for the prevention of sexual harassment at work and walk you through your employee benefits.\n\nFinally, we’ll wrap up with a quiz, which you’ll need to pass to complete this module.\n\nLet’s start our onboarding!",
+      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams.\n\nI am \"Ann\" your AI onboarding guide, and feel free to stop me at any time or ask any questions.\n\nEntri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers.\n\nBelow are the topics that we will cover in this course:\n\n First, we'll start with an introduction from our founders.\n\nNext, we'll share some inspiring user success stories, followed by a look at the different functions here at Entri.\n\nMoving on, we'll provide an overview of our vertical types and cover important HR policies.\n\nWe will also discuss our standards for the prevention of sexual harassment at work and walk you through your employee benefits.\n\nFinally, we'll wrap up with a quiz, which you'll need to pass to complete this module.\n\nLet's start our onboarding!",
       'founder-video': "Here is our Founders video.",
-      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
-      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
-      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
-      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect. IMPORTANT: End this module by saying exactly: —END OF MODULE—",
+      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect.\n\nIs everything clear so far? Do you have any questions about POSH before we move on?",
+      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance.\n\nIs everything clear? Do you have any questions about your benefits before we continue?",
+      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance.\n\nIs everything clear? Any questions about the lifestyle benefits before we move on?",
+      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect.\n\nIs everything clear? Do you have any questions before we proceed to the final quiz?",
       'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Are you ready to begin?"
     };
     
@@ -3124,8 +3698,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           </div>
         )}
 
-        {/* Control bar - only show when connected and NOT in PIP mode (demo/calendly/pdf) */}
-        {!isConnecting && !connectionError && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && renderControlBar()}
+        {/* Control bar - only show when connected and NOT in PIP mode (demo/calendly/pdf) and NOT during MCQ quiz */}
+        {!isConnecting && !connectionError && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && !mcqQuizState.isActive && renderControlBar()}
+
+        {/* MCQ Quiz Overlay - show when MCQ quiz is active */}
+        {mcqQuizState.isActive && mcqQuizState.quizData && (
+          <MCQQuizOverlay
+            question={mcqQuizState.quizData.questions[mcqQuizState.currentQuestionIndex]}
+            questionNumber={mcqQuizState.currentQuestionIndex + 1}
+            totalQuestions={mcqQuizState.quizData.questions.length}
+            onSelect={handleMcqSelect}
+            selectedIndex={mcqQuizState.selectedIndex}
+            isAnswered={mcqQuizState.isAnswered}
+            isCorrect={mcqQuizState.isCorrect}
+            disabled={mcqQuizState.waitingForAvatarToFinish}
+            score={mcqQuizState.score}
+            onSkipQuiz={skipMcqQuiz}
+            sidebarVisible={shouldShowLearningModules(personaId) && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf}
+            sidebarWidth={320}
+          />
+        )}
       </motion.div>
     );
   };
