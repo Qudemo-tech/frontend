@@ -102,12 +102,12 @@ const FloatingQudemoWidget = ({
   // Universal Demo share token
   const UNIVERSAL_DEMO_TOKEN = 'ca6b5a1b-0764-4e1c-bf6c-3e3c5bc93d1d';
 
-  // Position classes
+  // Position classes - use smaller spacing on mobile to prevent overflow
   const positionClasses = {
-    'bottom-right': 'bottom-4 right-4 md:bottom-6 md:right-6',
-    'bottom-left': 'bottom-4 left-4 md:bottom-6 md:left-6',
-    'top-right': 'top-4 right-4 md:top-6 md:right-6',
-    'top-left': 'top-4 left-4 md:top-6 md:left-6'
+    'bottom-right': 'bottom-3 right-3 md:bottom-6 md:right-6',
+    'bottom-left': 'bottom-3 left-3 md:bottom-6 md:left-6',
+    'top-right': 'top-3 right-3 md:top-6 md:right-6',
+    'top-left': 'top-3 left-3 md:top-6 md:left-6'
   };
 
   // Setup on mount
@@ -2099,7 +2099,14 @@ const FloatingQudemoWidget = ({
         style={{
           maxWidth: '100vw',
           maxHeight: '100vh',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          ...(window.innerWidth < 768 && !isExpanded && !isMinimized ? {
+            // On mobile, ensure collapsed button doesn't overflow
+            right: position.includes('right') ? '0.75rem' : 'auto',
+            left: position.includes('left') ? '0.75rem' : 'auto',
+            bottom: position.includes('bottom') ? '0.75rem' : 'auto',
+            top: position.includes('top') ? '0.75rem' : 'auto',
+          } : {})
         }}>
       
       {/* Collapsed preview button */}
