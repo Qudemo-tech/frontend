@@ -2116,7 +2116,12 @@ const FloatingQudemoWidget = ({
           className="group relative bg-gradient-to-br from-blue-600 to-purple-700 hover:from-blue-700 hover:to-purple-800 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 w-16 h-16 md:w-20 md:h-20 flex items-center justify-center"
           title={previewText}
           style={{
-            position: 'relative'
+            position: 'relative',
+            ...(window.innerWidth < 768 ? {
+              maxWidth: 'calc(100vw - 1.5rem)',
+              maxHeight: 'calc(100vh - 1.5rem)',
+              boxSizing: 'border-box'
+            } : {})
           }}
         >
           <ChatBubbleLeftRightIcon className="w-8 h-8 md:w-10 md:h-10" />

@@ -33,7 +33,25 @@
   // Create widget container
   const widgetContainer = document.createElement('div');
   widgetContainer.id = `qudemo-widget-container-${qudemoId}`;
-  widgetContainer.style.cssText = `
+  
+  // Use proper positioning that prevents overflow on mobile
+  const isMobile = window.innerWidth <= 768;
+  const containerStyles = isMobile ? `
+    position: fixed;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    top: 0;
+    width: 100%;
+    max-width: 100vw;
+    height: 100%;
+    max-height: 100vh;
+    border: none;
+    z-index: 999999;
+    pointer-events: none;
+    overflow: hidden;
+    box-sizing: border-box;
+  ` : `
     position: fixed;
     ${position.includes('right') ? 'right: 0;' : 'left: 0;'}
     bottom: 0;
@@ -46,7 +64,23 @@
     z-index: 999999;
     pointer-events: none;
     overflow: hidden;
+    box-sizing: border-box;
   `;
+  
+  widgetContainer.style.cssText = containerStyles;
+  
+  // Update on resize
+  let resizeTimeout;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+      const isMobileNow = window.innerWidth <= 768;
+      if (isMobileNow) {
+        widgetContainer.style.right = '0';
+        widgetContainer.style.left = '0';
+      }
+    }, 100);
+  });
 
   // Create iframe
   const embedUrl = `${baseUrl}/widget-embed/${qudemoId}?theme=${theme}&position=${position}&size=${size}&company=${encodeURIComponent(companyName)}`;
@@ -54,10 +88,14 @@
   iframe.src = embedUrl;
   iframe.style.cssText = `
     width: 100%;
+    max-width: 100vw;
     height: 100%;
+    max-height: 100vh;
     border: none;
     background: transparent;
     pointer-events: auto;
+    box-sizing: border-box;
+    overflow: hidden;
   `;
   iframe.allow = 'microphone';
   iframe.title = 'Qudemo Widget';
