@@ -17,16 +17,32 @@ const WidgetEmbed = () => {
   const size = searchParams.get('size') || 'medium';
 
   useEffect(() => {
-    // Apply theme to body
+    // Apply theme to body and html to prevent overflow
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.width = '100%';
+    document.documentElement.style.maxWidth = '100vw';
     document.body.style.backgroundColor = 'transparent';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
+    document.body.style.width = '100%';
+    document.body.style.maxWidth = '100vw';
+    document.body.style.boxSizing = 'border-box';
     
     // Apply theme class if needed
     if (theme === 'dark') {
       document.body.classList.add('dark-theme');
     }
+    
+    // Cleanup on unmount
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.width = '';
+      document.documentElement.style.maxWidth = '';
+      document.body.style.width = '';
+      document.body.style.maxWidth = '';
+      document.body.style.boxSizing = '';
+    };
   }, [theme]);
 
   if (!qudemoId) {
@@ -50,9 +66,12 @@ const WidgetEmbed = () => {
   return (
     <div style={{
       width: '100%',
-      height: '100vh',
+      maxWidth: '100vw',
+      height: '100%',
+      maxHeight: '100vh',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      boxSizing: 'border-box'
     }}>
       <FloatingQudemoWidget
         qudemoId={qudemoId}

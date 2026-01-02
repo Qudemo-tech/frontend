@@ -38,11 +38,14 @@
     ${position.includes('right') ? 'right: 0;' : 'left: 0;'}
     bottom: 0;
     top: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    max-width: 100vw;
+    height: 100%;
+    max-height: 100vh;
     border: none;
     z-index: 999999;
     pointer-events: none;
+    overflow: hidden;
   `;
 
   // Create iframe

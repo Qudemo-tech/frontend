@@ -2095,7 +2095,12 @@ const FloatingQudemoWidget = ({
     <>
       {/* Mobile overlay - removed as widget is now full screen on mobile */}
       
-      <div className={`fixed inset-0 md:inset-auto md:${positionClasses[position]} z-[10000] transition-all duration-300 md:p-0 ${isExpanded ? 'block' : 'flex items-center justify-center'} md:block`}>
+      <div className={`fixed ${!isExpanded && !isMinimized ? `${positionClasses[position]}` : 'inset-0'} md:inset-auto md:${positionClasses[position]} z-[10000] transition-all duration-300 md:p-0 ${isExpanded ? 'block' : ''} md:block`}
+        style={{
+          maxWidth: '100vw',
+          maxHeight: '100vh',
+          overflow: 'hidden'
+        }}>
       
       {/* Collapsed preview button */}
       {!isExpanded && !isMinimized ? (
@@ -2103,12 +2108,19 @@ const FloatingQudemoWidget = ({
           onClick={() => setIsExpanded(true)}
           className="group relative bg-gradient-to-br from-blue-600 to-purple-700 hover:from-blue-700 hover:to-purple-800 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 w-16 h-16 md:w-20 md:h-20 flex items-center justify-center"
           title={previewText}
+          style={{
+            position: 'relative'
+          }}
         >
           <ChatBubbleLeftRightIcon className="w-8 h-8 md:w-10 md:h-10" />
           <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
         </button>
       ) : isMinimized ? (
-        <div className="bg-white rounded-lg shadow-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-2xl border border-gray-200 overflow-hidden"
+          style={{
+            maxWidth: 'calc(100vw - 2rem)',
+            width: 'auto'
+          }}>
           <button
             onClick={() => setIsMinimized(false)}
             className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors w-full"
@@ -2116,8 +2128,8 @@ const FloatingQudemoWidget = ({
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
               <ChatBubbleLeftRightIcon className="w-5 h-5 text-white" />
             </div>
-            <span className="font-medium text-gray-900">Demo Video</span>
-            <ChevronDownIcon className="w-5 h-5 text-gray-400 ml-auto rotate-180" />
+            <span className="font-medium text-gray-900 truncate">Demo Video</span>
+            <ChevronDownIcon className="w-5 h-5 text-gray-400 ml-auto rotate-180 flex-shrink-0" />
           </button>
         </div>
       ) : (
@@ -2127,12 +2139,15 @@ const FloatingQudemoWidget = ({
             isMaximized ? 'fixed rounded-2xl md:inset-4 shadow-2xl' : 'md:rounded-2xl md:shadow-2xl h-full md:h-auto'
           }`}
           style={{ 
-            width: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '313px' : '100vw'),
-            height: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '715px' : '100vh'),
+            width: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '313px' : '100%'),
+            maxWidth: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '313px' : '100vw'),
+            height: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '715px' : '100%'),
+            maxHeight: isMaximized ? 'auto' : (window.innerWidth >= 768 ? '715px' : '100vh'),
             border:'none', 
             outline:'none',
             margin: window.innerWidth < 768 ? '0' : 'auto',
             padding: window.innerWidth < 768 ? '0' : 'auto',
+            boxSizing: 'border-box',
             // Mobile maximized: use safe areas with fallback to 1rem padding
             ...(isMaximized && window.innerWidth < 768 ? {
               top: 'max(1rem, env(safe-area-inset-top))',
