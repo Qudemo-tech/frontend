@@ -318,19 +318,37 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         addDebugLog('[DEMO] Interrupting avatar speech for video playback');
         dailyEventManagerRef.current.interruptReplica();
       }
+      
+      // Disable avatar listening - avatar should NOT listen when video is playing
+      if (dailyEventManagerRef.current) {
+        addDebugLog('[DEMO] Disabling avatar listening - video is playing');
+        dailyEventManagerRef.current.disableListening();
+      }
+      
       // Mute avatar audio when video starts
       addDebugLog('[DEMO] Muting avatar audio for video playback');
       setAudioEnabled(false);
+      
       // Reset speaking state
       setIsAvatarSpeaking(false);
       isAvatarSpeakingRef.current = false;
-      // Don't set to "listening" when microphone is muted - set to "idle" instead
-      setAvatarState(isMuted ? "idle" : "listening");
+      
+      // Set avatar to idle state - not speaking, not listening
+      setAvatarState("idle");
     },
     onVideoStop: () => {
       // Restore avatar audio when video stops
       addDebugLog('[DEMO] Video stopped - restoring avatar audio');
       setAudioEnabled(true);
+      
+      // Re-enable avatar listening - avatar can now listen again
+      if (dailyEventManagerRef.current) {
+        addDebugLog('[DEMO] Re-enabling avatar listening - video finished');
+        dailyEventManagerRef.current.enableListening();
+      }
+      
+      // Set avatar back to listening state - ready to continue conversation
+      setAvatarState("listening");
       
       // Handle founder video completion (video will be closed and next module will start)
       handleFounderVideoStop();
@@ -345,6 +363,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Send message to replica - defined early so it can be used by other callbacks
   const sendMessageToReplica = useCallback((message, type = 'respond') => {
     if (!dailyEventManagerRef.current) return;
+
+    // Block sending messages when video is playing - avatar should be silent
+    if (isDemoPlayingRef.current) {
+      addDebugLog('[DEMO] Blocking message to avatar - video is playing');
+      return;
+    }
 
     // Strip markdown formatting before sending to avatar
     const cleanedMessage = stripMarkdown(message);
@@ -588,10 +612,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         handleReplicaSpeech(text, source);
       },
       onToolCall: (name, args, properties) => {
-        // Allow tool calls even during video (e.g., to close video)
-        // But prevent new video from starting if one is already playing
-        if (isDemoPlayingRef.current && name === 'show_demo_video') {
-          addDebugLog('[DEMO] Ignoring show_demo_video tool call - video already playing');
+        // Block ALL tool calls when video is playing - avatar should be completely inactive
+        if (isDemoPlayingRef.current) {
+          addDebugLog('[DEMO] Blocking tool call - video is playing', { tool: name });
           return;
         }
         log('TOOL_CALL', `Tool called: ${name}`, { args });
@@ -1069,8 +1092,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   };
 
   useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    // Mobile: < 768px, Tablet: 768px - 1024px (both should have fullscreen video)
+    const checkIsMobileOrTablet = () => window.innerWidth < 1024;
+    setIsMobile(checkIsMobileOrTablet());
+    const handleResize = () => setIsMobile(checkIsMobileOrTablet());
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -1287,6 +1312,30 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
     }
   }, [showCalendly, hasLiveVideo]);
+
+  // Clone avatar video to demo video PIP (for mobile view)
+  useEffect(() => {
+    if (isDemoPlaying && hasLiveVideo) {
+      const sourceVideo = document.querySelector('#tavus-video-container video');
+      const pipContainer = document.getElementById('avatar-pip');
+
+      if (sourceVideo && pipContainer) {
+        const pipVideo = sourceVideo.cloneNode(true);
+        pipVideo.style.width = '100%';
+        pipVideo.style.height = '100%';
+        pipVideo.style.objectFit = 'cover';
+        pipVideo.muted = false;
+
+        if (sourceVideo.srcObject) {
+          pipVideo.srcObject = sourceVideo.srcObject;
+        }
+
+        pipContainer.innerHTML = '';
+        pipContainer.appendChild(pipVideo);
+        pipVideo.play().catch(e => console.log('Demo PIP video play failed:', e));
+      }
+    }
+  }, [isDemoPlaying, hasLiveVideo]);
 
   // Mute mic and avatar audio when calendly opens
   useEffect(() => {
@@ -1795,10 +1844,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           handleReplicaSpeech(text, source);
         },
         onToolCall: (name, args) => {
-          // Allow tool calls even during video (e.g., to close video)
-          // But prevent new video from starting if one is already playing
-          if (isDemoPlayingRef.current && name === 'show_demo_video') {
-            log('DEMO', 'Ignoring show_demo_video tool call - video already playing');
+          // Block ALL tool calls when video is playing - avatar should be completely inactive
+          if (isDemoPlayingRef.current) {
+            log('DEMO', 'Blocking tool call - video is playing', { tool: name });
             return;
           }
           handleToolCall(name, args);
@@ -2788,11 +2836,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         style={{ zIndex: 0 }}
       />
 
-      {/* Demo video overlay */}
+      {/* Demo video overlay - Google Meet style screen presentation */}
       {isDemoPlaying && (
-        <div className="absolute inset-0 z-10 bg-black">
-          {/* Main Video - centered, landscape */}
-          <div className="absolute inset-6 right-[420px] rounded-2xl overflow-hidden border border-white/30 shadow-[0_0_60px_rgba(255,255,255,0.25)]">
+        <div className="absolute inset-0 z-10 bg-black flex flex-col">
+          {/* Main Video - fullscreen on all devices, Google Meet style */}
+          {/* On mobile/tablet: Video takes top 60%, avatar shows below in bottom 40% */}
+          {/* On desktop: Video takes most of container with small avatar PIP overlay in corner */}
+          <div className={`
+            bg-black
+            ${isMobile 
+              ? 'w-full h-[60%] rounded-none' 
+              : 'absolute inset-4 rounded-lg overflow-hidden'
+            }
+          `}>
             {/* YouTube iframe or regular video element */}
             {isYouTube && youTubeEmbedUrl ? (
               <iframe
@@ -2800,7 +2856,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 className="w-full h-full"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
+                allowFullScreen={false}
                 title="Demo Video"
                 onError={(e) => {
                   log('ERROR', '❌ YouTube iframe error', { error: e, url: youTubeEmbedUrl });
@@ -2812,26 +2868,37 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             ) : (
               <video
                 ref={demoVideoRef}
-                className="w-full h-full object-cover"
+                className={`w-full h-full ${isMobile ? 'object-contain' : 'object-contain'}`}
                 playsInline
                 muted
                 onClick={() => stopDemoVideo()}
               />
             )}
-            {/* Close demo button */}
+            {/* Close demo button - larger and more accessible on mobile */}
             <button
               onClick={() => stopDemoVideo()}
-              className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white z-20 border border-white/30 hover:bg-black/70 transition-all"
+              className={`
+                absolute z-20 rounded-full bg-black/70 text-white border border-white/30 hover:bg-black/90 transition-all
+                ${isMobile 
+                  ? 'top-4 right-4 p-3' 
+                  : 'top-4 right-4 p-2'
+                }
+              `}
+              aria-label="Close video"
             >
-              <X className="w-5 h-5" />
+              <X className={isMobile ? 'w-6 h-6' : 'w-5 h-5'} />
             </button>
           </div>
-          {/* Avatar PIP - bottom right, exact same position as "small" widget state */}
+          {/* Avatar PIP - shown below video on mobile, small overlay in corner on desktop (Google Meet style) */}
           <div
             id="avatar-pip"
-            className={`absolute bottom-4 right-4 overflow-hidden rounded-2xl border border-white/30 shadow-[0_0_50px_rgba(255,255,255,0.2)] bg-black ${
-              isMobile ? 'w-80 h-96' : 'w-96 h-[500px]'
-            }`}
+            className={`
+              overflow-hidden bg-black
+              ${isMobile 
+                ? 'relative w-full h-[40%] rounded-none border-t border-white/20 flex-shrink-0' 
+                : 'absolute bottom-4 right-4 w-64 h-80 rounded-lg border border-white/30 shadow-[0_0_30px_rgba(255,255,255,0.15)]'
+              }
+            `}
           >
             {/* PIP controls inside avatar */}
             {renderPipControlBar()}

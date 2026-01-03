@@ -2,8 +2,13 @@
 
 const config = {
   // API Base URLs
-  // In production (Vercel), use empty string for relative URLs to serverless functions
-  // In development, use localhost
+  // For Tavus endpoints: Always use relative URLs (Vercel serverless functions)
+  // This ensures Tavus API calls go to frontend/api/* serverless functions, not the Render backend
+  // In development, use localhost:5000 (dev-server.mjs)
+  // In production, use empty string for relative URLs to Vercel serverless functions
+  TAVUS_API_URL: process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000',
+  
+  // Legacy NODE_API_URL for other endpoints (can still use Render backend)
   NODE_API_URL: process.env.REACT_APP_NODE_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000'),
 
   // Tavus API endpoints (via serverless functions)
@@ -57,18 +62,23 @@ export const buildApiUrl = (endpoint) => {
   return `${config.NODE_API_URL}${endpoint}`;
 };
 
-// Helper function to get Tavus API URL
-export const getTavusApiUrl = (endpoint) => {
-  return buildApiUrl(endpoint);
+// Helper function to build Tavus API URLs (uses TAVUS_API_URL, not NODE_API_URL)
+export const buildTavusApiUrl = (endpoint) => {
+  return `${config.TAVUS_API_URL}${endpoint}`;
 };
 
-// Specific endpoint helpers
+// Helper function to get Tavus API URL
+export const getTavusApiUrl = (endpoint) => {
+  return buildTavusApiUrl(endpoint);
+};
+
+// Specific endpoint helpers - Tavus endpoints use TAVUS_API_URL (relative URLs in production)
 export const getCreateConversationUrl = () => {
-  return buildApiUrl(config.endpoints.tavus.createConversation);
+  return buildTavusApiUrl(config.endpoints.tavus.createConversation);
 };
 
 export const getEndConversationUrl = () => {
-  return buildApiUrl(config.endpoints.tavus.endConversation);
+  return buildTavusApiUrl(config.endpoints.tavus.endConversation);
 };
 
 export const getMobileLogsUrl = () => {

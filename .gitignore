@@ -25,3 +25,10 @@ yarn-error.log*
 # ignore legacy folder for now
 legacy/
 src/mobile/DEBUG-CONNECTION-ISSUE.md
+
+# Ignore video files in public folder
+public/*.mp4
+public/*.mov
+public/*.avi
+public/*.webm
+public/*.mkv
