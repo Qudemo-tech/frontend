@@ -140,8 +140,10 @@ export const moduleOrder = [
 
 /**
  * Modules that require user confirmation before advancing
+ * The avatar will wait for the user to say "yes", "continue", etc. before moving on
  */
 export const modulesRequiringConfirmation = [
+  'welcome-intro',
   'posh-info',
   'employee-benefits',
   'lifestyle-benefits',

@@ -147,6 +147,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
   const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
   const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
+  const pendingModuleTransitionRef = useRef(null); // Pending module ID to transition to after avatar finishes speaking
 
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
@@ -251,31 +252,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       if (moduleSpeechLockRef.current) {
         return;
       }
-      
+
+      // 🛑 BLOCK proactive advancement when waiting for user confirmation
+      if (waitingForModuleConfirmationRef.current) {
+        addDebugLog('[PROACTIVE] Blocked - waiting for user confirmation');
+        return;
+      }
+
       // Check if user hasn't spoken and avatar isn't speaking (use refs for current values)
       if (!isUserSpeakingRef.current && !isAvatarSpeakingRef.current && dailyEventManagerRef.current) {
-        // For personas with proactive module flow, move to next module when current is completed
-        if (persona.hasFeature('proactiveModuleFlow') && activeModule && !quizState.isActive) {
-          const currentIndex = moduleOrder.indexOf(activeModule);
-          if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
-            const nextModuleId = moduleOrder[currentIndex + 1];
-            addDebugLog(`[PROACTIVE] Moving to next Entri module: ${nextModuleId}`);
-            // Automatically move to next module using ref
-            if (handleModuleSelectRef.current) {
-              handleModuleSelectRef.current(nextModuleId);
-            }
-            return;
-          }
-        }
-        
-        addDebugLog('[PROACTIVE] 5 seconds passed, triggering continuation');
-        // Send a message to trigger proactive continuation
-        // Using respond message to trigger LLM to continue conversation
-        dailyEventManagerRef.current.sendRespondMessage("Continue the conversation naturally with a related topic or question.");
+        // 🛑 Do NOT auto-advance modules - all module transitions require user confirmation
+        // The proactive flow for module advancement has been removed to ensure
+        // users explicitly confirm before moving to the next module
+
+        addDebugLog('[PROACTIVE] 5 seconds passed - NOT auto-advancing (confirmation required)');
+        // Don't send continuation message during onboarding modules
+        // Users must say "continue" to advance
       }
       proactiveTimeoutRef.current = null;
     }, 5000);
-  }, [addDebugLog, personaId, activeModule, quizState.isActive]);
+  }, [addDebugLog]);
 
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
@@ -524,25 +520,34 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           return; // Skip all module completion logic - quiz handles its own flow
         }
 
-        // When avatar stops speaking during welcome module, transition to founder video immediately
-        // For other modules (non-welcome, non-founder-video), completion is handled by finishModuleSpeech
-        if (activeModuleRef.current === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
-          addDebugLog('[FOUNDER-VIDEO] ✅ Welcome module complete - transitioning to founder video');
-          const acc = moduleSpeechAccumulatorRef.current;
-          acc.completed = true;
-          if (finishModuleSpeechRef.current) {
-            addDebugLog('[FOUNDER-VIDEO] Calling finishModuleSpeech to transition to founder-video');
-            finishModuleSpeechRef.current();
-          } else {
-            addDebugLog('[FOUNDER-VIDEO] ❌ finishModuleSpeechRef.current is null!');
-          }
-        } else if (activeModuleRef.current && activeModuleRef.current !== 'welcome-intro' && activeModuleRef.current !== 'founder-video' && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+        // Check for pending module transition (after quiz completion/skip message)
+        if (pendingModuleTransitionRef.current) {
+          const nextModuleId = pendingModuleTransitionRef.current;
+          addDebugLog(`[MODULE-TRANSITION] Avatar finished speaking - transitioning to: ${nextModuleId}`);
+          pendingModuleTransitionRef.current = null; // Clear the pending transition
+
+          // Small delay for smoother UX
+          setTimeout(() => {
+            if (mountedRef.current && handleModuleSelectRef.current) {
+              handleModuleSelectRef.current(nextModuleId);
+            }
+          }, 500);
+
+          setIsAvatarSpeaking(false);
+          isAvatarSpeakingRef.current = false;
+          setAvatarState("idle");
+          return;
+        }
+
+        // Handle module completion when avatar stops speaking
+        // Skip founder-video (handled by video stop callback) and final-quiz (handled separately)
+        if (activeModuleRef.current && activeModuleRef.current !== 'founder-video' && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
           // Skip module completion if MCQ quiz is active (quiz handles its own flow)
           if (mcqQuizStateRef.current.isActive) {
             addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active`);
             // Don't process module completion - quiz is in control
           } else {
-            // For other regular modules: Check if confirmation is required before completing
+            // For all modules (including welcome-intro): Check if confirmation is required before completing
             const currentModule = activeModuleRef.current;
 
             // Check if this module requires user confirmation before advancing
@@ -1013,10 +1018,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             dailyEventManagerRef.current.disableListening();
           }
 
-          // Start the MCQ quiz for this module
+          // CRITICAL: Interrupt any pending Tavus response before starting quiz
+          // This prevents Tavus from responding to "continue" with its default greeting
+          if (dailyEventManagerRef.current) {
+            addDebugLog(`[MODULE-CONFIRM] Interrupting Tavus before quiz start`);
+            dailyEventManagerRef.current.interruptReplica();
+          }
+
+          // Start the MCQ quiz for this module (small delay to ensure interrupt is processed)
           setTimeout(() => {
-            startMcqQuiz(currentModule);
-          }, 500);
+            if (mountedRef.current) {
+              startMcqQuiz(currentModule);
+            }
+          }, 200);
 
           return; // Don't process as regular speech
         }
@@ -1039,15 +1053,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             dailyEventManagerRef.current.disableListening();
           }
 
-          // Send acknowledgment and transition
-          sendMessageToReplica(`Great! Let's move on to the next topic.`);
+          // CRITICAL: Interrupt any pending Tavus response before sending our controlled message
+          // This prevents Tavus from responding to "continue" with its default greeting
+          if (dailyEventManagerRef.current) {
+            addDebugLog(`[MODULE-CONFIRM] Interrupting Tavus to prevent auto-response`);
+            dailyEventManagerRef.current.interruptReplica();
+          }
 
+          // Send acknowledgment using echo mode, then transition after avatar finishes
+          // Small delay to ensure interrupt is processed before sending new message
+          addDebugLog(`[MODULE-CONFIRM] Sending acknowledgment, will transition to: ${nextModuleId}`);
+          pendingModuleTransitionRef.current = nextModuleId;
           setTimeout(() => {
-            if (mountedRef.current && handleModuleSelectRef.current) {
-              addDebugLog(`[MODULE-CONFIRM] Transitioning to: ${nextModuleId}`);
-              handleModuleSelectRef.current(nextModuleId);
+            if (mountedRef.current) {
+              sendMessageToReplica(`Great! Let's move on to the next topic.`, 'echo');
             }
-          }, 2000); // Wait for acknowledgment to be spoken
+          }, 100);
         }
 
         return; // Don't process as regular speech
@@ -2088,22 +2109,34 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             return; // Skip all module completion logic - quiz handles its own flow
           }
 
+          // Check for pending module transition (after quiz completion/skip message)
+          if (pendingModuleTransitionRef.current) {
+            const nextModuleId = pendingModuleTransitionRef.current;
+            addDebugLog(`[MODULE-TRANSITION] Avatar finished speaking - transitioning to: ${nextModuleId}`);
+            pendingModuleTransitionRef.current = null; // Clear the pending transition
+
+            // Small delay for smoother UX
+            setTimeout(() => {
+              if (mountedRef.current && handleModuleSelectRef.current) {
+                handleModuleSelectRef.current(nextModuleId);
+              }
+            }, 500);
+
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
+            return;
+          }
+
           setIsAvatarSpeaking(false);
           isAvatarSpeakingRef.current = false;
 
           // Proactive flow: When avatar stops speaking, trigger module completion
           const currentModule = activeModuleRef.current;
 
-          if (currentModule === 'welcome-intro' && moduleSpeechLockRef.current && !interrupted) {
-            // Welcome module: Transition to founder video
-            addDebugLog('[FOUNDER-VIDEO] ✅ Welcome module complete - transitioning to founder video');
-            const acc = moduleSpeechAccumulatorRef.current;
-            acc.completed = true;
-            if (finishModuleSpeechRef.current) {
-              finishModuleSpeechRef.current();
-            }
-          } else if (currentModule && currentModule !== 'welcome-intro' && currentModule !== 'founder-video' && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
-            // Regular modules: Check if confirmation is required before completing
+          // Handle module completion for all modules except founder-video (handled by video callback) and final-quiz
+          if (currentModule && currentModule !== 'founder-video' && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+            // Check if this module requires user confirmation before advancing
             if (modulesRequiringConfirmation.includes(currentModule)) {
               addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
 
@@ -2548,10 +2581,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       completionMessage += ` You needed ${quizData.passingScore} correct answers to pass. Don't worry, the important thing is that you're learning!`;
     }
 
+    // Determine next module before resetting state
+    const currentIndex = moduleOrder.indexOf(moduleId);
+    const nextModuleId = (currentIndex >= 0 && currentIndex < moduleOrder.length - 1)
+      ? moduleOrder[currentIndex + 1]
+      : null;
+
+    if (nextModuleId) {
+      addDebugLog(`[MCQ-QUIZ] Setting pending module transition to: ${nextModuleId}`);
+      pendingModuleTransitionRef.current = nextModuleId;
+    }
+
     // Use ECHO mode for completion message
+    // The module transition will happen in onReplicaStopSpeaking when avatar finishes
     sendMessageToReplica(completionMessage, 'echo');
 
-    // Reset quiz state
+    // Reset quiz state (but pendingModuleTransitionRef persists)
     setMcqQuizState({
       isActive: false,
       moduleId: null,
@@ -2565,19 +2610,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-
-    // Advance to next module after quiz completion
-    const currentIndex = moduleOrder.indexOf(moduleId);
-    if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
-      const nextModuleId = moduleOrder[currentIndex + 1];
-      addDebugLog(`[MCQ-QUIZ] Advancing to next module: ${nextModuleId}`);
-
-      setTimeout(() => {
-        if (mountedRef.current && handleModuleSelectRef.current) {
-          handleModuleSelectRef.current(nextModuleId);
-        }
-      }, 3000); // Wait for completion message to be spoken
-    }
   }, [addDebugLog, sendMessageToReplica, moduleOrder]);
 
   // Skip/End MCQ quiz
@@ -2587,7 +2619,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     addDebugLog(`[MCQ-QUIZ] Quiz skipped for module: ${state.moduleId}`);
 
-    // Use ECHO mode
+    // Determine next module before resetting state
+    const currentIndex = moduleOrder.indexOf(state.moduleId);
+    const nextModuleId = (currentIndex >= 0 && currentIndex < moduleOrder.length - 1)
+      ? moduleOrder[currentIndex + 1]
+      : null;
+
+    if (nextModuleId) {
+      addDebugLog(`[MCQ-QUIZ] Setting pending module transition to: ${nextModuleId}`);
+      pendingModuleTransitionRef.current = nextModuleId;
+    }
+
+    // Use ECHO mode - transition will happen in onReplicaStopSpeaking
     sendMessageToReplica("Okay, let's skip the quiz and move on to the next topic.", 'echo');
 
     // Reset quiz state
@@ -2604,17 +2647,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-
-    // Advance to next module
-    const currentIndex = moduleOrder.indexOf(state.moduleId);
-    if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
-      const nextModuleId = moduleOrder[currentIndex + 1];
-      setTimeout(() => {
-        if (mountedRef.current && handleModuleSelectRef.current) {
-          handleModuleSelectRef.current(nextModuleId);
-        }
-      }, 2000);
-    }
   }, [addDebugLog, sendMessageToReplica, moduleOrder]);
 
   // Update refs for quiz functions (used in onReplicaStopSpeaking callback)
@@ -2685,66 +2717,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Get playDemoVideo from the hook - it should be in scope
     // If not accessible, we'll use the ref-based approach in handleModuleSelect
     
-    // ✅ Completion checks removed - allow immediate transition
-    addDebugLog('[MODULE-LOCK] ✅ Proceeding with module transition (completion checks disabled)');
+    // ✅ Module speech finished - mark as completed and unlock
+    addDebugLog(`[MODULE-LOCK] ✅ finishModuleSpeech called for: ${currentModule}`);
     acc.completed = true;
-    
-    // Special handling for welcome-intro: DO NOT unlock - transition directly to founder-video
-    if (currentModule === 'welcome-intro') {
-      addDebugLog('[MODULE-LOCK] Welcome complete - transitioning to founder video WITHOUT unlocking');
-      
-      // Mark welcome module as complete
-      if (!completedModules.includes(currentModule)) {
-        addDebugLog(`[MODULE-LOCK] Marking module complete: ${currentModule}`);
-        setCompletedModules(prev => {
-          if (prev.includes(currentModule)) {
-            return prev;
-          }
-          return [...prev, currentModule];
-        });
-      }
-      
-      // 🔒 KEEP LOCK ACTIVE and microphone muted during transition
-      // DO NOT unlock or unmute - transition immediately to founder-video
-      // This prevents the gap where microphone turns on and listening starts
-      
-      // Immediately transition to founder-video sub-module
-      console.log('[FOUNDER-VIDEO] Starting transition to founder-video', { 
-        mounted: mountedRef.current, 
-        hasHandleModuleSelect: !!handleModuleSelectRef.current 
-      });
-      addDebugLog('[MODULE-LOCK] 🎬 Immediately transitioning to founder-video sub-module');
-      
-      if (mountedRef.current && handleModuleSelectRef.current) {
-        console.log('[FOUNDER-VIDEO] Calling handleModuleSelect for founder-video NOW');
-        handleModuleSelectRef.current('founder-video');
-      } else {
-        console.error('[FOUNDER-VIDEO] ❌ Cannot transition - mounted:', mountedRef.current, 'handleModuleSelect:', !!handleModuleSelectRef.current);
-        // Fallback: Try to play video directly if transition fails
-        if (mountedRef.current && playDemoVideoRef.current) {
-          console.log('[FOUNDER-VIDEO] Fallback: Playing video directly');
-          const founderVideoUrl = 'https://www.youtube.com/watch?v=YtB5fjEO1zc';
-          pendingDemoVideoRef.current = founderVideoUrl;
-          playDemoVideoRef.current(founderVideoUrl);
-        }
-      }
-      return; // Exit early - don't unlock or unmute
-    }
-    
-    addDebugLog('[MODULE-LOCK] ✅ Finishing module speech - unlocking');
-    moduleSpeechLockRef.current = false;
-    
-    // Clear stored prompt
-    currentModulePromptRef.current = '';
 
-    // 🔴 DO NOT unmute microphone automatically
-    // Microphone stays muted throughout onboarding - user must manually enable it
-    addDebugLog('[MODULE-LOCK] ⚠️ Keeping microphone muted - user must manually enable');
-    
-    // Tavus listening is controlled by the useEffect that syncs with microphone state
-    // If microphone is muted → listening will be disabled
-    // If microphone is unmuted → listening will be enabled
-    // No need to manually control it here - the useEffect handles it
+    // Unlock speech lock
+    moduleSpeechLockRef.current = false;
+    currentModulePromptRef.current = '';
 
     // Mark current module as complete
     if (currentModule && !completedModules.includes(currentModule)) {
@@ -2757,56 +2736,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       });
     }
 
-    // Special handling for founder-video: After video completes, move to next main module
-    // NOTE: This logic is now handled by handleFounderVideoStop callback when video actually ends
-    // This code here is kept as a backup but should not execute since founder-video unlock
-    // happens via the video stop callback, not via finishModuleSpeech
+    // Special handling for founder-video: Transition handled by video stop callback
     if (currentModule === 'founder-video') {
-      // Founder video completion is handled by handleFounderVideoStop callback
-      // which is called when the video actually ends (via onVideoStop in useDemoVideo)
-      addDebugLog('[MODULE-LOCK] Founder video module unlocked - transition handled by video stop callback');
-      return; // Exit early, don't process further
+      addDebugLog('[MODULE-LOCK] Founder video - transition handled by handleFounderVideoStop');
+      return;
     }
-    
-    // For other modules: Auto-advance to next module
-    // NOTE: Modules requiring confirmation are handled in onReplicaStopSpeaking callback
-    // and should NOT reach this function. This is only for non-confirmation modules.
-    if (persona.hasFeature('proactiveModuleFlow') && currentModule && currentModule !== 'final-quiz') {
-      const currentIndex = moduleOrder.indexOf(currentModule);
 
-      // Auto-advance to next module
-      if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
-        const nextModuleId = moduleOrder[currentIndex + 1];
-        addDebugLog(`[MODULE-LOCK] 🎯 Proactive flow: Moving to next module: ${nextModuleId}`);
-
-        // 🔇 Ensure microphone stays muted before transitioning
-        if (sessionManagerRef.current?.isInitialized) {
-          sessionManagerRef.current.setMicrophoneMuted(true);
-          setIsMuted(true);
-        }
-
-        // 🔴 Keep Tavus listening disabled
-        if (dailyEventManagerRef.current) {
-          dailyEventManagerRef.current.disableListening();
-        }
-
-        setTimeout(() => {
-          if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
-            addDebugLog(`[MODULE-LOCK] ✅ Transitioning to next module: ${nextModuleId}`);
-            handleModuleSelectRef.current(nextModuleId);
-          }
-        }, 1000); // Short delay for smooth transition
-      } else if (currentModule === moduleOrder[moduleOrder.length - 2]) {
-        // If we just completed the last module before quiz, transition to quiz
-        addDebugLog('[MODULE-LOCK] 🎯 All modules complete - transitioning to final quiz');
-        setTimeout(() => {
-          if (mountedRef.current && handleModuleSelectRef.current) {
-            handleModuleSelectRef.current('final-quiz');
-          }
-        }, 1000);
-      }
-    }
-  }, [activeModule, completedModules, personaId, quizState.isActive, addDebugLog, playDemoVideo, isDemoPlaying, sendMessageToReplica, moduleOrder]);
+    // For ALL other modules: Transition is handled by onReplicaStopSpeaking
+    // which checks modulesRequiringConfirmation and either:
+    // - Waits for user confirmation (if module requires it)
+    // - Auto-advances to next module (if proactiveModuleFlow and no confirmation needed)
+    addDebugLog('[MODULE-LOCK] Module speech finished - transition handled by onReplicaStopSpeaking');
+  }, [activeModule, completedModules, addDebugLog]);
 
   // 🧠 Check module completion based on sentinel phrase or content length
   const checkModuleCompletion = useCallback(() => {
