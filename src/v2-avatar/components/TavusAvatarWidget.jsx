@@ -145,6 +145,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const listeningStateRef = useRef(null); // Track current listening state to prevent redundant calls ('enabled' | 'disabled' | null)
   const playDemoVideoRef = useRef(null); // Ref to playDemoVideo function
   const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
+  const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
+  const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
 
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
@@ -198,6 +200,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     score: { correct: 0, total: 0 }, // Running score
     quizData: null,            // Quiz configuration from moduleQuizzes.js
     waitingForAvatarToFinish: false, // Waiting for avatar to finish speaking before enabling selection
+    pendingNextQuestion: false, // Flag to ask next question when avatar finishes feedback
+    pendingQuizComplete: false, // Flag to complete quiz when avatar finishes feedback
   });
   const mcqQuizStateRef = useRef(mcqQuizState); // Ref for use in callbacks
 
@@ -457,11 +461,54 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
         if (mcqQuizStateRef.current.isActive) {
-          addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - quiz is in control`);
+          const quizState = mcqQuizStateRef.current;
+          addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - pendingNextQuestion: ${quizState.pendingNextQuestion}, pendingQuizComplete: ${quizState.pendingQuizComplete}`);
 
-          // Enable MCQ selection when avatar finishes speaking during quiz
-          if (mcqQuizStateRef.current.waitingForAvatarToFinish) {
-            addDebugLog('[MCQ-QUIZ] Avatar finished speaking - enabling selection, keeping listening DISABLED');
+          // Check if we need to ask next question (avatar finished feedback)
+          if (quizState.pendingNextQuestion) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished feedback - asking next question');
+
+            // Reset flags and ask next question
+            setMcqQuizState(prev => ({
+              ...prev,
+              waitingForAvatarToFinish: false,
+              pendingNextQuestion: false,
+            }));
+
+            // Small delay before next question for smoother UX
+            setTimeout(() => {
+              if (askNextMcqQuestionRef.current) {
+                askNextMcqQuestionRef.current();
+              }
+            }, 500);
+
+            // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+            if (dailyEventManagerRef.current) {
+              dailyEventManagerRef.current.disableListening();
+              listeningStateRef.current = 'disabled';
+            }
+          }
+          // Check if we need to complete quiz (avatar finished last feedback)
+          else if (quizState.pendingQuizComplete) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished last feedback - completing quiz');
+
+            // Reset flags and complete quiz
+            setMcqQuizState(prev => ({
+              ...prev,
+              waitingForAvatarToFinish: false,
+              pendingQuizComplete: false,
+            }));
+
+            // Small delay before completion for smoother UX
+            setTimeout(() => {
+              if (completeMcqQuizRef.current) {
+                completeMcqQuizRef.current();
+              }
+            }, 500);
+          }
+          // Enable MCQ selection when avatar finishes speaking question (not feedback)
+          else if (quizState.waitingForAvatarToFinish) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection, keeping listening DISABLED');
             setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
 
             // CRITICAL: Keep Tavus listening disabled during MCQ quiz
@@ -1978,11 +2025,54 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
           // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
           if (mcqQuizStateRef.current.isActive) {
-            addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - quiz is in control`);
+            const quizState = mcqQuizStateRef.current;
+            addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - pendingNextQuestion: ${quizState.pendingNextQuestion}, pendingQuizComplete: ${quizState.pendingQuizComplete}`);
 
-            // Enable MCQ selection when avatar finishes speaking during quiz
-            if (mcqQuizStateRef.current.waitingForAvatarToFinish) {
-              addDebugLog('[MCQ-QUIZ] Avatar finished speaking - enabling selection, keeping listening DISABLED');
+            // Check if we need to ask next question (avatar finished feedback)
+            if (quizState.pendingNextQuestion) {
+              addDebugLog('[MCQ-QUIZ] Avatar finished feedback - asking next question');
+
+              // Reset flags and ask next question
+              setMcqQuizState(prev => ({
+                ...prev,
+                waitingForAvatarToFinish: false,
+                pendingNextQuestion: false,
+              }));
+
+              // Small delay before next question for smoother UX
+              setTimeout(() => {
+                if (askNextMcqQuestionRef.current) {
+                  askNextMcqQuestionRef.current();
+                }
+              }, 500);
+
+              // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+              if (dailyEventManagerRef.current) {
+                dailyEventManagerRef.current.disableListening();
+                listeningStateRef.current = 'disabled';
+              }
+            }
+            // Check if we need to complete quiz (avatar finished last feedback)
+            else if (quizState.pendingQuizComplete) {
+              addDebugLog('[MCQ-QUIZ] Avatar finished last feedback - completing quiz');
+
+              // Reset flags and complete quiz
+              setMcqQuizState(prev => ({
+                ...prev,
+                waitingForAvatarToFinish: false,
+                pendingQuizComplete: false,
+              }));
+
+              // Small delay before completion for smoother UX
+              setTimeout(() => {
+                if (completeMcqQuizRef.current) {
+                  completeMcqQuizRef.current();
+                }
+              }, 500);
+            }
+            // Enable MCQ selection when avatar finishes speaking question (not feedback)
+            else if (quizState.waitingForAvatarToFinish) {
+              addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection, keeping listening DISABLED');
               setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
 
               // CRITICAL: Keep Tavus listening disabled during MCQ quiz
@@ -2379,7 +2469,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     addDebugLog(`[MCQ-QUIZ] User selected option ${optionLabels[selectedIndex]}: "${currentQuestion.options[selectedIndex]}" - ${isCorrect ? 'CORRECT' : 'INCORRECT'}`);
 
-    // Update state with answer
+    // Check if there are more questions
+    const isLastQuestion = state.currentQuestionIndex >= state.quizData.questions.length - 1;
+
+    // Update state with answer and set pending flags for next action
     setMcqQuizState(prev => ({
       ...prev,
       selectedIndex: selectedIndex,
@@ -2389,7 +2482,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         correct: prev.score.correct + (isCorrect ? 1 : 0),
         total: prev.score.total + 1,
       },
-      waitingForAvatarToFinish: true, // Wait for avatar feedback before next question
+      waitingForAvatarToFinish: true, // Wait for avatar feedback to complete
+      pendingNextQuestion: !isLastQuestion, // Flag to ask next question when feedback completes
+      pendingQuizComplete: isLastQuestion, // Flag to complete quiz when feedback completes
     }));
 
     // Send feedback to avatar
@@ -2401,26 +2496,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       feedbackMessage = `That's not quite right. The correct answer is ${optionLabels[currentQuestion.correctIndex]}: ${correctAnswer}. ${currentQuestion.explanation}`;
     }
 
-    // Check if there are more questions
-    const isLastQuestion = state.currentQuestionIndex >= state.quizData.questions.length - 1;
     if (!isLastQuestion) {
       feedbackMessage += " Let me read the next question.";
     }
 
-    // Use ECHO mode - avatar speaks exactly this feedback without LLM processing
-    sendMessageToReplica(feedbackMessage, 'echo');
+    addDebugLog(`[MCQ-QUIZ] Sending feedback, pendingNextQuestion: ${!isLastQuestion}, pendingQuizComplete: ${isLastQuestion}`);
 
-    // If not last question, prepare next question after a delay
-    if (!isLastQuestion) {
-      setTimeout(() => {
-        askNextMcqQuestion();
-      }, 4000); // Wait for avatar to finish feedback
-    } else {
-      // Last question - complete quiz after delay
-      setTimeout(() => {
-        completeMcqQuiz();
-      }, 4000);
-    }
+    // Use ECHO mode - avatar speaks exactly this feedback without LLM processing
+    // The next question will be triggered in onReplicaStopSpeaking when avatar finishes
+    sendMessageToReplica(feedbackMessage, 'echo');
   }, [addDebugLog, sendMessageToReplica]);
 
   // Ask the next MCQ question
@@ -2478,6 +2562,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       score: { correct: 0, total: 0 },
       quizData: null,
       waitingForAvatarToFinish: false,
+      pendingNextQuestion: false,
+      pendingQuizComplete: false,
     });
 
     // Advance to next module after quiz completion
@@ -2515,6 +2601,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       score: { correct: 0, total: 0 },
       quizData: null,
       waitingForAvatarToFinish: false,
+      pendingNextQuestion: false,
+      pendingQuizComplete: false,
     });
 
     // Advance to next module
@@ -2528,6 +2616,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }, 2000);
     }
   }, [addDebugLog, sendMessageToReplica, moduleOrder]);
+
+  // Update refs for quiz functions (used in onReplicaStopSpeaking callback)
+  askNextMcqQuestionRef.current = askNextMcqQuestion;
+  completeMcqQuizRef.current = completeMcqQuiz;
 
   // Repeat current MCQ question
   const repeatMcqQuestion = useCallback(() => {
