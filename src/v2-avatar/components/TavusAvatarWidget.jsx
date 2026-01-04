@@ -1033,27 +1033,52 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Handle show_demo_video tool call from Tavus persona
         log('TOOL_CALL', 'show_demo_video triggered', { url: args.url, title: args.title });
 
-        // Send echo message to announce the video
+        // Don't send echo message - avatar should remain silent when video tool is opened
+        // User is watching the video, so avatar should not speak at all
+
+        // Immediately interrupt avatar if speaking and disable listening
         if (dailyEventManagerRef.current) {
-          dailyEventManagerRef.current.sendEchoMessage("Absolutely, here's the video you requested.");
+          if (isAvatarSpeakingRef.current) {
+            log('DEMO', 'Interrupting avatar speech immediately when video tool is called');
+            dailyEventManagerRef.current.interruptReplica();
+          }
+          // Disable listening immediately - avatar should not listen when video is playing
+          dailyEventManagerRef.current.disableListening();
+          log('DEMO', 'Disabled avatar listening immediately when video tool is called');
         }
 
-        // Store the video URL and wait for avatar to finish speaking
-        if (args.url) {
-          pendingDemoVideoRef.current = args.url;
-          log('DEMO', 'Video pending - waiting for user and avatar to finish speaking');
+        // Set flag immediately to prevent any new avatar speech
+        // This ensures avatar doesn't speak even before isDemoPlaying is set to true
+        isDemoPlayingRef.current = true;
+        setIsAvatarSpeaking(false);
+        isAvatarSpeakingRef.current = false;
+        setAvatarState("idle");
 
-          // Set timeout to clear pending video after 30 seconds (prevent stuck state)
-          if (pendingVideoTimeoutRef.current) {
-            clearTimeout(pendingVideoTimeoutRef.current);
+        // Play video immediately without waiting for avatar to finish speaking
+        if (args.url && playDemoVideoRef.current) {
+          log('DEMO', 'Playing video immediately - not waiting for avatar to finish speaking');
+          
+          // Save current state for restoration later
+          preDemoWidgetStateRef.current = state;
+
+          // Maximize if not already, then play immediately
+          if (state !== "maximized") {
+            setState("maximized");
+            setTimeout(() => {
+              if (mountedRef.current && playDemoVideoRef.current) {
+                playDemoVideoRef.current(args.url);
+                log('DEMO', 'Video playback started (after maximize)');
+              }
+            }, 100);
+          } else {
+            // Play immediately
+            playDemoVideoRef.current(args.url);
+            log('DEMO', 'Video playback started (immediate)');
           }
-          pendingVideoTimeoutRef.current = setTimeout(() => {
-            if (pendingDemoVideoRef.current) {
-              log('DEMO', 'Pending video timeout - clearing stuck pending state');
-              pendingDemoVideoRef.current = null;
-            }
-            pendingVideoTimeoutRef.current = null;
-          }, 30000);
+        } else if (args.url) {
+          // Fallback: Store video URL if playDemoVideo is not available yet
+          pendingDemoVideoRef.current = args.url;
+          log('DEMO', 'Video pending - playDemoVideo not available yet');
         }
         break;
       case 'show_pdf':
