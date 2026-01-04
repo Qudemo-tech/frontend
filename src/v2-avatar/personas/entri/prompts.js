@@ -4,8 +4,7 @@
  * Scripts/prompts for what the avatar says during each module.
  *
  * PACING TIPS:
- * - Use ellipses (...) for longer pauses
- * - Use em-dashes (—) for medium pauses
+ * - Use ellipses (...) for pauses
  * - Keep sentences short for natural breathing room
  * - Add questions to engage the user
  */
@@ -19,13 +18,13 @@ I'm so glad you're here. ... My name is Ann, and I'll be your AI onboarding guid
 
 So let me tell you about our company.
 
-Entri is India's leading learning platform for job seekers. ... We've helped over 1.4 crore users — that's more than 14 million people — achieve their career dreams.
+Entri is India's leading learning platform for job seekers. ... We've helped over 1.4 crore users, that's more than 14 million people, achieve their career dreams.
 
 ...
 
 We're an education technology company... focused on making learning accessible to everyone. ... We help people prepare for competitive exams... learn new skills... and advance their careers.
 
-As a new Entripreneur — that's what we call ourselves here — ... you're now part of this mission.
+As a new Entripreneur, that's what we call ourselves here, ... you're now part of this mission.
 
 ...
 
@@ -51,7 +50,7 @@ Do you have any questions before we watch the founders' video? ... Just say "yes
 
   'posh-info': `Alright... let's talk about something really important.
 
-POSH — Prevention of Sexual Harassment at the Workplace.
+POSH, Prevention of Sexual Harassment at the Workplace.
 
 ...
 
@@ -73,7 +72,7 @@ That concludes our POSH overview.
 
 Do you have any questions about workplace safety... or the POSH committee? ... Say "continue" when you're ready... or ask me anything.`,
 
-  'employee-benefits': `Now... let's talk about something exciting — your benefits!
+  'employee-benefits': `Now... let's talk about something exciting, your benefits!
 
 ...
 
@@ -105,7 +104,7 @@ That's the summary of your employee benefits.
 
 Any questions about insurance... counseling... or any of these benefits? ... Just say "continue" to move on... or feel free to ask.`,
 
-  'lifestyle-benefits': `Alright... now for the fun stuff — lifestyle benefits!
+  'lifestyle-benefits': `Alright... now for the fun stuff, lifestyle benefits!
 
 ...
 
@@ -121,7 +120,7 @@ There's a Sports Club... a Lunch Program...
 
 ...
 
-And recreational facilities — table tennis... carroms... board games... even a library.
+And recreational facilities, table tennis... carroms... board games... even a library.
 
 ...
 
@@ -177,7 +176,7 @@ I'll ask you a few questions... to see how much you've learned about Entri.
 
 ...
 
-Don't worry — it's not too hard. ... Just pay attention and you'll do great.
+Don't worry, it's not too hard. ... Just pay attention and you'll do great.
 
 ...
 

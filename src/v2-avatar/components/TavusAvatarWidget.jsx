@@ -520,19 +520,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           return; // Skip all module completion logic - quiz handles its own flow
         }
 
-        // Check for pending module transition (after quiz completion/skip message)
+        // Check for pending module transition
+        // Note: We now do DIRECT transitions in handleUserSpeech, but this handles edge cases
+        // where Tavus auto-responds (e.g., says "Sure") before our transition timer fires
         if (pendingModuleTransitionRef.current) {
           const nextModuleId = pendingModuleTransitionRef.current;
-          addDebugLog(`[MODULE-TRANSITION] Avatar finished speaking - transitioning to: ${nextModuleId}`);
-          pendingModuleTransitionRef.current = null; // Clear the pending transition
 
-          // Small delay for smoother UX
-          setTimeout(() => {
-            if (mountedRef.current && handleModuleSelectRef.current) {
-              handleModuleSelectRef.current(nextModuleId);
-            }
-          }, 500);
+          // Tavus said something (likely auto-response like "Sure" or "Okay")
+          // We don't care what it said - we have a pending transition to execute
+          addDebugLog(`[MODULE-TRANSITION] Pending transition detected after Tavus speech: "${lastSpeech}" - proceeding to: ${nextModuleId}`);
 
+          // Don't clear pendingModuleTransitionRef here - let the setTimeout in handleUserSpeech handle it
+          // Just mark avatar as not speaking
           setIsAvatarSpeaking(false);
           isAvatarSpeakingRef.current = false;
           setAvatarState("idle");
@@ -570,11 +569,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 setIsMuted(false);
               }
 
-              // Enable Tavus listening so it can hear user's response
+              // CRITICAL: Keep Tavus listening DISABLED during confirmation
+              // We still receive user transcripts via Daily.co events, but Tavus won't auto-respond
+              // This prevents Tavus from generating its own response to "continue"
               if (dailyEventManagerRef.current) {
-                listeningStateRef.current = 'enabled';
-                dailyEventManagerRef.current.enableListening();
-                addDebugLog('[MODULE-CONFIRM] 🎤 Listening enabled - waiting for user confirmation');
+                listeningStateRef.current = 'disabled';
+                dailyEventManagerRef.current.disableListening();
+                addDebugLog('[MODULE-CONFIRM] 🎤 Mic unmuted but Tavus listening DISABLED - we handle confirmation manually');
               }
 
               // Do NOT call finishModuleSpeech - wait for user confirmation
@@ -817,13 +818,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Handle user speech
   const handleUserSpeech = (text, source) => {
     if (!text) return;
-    
-    // IMPORTANT: Ignore user speech when avatar is speaking (especially during quiz)
-    if (isAvatarSpeakingRef.current) {
+
+    // IMPORTANT: When waiting for module confirmation, ALWAYS process user speech
+    // even if avatar is speaking (Tavus may auto-respond with "Okay" but we still
+    // need to catch the user's "continue" to trigger our transition)
+    if (waitingForModuleConfirmationRef.current) {
+      log('USER_SPEECH', `Processing during confirmation wait (avatar may be speaking): "${text}"`, { text });
+      // Don't return - fall through to process confirmation
+    } else if (isAvatarSpeakingRef.current) {
+      // Normal case: ignore user speech when avatar is speaking (especially during quiz)
       log('USER_SPEECH', `Ignored - avatar is speaking: "${text}"`, { text });
       return;
     }
-    
+
     log('USER_SPEECH', `User said (${source})`, { text });
     
     // Check if we're in quiz mode and waiting for an answer
@@ -1012,25 +1019,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             setIsMuted(true);
           }
 
-          // Disable listening during quiz
+          // Listening is already disabled during confirmation waiting
+          // Just ensure it stays disabled during quiz
           if (dailyEventManagerRef.current) {
             listeningStateRef.current = 'disabled';
             dailyEventManagerRef.current.disableListening();
           }
 
-          // CRITICAL: Interrupt any pending Tavus response before starting quiz
-          // This prevents Tavus from responding to "continue" with its default greeting
-          if (dailyEventManagerRef.current) {
-            addDebugLog(`[MODULE-CONFIRM] Interrupting Tavus before quiz start`);
-            dailyEventManagerRef.current.interruptReplica();
-          }
-
-          // Start the MCQ quiz for this module (small delay to ensure interrupt is processed)
-          setTimeout(() => {
-            if (mountedRef.current) {
-              startMcqQuiz(currentModule);
-            }
-          }, 200);
+          // Start the MCQ quiz for this module
+          startMcqQuiz(currentModule);
 
           return; // Don't process as regular speech
         }
@@ -1047,28 +1044,25 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             setIsMuted(true);
           }
 
-          // Disable listening
+          // Disable listening and interrupt any pending Tavus response
           if (dailyEventManagerRef.current) {
             listeningStateRef.current = 'disabled';
             dailyEventManagerRef.current.disableListening();
-          }
-
-          // CRITICAL: Interrupt any pending Tavus response before sending our controlled message
-          // This prevents Tavus from responding to "continue" with its default greeting
-          if (dailyEventManagerRef.current) {
-            addDebugLog(`[MODULE-CONFIRM] Interrupting Tavus to prevent auto-response`);
             dailyEventManagerRef.current.interruptReplica();
           }
 
-          // Send acknowledgment using echo mode, then transition after avatar finishes
-          // Small delay to ensure interrupt is processed before sending new message
-          addDebugLog(`[MODULE-CONFIRM] Sending acknowledgment, will transition to: ${nextModuleId}`);
-          pendingModuleTransitionRef.current = nextModuleId;
+          addDebugLog(`[MODULE-CONFIRM] Transitioning directly to: ${nextModuleId}`);
+
+          // DIRECT TRANSITION: Go straight to next module
+          // Skip echo message - Tavus processes audio at API level before we can intercept,
+          // so any echo we send races with Tavus's auto-response
+          // Wait a bit for the interrupt to process, then transition
           setTimeout(() => {
-            if (mountedRef.current) {
-              sendMessageToReplica(`Great! Let's move on to the next topic.`, 'echo');
+            if (mountedRef.current && handleModuleSelectRef.current) {
+              addDebugLog(`[MODULE-CONFIRM] Executing transition to: ${nextModuleId}`);
+              handleModuleSelectRef.current(nextModuleId);
             }
-          }, 100);
+          }, 500);
         }
 
         return; // Don't process as regular speech
@@ -1427,40 +1421,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   }, [isAvatarSpeaking, isUserSpeaking, state, log]);
 
-  // Wait for both user and avatar to finish speaking before playing demo video
-  // EXCEPTION: For founder-video module, play immediately without waiting
+  // Wait for avatar to finish speaking before playing demo video
+  // This applies to ALL videos including founder-video - avatar should finish intro first
   useEffect(() => {
     if (pendingDemoVideoRef.current) {
       const videoUrl = pendingDemoVideoRef.current;
-      
-      // Special handling for founder-video: Play immediately without waiting
-      if (activeModule === 'founder-video') {
-        log('DEMO', 'Founder video - playing immediately without waiting', { hasPlayDemoVideo: !!playDemoVideo });
-        
-        // Save current state for restoration later
-        preDemoWidgetStateRef.current = state;
 
-        // Maximize if not already, then play immediately
-        if (state !== "maximized") {
-          setState("maximized");
-          setTimeout(() => {
-            if (mountedRef.current && playDemoVideo) {
-              playDemoVideo(videoUrl);
-              pendingDemoVideoRef.current = null;
-              log('DEMO', 'Founder video playback started (after maximize)');
-            }
-          }, 100); // Very short delay
-        } else {
-          // Play immediately
-          if (playDemoVideo) {
-            playDemoVideo(videoUrl);
-            pendingDemoVideoRef.current = null;
-            log('DEMO', 'Founder video playback started (immediate)');
-          }
-        }
-      } else if (!isAvatarSpeaking && !isUserSpeaking) {
-        // For other videos: Wait for both user and avatar to finish speaking
-      log('DEMO', 'Both user and replica finished speaking - playing video now');
+      // Wait for avatar to finish speaking before playing any video
+      if (!isAvatarSpeaking && !isUserSpeaking) {
+        log('DEMO', 'Avatar finished speaking - playing video now');
 
       // Save current state for restoration later
       preDemoWidgetStateRef.current = state;
@@ -1480,35 +1449,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
     }
   }, [isAvatarSpeaking, isUserSpeaking, state, log, playDemoVideo, activeModule]);
-  
-  // Force play founder video immediately when module is selected (fallback)
-  useEffect(() => {
-    if (activeModule === 'founder-video' && pendingDemoVideoRef.current) {
-      const videoUrl = pendingDemoVideoRef.current;
-      log('DEMO', 'Founder video - force playing immediately (fallback useEffect)', { isDemoPlaying, hasPlayDemoVideo: !!playDemoVideo });
-      
-      // Play immediately without any conditions (don't check isDemoPlaying - force play)
-      setTimeout(() => {
-        if (mountedRef.current && pendingDemoVideoRef.current === videoUrl && playDemoVideo) {
-          preDemoWidgetStateRef.current = state;
-          if (state !== "maximized") {
-            setState("maximized");
-            setTimeout(() => {
-              if (mountedRef.current && playDemoVideo) {
-                playDemoVideo(videoUrl);
-                pendingDemoVideoRef.current = null;
-                log('DEMO', 'Founder video playback started (after maximize - fallback)');
-              }
-            }, 100);
-          } else {
-            playDemoVideo(videoUrl);
-            pendingDemoVideoRef.current = null;
-            log('DEMO', 'Founder video playback started (immediate - fallback)');
-          }
-        }
-      }, 100); // Reduced delay for faster playback
-    }
-  }, [activeModule, state, log, playDemoVideo]);
 
   // Wait for both user and avatar to finish speaking before showing PDF
   useEffect(() => {
@@ -1956,10 +1896,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       let resp;
       try {
+        // Pass empty customGreeting to suppress Tavus persona's default greeting
+        // We control greetings via our module prompts instead
         resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ personaId }),
+          body: JSON.stringify({
+            personaId,
+            customGreeting: ' ', // Empty greeting - we send our own via module prompts
+            // Override persona's conversational context to prevent auto-responses
+            // The frontend controls all responses via echo mode
+            conversationalContext: `You are Ann, an AI onboarding guide. IMPORTANT: Do NOT proactively speak or give information unless specifically instructed via an echo message. Wait for echo messages to know what to say. When users say simple confirmations like "continue", "yes", "okay", "next", "ready" - do NOT respond with information. Just acknowledge briefly or stay silent. The frontend application controls all module content delivery.`,
+          }),
         });
       } catch (fetchError) {
         addDebugLog(`Network Error: ${fetchError.message}`);
@@ -2109,19 +2057,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             return; // Skip all module completion logic - quiz handles its own flow
           }
 
-          // Check for pending module transition (after quiz completion/skip message)
+          // Check for pending module transition
+          // Note: We now do DIRECT transitions in handleUserSpeech, but this handles edge cases
+          // where Tavus auto-responds (e.g., says "Sure") before our transition timer fires
           if (pendingModuleTransitionRef.current) {
             const nextModuleId = pendingModuleTransitionRef.current;
-            addDebugLog(`[MODULE-TRANSITION] Avatar finished speaking - transitioning to: ${nextModuleId}`);
-            pendingModuleTransitionRef.current = null; // Clear the pending transition
 
-            // Small delay for smoother UX
-            setTimeout(() => {
-              if (mountedRef.current && handleModuleSelectRef.current) {
-                handleModuleSelectRef.current(nextModuleId);
-              }
-            }, 500);
+            // Tavus said something (likely auto-response like "Sure" or "Okay")
+            // We don't care what it said - we have a pending transition to execute
+            addDebugLog(`[MODULE-TRANSITION] Pending transition detected after Tavus speech: "${lastSpeech}" - proceeding to: ${nextModuleId}`);
 
+            // Don't clear pendingModuleTransitionRef here - let the setTimeout in handleUserSpeech handle it
+            // Just mark avatar as not speaking
             setIsAvatarSpeaking(false);
             isAvatarSpeakingRef.current = false;
             setAvatarState("idle");
@@ -2156,11 +2103,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 setIsMuted(false);
               }
 
-              // Enable Tavus listening
+              // CRITICAL: Keep Tavus listening DISABLED during confirmation
+              // We still receive user transcripts via Daily.co events, but Tavus won't auto-respond
+              // This prevents Tavus from generating its own response to "continue"
               if (dailyEventManagerRef.current) {
-                listeningStateRef.current = 'enabled';
-                dailyEventManagerRef.current.enableListening();
-                addDebugLog('[MODULE-CONFIRM] 🎤 Listening enabled - waiting for user confirmation');
+                listeningStateRef.current = 'disabled';
+                dailyEventManagerRef.current.disableListening();
+                addDebugLog('[MODULE-CONFIRM] 🎤 Mic unmuted but Tavus listening DISABLED - we handle confirmation manually');
               }
 
               // Do NOT call finishModuleSpeech - wait for user confirmation
@@ -2841,11 +2790,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "idle" - microphone muted (sync)');
       }
     } else {
-      // Microphone unmuted → enable listening (but NOT during MCQ quiz)
+      // Microphone unmuted → enable listening (but NOT during MCQ quiz or confirmation waiting)
       if (mcqQuizStateRef.current.isActive) {
         // During MCQ quiz, keep listening disabled even if mic is unmuted
         dailyEventManagerRef.current.disableListening();
         console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (MCQ quiz active)');
+        setAvatarState("idle");
+      } else if (waitingForModuleConfirmationRef.current) {
+        // During module confirmation, keep listening disabled - we handle confirmation manually
+        dailyEventManagerRef.current.disableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (waiting for module confirmation)');
         setAvatarState("idle");
       } else {
         dailyEventManagerRef.current.enableListening();
