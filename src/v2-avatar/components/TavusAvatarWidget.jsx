@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -28,7 +28,7 @@ import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
 import EntriLearningModules from './EntriLearningModules';
 import MCQQuizOverlay from './MCQQuizOverlay';
-import { getModuleQuiz, hasModuleQuiz } from '../config/moduleQuizzes';
+import { getPersona } from '../personas';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -38,11 +38,13 @@ import { getModuleQuiz, hasModuleQuiz } from '../config/moduleQuizzes';
 export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, personaId } = {}) => {
   console.log('[TAVUS-WIDGET] TavusAvatarWidget rendering - autoExpand:', autoExpand, 'personaId:', personaId, 'hasOnExpand:', !!onExpand);
 
-  // Helper function to check if persona should show learning modules (Entri and Evolution only)
-  const shouldShowLearningModules = (personaId) => {
-    const learningModulePersonas = ['p54ceeb77022', 'p99b6eb28083']; // Entri and Evolution
-    return learningModulePersonas.includes(personaId);
-  };
+  // Get persona configuration - all persona-specific behavior flows from this
+  const persona = useMemo(() => getPersona(personaId), [personaId]);
+
+  // Helper function to check if persona should show learning modules
+  const shouldShowLearningModules = useCallback(() => {
+    return persona.hasFeature('learningModules');
+  }, [persona]);
 
   const [state, setState] = useState(autoExpand ? "maximized" : "minimized");
   const [isMuted, setIsMuted] = useState(true);
@@ -76,27 +78,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [showLearningModules, setShowLearningModules] = useState(shouldShowLearningModules(personaId));
-  
-  // Entri onboarding module order for proactive behavior
-  const entriModuleOrder = [
-    'welcome-intro',
-    'posh-info',
-    'employee-benefits',
-    'lifestyle-benefits',
-    'company-rules',
-    'final-quiz'
-  ];
+  const [showLearningModules, setShowLearningModules] = useState(shouldShowLearningModules());
 
-  // Modules that require user confirmation before moving to next (pause for questions)
-  const modulesRequiringConfirmation = [
-    'posh-info',
-    'employee-benefits',
-    'lifestyle-benefits',
-    'company-rules'
-  ];
-  
-  // Track if Entri onboarding has started
+  // Get module configuration from persona (empty arrays for personas without modules)
+  const moduleOrder = persona.modules.order || [];
+  const modulesRequiringConfirmation = persona.modules.requiresConfirmation || [];
+
+  // Track if onboarding has started (for personas with proactive flow)
   const entriOnboardingStartedRef = useRef(false);
   
   // Quiz state - for conversation-based quiz
@@ -262,13 +250,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       
       // Check if user hasn't spoken and avatar isn't speaking (use refs for current values)
       if (!isUserSpeakingRef.current && !isAvatarSpeakingRef.current && dailyEventManagerRef.current) {
-        const isEntriPersona = personaId === 'p54ceeb77022';
-        
-        if (isEntriPersona && activeModule && !quizState.isActive) {
-          // For Entri persona, move to next module when current is completed
-          const currentIndex = entriModuleOrder.indexOf(activeModule);
-          if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-            const nextModuleId = entriModuleOrder[currentIndex + 1];
+        // For personas with proactive module flow, move to next module when current is completed
+        if (persona.hasFeature('proactiveModuleFlow') && activeModule && !quizState.isActive) {
+          const currentIndex = moduleOrder.indexOf(activeModule);
+          if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+            const nextModuleId = moduleOrder[currentIndex + 1];
             addDebugLog(`[PROACTIVE] Moving to next Entri module: ${nextModuleId}`);
             // Automatically move to next module using ref
             if (handleModuleSelectRef.current) {
@@ -292,7 +278,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Callback for when founder video stops - move to next module
   const handleFounderVideoStop = useCallback(() => {
-    if (activeModuleRef.current === 'founder-video' && personaId === 'p54ceeb77022') {
+    if (activeModuleRef.current === 'founder-video' && persona.hasFeature('founderVideo')) {
       addDebugLog('[DEMO] Founder video finished');
 
       // Unlock the module lock
@@ -307,8 +293,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         return [...prev, 'founder-video'];
       });
 
-      // Check if founder-video has a quiz
-      if (hasModuleQuiz('founder-video')) {
+      // Check if founder-video has a quiz (use persona config)
+      if (persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz('founder-video')) {
         addDebugLog('[DEMO] Founder video has quiz - starting MCQ quiz');
 
         // Keep microphone muted during quiz
@@ -348,7 +334,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
 
         // Move to next main module (posh-info)
-        const nextModuleId = entriModuleOrder[1]; // posh-info
+        const nextModuleId = moduleOrder[1]; // posh-info
         addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
         setTimeout(() => {
           if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
@@ -364,7 +350,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }, 500);
       }
     }
-  }, [personaId, entriModuleOrder, quizState.isActive, addDebugLog]);
+  }, [personaId, moduleOrder, quizState.isActive, addDebugLog]);
 
   // Demo video hook
   const { isDemoPlaying, currentVideoUrl, isYouTube, youTubeEmbedUrl, demoVideoRef, playDemoVideo, stopDemoVideo } = useDemoVideo({
@@ -964,8 +950,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Get current module
         const currentModule = activeModuleRef.current;
 
-        // Check if this module has a quiz
-        if (hasModuleQuiz(currentModule)) {
+        // Check if this module has a quiz (use persona config)
+        if (persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz(currentModule)) {
           addDebugLog(`[MODULE-CONFIRM] Module ${currentModule} has quiz - starting MCQ quiz`);
 
           // Mute microphone before starting quiz
@@ -989,10 +975,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
 
         // No quiz - advance to next module
-        const currentIndex = entriModuleOrder.indexOf(currentModule);
+        const currentIndex = moduleOrder.indexOf(currentModule);
 
-        if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-          const nextModuleId = entriModuleOrder[currentIndex + 1];
+        if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+          const nextModuleId = moduleOrder[currentIndex + 1];
 
           // Mute microphone before transitioning
           if (sessionManagerRef.current?.isInitialized) {
@@ -1137,15 +1123,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         lowerText.includes(indicator)
       );
       
-      // For Entri persona, also check if avatar has been speaking for a while (more lenient completion)
-      const isEntriPersona = personaId === 'p54ceeb77022';
+      // For personas with proactive flow, also check if avatar has been speaking for a while (more lenient completion)
+      const hasProactiveFlow = persona.hasFeature('proactiveModuleFlow');
       const textLength = cleanedText.length;
       const hasSubstantialContent = textLength > 100; // Avatar has spoken a substantial amount
-      
+
       // Mark as completed after avatar finishes speaking
-      // For Entri: be more lenient - if avatar has spoken substantially, consider it complete
-      // For Evolution: require completion indicators
-      if (indicatesCompletion || (isEntriPersona && hasSubstantialContent)) {
+      // For proactive flow personas: be more lenient - if avatar has spoken substantially, consider it complete
+      // For others: require completion indicators
+      if (indicatesCompletion || (hasProactiveFlow && hasSubstantialContent)) {
         // Use a ref to track if we've already scheduled completion
         const moduleId = activeModule;
         setTimeout(() => {
@@ -1160,28 +1146,27 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             
             // Log completion for debugging
             log('MODULE_COMPLETE', `Module ${moduleId} completed. Unlocking next module...`);
-            
-            // Determine next module to unlock (only for evolution persona)
-            const isEntriPersona = personaId === 'p54ceeb77022';
-            if (!isEntriPersona) {
-              const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
+
+            // Determine next module to unlock (only for personas without proactive flow)
+            if (!persona.hasFeature('proactiveModuleFlow')) {
               const currentIndex = moduleOrder.indexOf(moduleId);
               const nextModuleId = moduleOrder[currentIndex + 1];
-              
+
+              // Get module titles from persona config
+              const currentModuleDef = persona.getModule(moduleId);
+              const nextModuleDef = persona.getModule(nextModuleId);
+              const currentModuleName = currentModuleDef?.title || moduleId;
+              const nextModuleName = nextModuleDef?.title || nextModuleId;
+
               // Notify user about next module unlocking (if not quiz)
               if (nextModuleId && nextModuleId !== 'final-quiz') {
-                const nextModuleNames = {
-                  'genetic-drift': 'Genetic Drift',
-                  'fossil-record': 'Fossil Record'
-                };
-                
                 setTimeout(() => {
                   sendMessageToReplica(
-                    `Great job completing ${moduleId === 'natural-selection' ? 'Natural Selection' : moduleId === 'genetic-drift' ? 'Genetic Drift' : 'Fossil Record'}! ` +
-                    `The next topic "${nextModuleNames[nextModuleId]}" is now unlocked. You can click on it in the sidebar to continue learning!`
+                    `Great job completing ${currentModuleName}! ` +
+                    `The next topic "${nextModuleName}" is now unlocked. You can click on it in the sidebar to continue learning!`
                   );
                 }, 1000);
-              } else if (nextModuleId === 'final-quiz' && updated.length === 3) {
+              } else if (nextModuleId === 'final-quiz' && updated.length >= moduleOrder.length - 1) {
                 // All topics completed, quiz unlocked
                 setTimeout(() => {
                   sendMessageToReplica(
@@ -1192,9 +1177,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
               }
             } else {
               // For Entri persona, automatically move to next module after completion
-              const currentIndex = entriModuleOrder.indexOf(moduleId);
-              if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-                const nextModuleId = entriModuleOrder[currentIndex + 1];
+              const currentIndex = moduleOrder.indexOf(moduleId);
+              if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+                const nextModuleId = moduleOrder[currentIndex + 1];
                 addDebugLog(`[ENTRI-ONBOARDING] Module ${moduleId} completed, moving to ${nextModuleId}`);
                 
                 // Wait a bit then automatically move to next module
@@ -2156,19 +2141,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       addDebugLog('Microphone will remain muted - user must manually enable it');
             setIsMuted(true);
       
-      // Step 6: Auto-start Entri onboarding if Entri persona
-      if (personaId === 'p54ceeb77022' && !entriOnboardingStartedRef.current) {
+      // Step 6: Auto-start onboarding if persona has proactive module flow
+      if (persona.hasFeature('proactiveModuleFlow') && !entriOnboardingStartedRef.current) {
         setTimeout(() => {
           if (mountedRef.current && sessionManagerRef.current?.isInitialized) {
-            addDebugLog('[ENTRI-ONBOARDING] Starting proactive onboarding with welcome module');
+            addDebugLog('[ONBOARDING] Starting proactive onboarding with welcome module');
             entriOnboardingStartedRef.current = true;
             // Ensure microphone is muted before starting onboarding
             sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-              addDebugLog(`[ENTRI-ONBOARDING] Failed to mute microphone: ${err.message}`);
+              addDebugLog(`[ONBOARDING] Failed to mute microphone: ${err.message}`);
             });
             setIsMuted(true);
-            // Start with welcome module
-            handleModuleSelect('welcome-intro');
+            // Start with first module from persona config
+            const firstModule = moduleOrder[0];
+            if (firstModule) {
+              handleModuleSelect(firstModule);
+            }
           }
         }, 2000); // Wait 2 seconds for session to stabilize
       }
@@ -2319,7 +2307,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }));
     setCompletedModules(prev => [...prev, 'final-quiz']);
     // Only show learning modules if persona supports them
-    if (shouldShowLearningModules(personaId)) {
+    if (shouldShowLearningModules()) {
       setShowLearningModules(true);
     }
     
@@ -2330,7 +2318,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Start MCQ quiz for a module
   const startMcqQuiz = useCallback((moduleId) => {
-    const quizData = getModuleQuiz(moduleId);
+    // Get quiz data from persona config
+    const quizData = persona.getModuleQuiz(moduleId);
     if (!quizData || !quizData.questions || quizData.questions.length === 0) {
       addDebugLog(`[MCQ-QUIZ] No quiz found for module: ${moduleId}`);
       return false;
@@ -2492,9 +2481,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     });
 
     // Advance to next module after quiz completion
-    const currentIndex = entriModuleOrder.indexOf(moduleId);
-    if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-      const nextModuleId = entriModuleOrder[currentIndex + 1];
+    const currentIndex = moduleOrder.indexOf(moduleId);
+    if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+      const nextModuleId = moduleOrder[currentIndex + 1];
       addDebugLog(`[MCQ-QUIZ] Advancing to next module: ${nextModuleId}`);
 
       setTimeout(() => {
@@ -2503,7 +2492,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
       }, 3000); // Wait for completion message to be spoken
     }
-  }, [addDebugLog, sendMessageToReplica, entriModuleOrder]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder]);
 
   // Skip/End MCQ quiz
   const skipMcqQuiz = useCallback(() => {
@@ -2529,16 +2518,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     });
 
     // Advance to next module
-    const currentIndex = entriModuleOrder.indexOf(state.moduleId);
-    if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-      const nextModuleId = entriModuleOrder[currentIndex + 1];
+    const currentIndex = moduleOrder.indexOf(state.moduleId);
+    if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+      const nextModuleId = moduleOrder[currentIndex + 1];
       setTimeout(() => {
         if (mountedRef.current && handleModuleSelectRef.current) {
           handleModuleSelectRef.current(nextModuleId);
         }
       }, 2000);
     }
-  }, [addDebugLog, sendMessageToReplica, entriModuleOrder]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder]);
 
   // Repeat current MCQ question
   const repeatMcqQuestion = useCallback(() => {
@@ -2690,13 +2679,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // For other modules: Auto-advance to next module
     // NOTE: Modules requiring confirmation are handled in onReplicaStopSpeaking callback
     // and should NOT reach this function. This is only for non-confirmation modules.
-    const isEntriPersona = personaId === 'p54ceeb77022';
-    if (isEntriPersona && currentModule && currentModule !== 'final-quiz') {
-      const currentIndex = entriModuleOrder.indexOf(currentModule);
+    if (persona.hasFeature('proactiveModuleFlow') && currentModule && currentModule !== 'final-quiz') {
+      const currentIndex = moduleOrder.indexOf(currentModule);
 
       // Auto-advance to next module
-      if (currentIndex >= 0 && currentIndex < entriModuleOrder.length - 1) {
-        const nextModuleId = entriModuleOrder[currentIndex + 1];
+      if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+        const nextModuleId = moduleOrder[currentIndex + 1];
         addDebugLog(`[MODULE-LOCK] 🎯 Proactive flow: Moving to next module: ${nextModuleId}`);
 
         // 🔇 Ensure microphone stays muted before transitioning
@@ -2716,7 +2704,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             handleModuleSelectRef.current(nextModuleId);
           }
         }, 1000); // Short delay for smooth transition
-      } else if (currentModule === entriModuleOrder[entriModuleOrder.length - 2]) {
+      } else if (currentModule === moduleOrder[moduleOrder.length - 2]) {
         // If we just completed the last module before quiz, transition to quiz
         addDebugLog('[MODULE-LOCK] 🎯 All modules complete - transitioning to final quiz');
         setTimeout(() => {
@@ -2726,7 +2714,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }, 1000);
       }
     }
-  }, [activeModule, completedModules, personaId, quizState.isActive, addDebugLog, playDemoVideo, isDemoPlaying, sendMessageToReplica, entriModuleOrder]);
+  }, [activeModule, completedModules, personaId, quizState.isActive, addDebugLog, playDemoVideo, isDemoPlaying, sendMessageToReplica, moduleOrder]);
 
   // 🧠 Check module completion based on sentinel phrase or content length
   const checkModuleCompletion = useCallback(() => {
@@ -2838,40 +2826,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   }, [isMuted]); // Only depend on isMuted - refs don't need to be in deps
 
-  // Check if module is unlocked
+  // Check if module is unlocked - delegate to persona config
   const isModuleUnlocked = (moduleId) => {
-    // Check if this is Entri persona - all modules are unlocked
-    const isEntriPersona = personaId === 'p54ceeb77022';
-    if (isEntriPersona) {
-      return true; // All Entri modules are unlocked
-    }
-    
-    // Evolution persona - progressive unlocking
-    const moduleOrder = ['natural-selection', 'genetic-drift', 'fossil-record', 'final-quiz'];
-    const moduleIndex = moduleOrder.indexOf(moduleId);
-    
-    if (moduleIndex === 0) {
-      // First module is always unlocked
-      return true;
-    }
-    
-    if (moduleId === 'final-quiz') {
-      // Quiz unlocks only when all 3 topics are completed
-      return completedModules.includes('natural-selection') &&
-             completedModules.includes('genetic-drift') &&
-             completedModules.includes('fossil-record');
-    }
-    
-    // Other modules unlock when previous module is completed
-    const previousModuleId = moduleOrder[moduleIndex - 1];
-    return completedModules.includes(previousModuleId);
+    return persona.isModuleUnlocked(moduleId, completedModules);
   };
 
   // Handle learning module selection
   const handleModuleSelect = useCallback(async (moduleId) => {
-    // Check if this is Entri persona
-    const isEntriPersona = personaId === 'p54ceeb77022';
-    
     // Check if module is unlocked before proceeding
     if (!isModuleUnlocked(moduleId)) {
       // Send message to avatar explaining the module is locked
@@ -2881,108 +2842,27 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       );
       return;
     }
-    
+
     setActiveModule(moduleId);
     activeModuleRef.current = moduleId; // Update ref immediately for callbacks
-    
+
     // Clear any existing transcripts when selecting a new module
     setTranscripts([]);
-    
+
     // 🔒 START MODULE SPEECH LOCK - MUST be called before sending prompt
     startModuleSpeech(moduleId);
-    
+
     // ⏳ CRITICAL: Delay to ensure Tavus processes disableListening before prompt
     // This prevents Tavus from treating the prompt as user input
     await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Get module prompt from persona config
+    const prompt = persona.getModulePrompt(moduleId);
     
-    // Module-specific prompts for the avatar
-    const evolutionPrompts = {
-      'natural-selection': "Let's discuss natural selection! This is how living things change over time. Animals that are better at surviving pass on their traits to their babies. Can you think of an example of natural selection?",
-      'genetic-drift': "Great! Let's explore genetic drift. This happens when random chance affects which traits get passed down in a population. It's like flipping a coin - sometimes you get heads, sometimes tails. What questions do you have about genetic drift?",
-      'fossil-record': "Excellent choice! The fossil record shows us evidence of evolution over millions of years. Fossils are like nature's history book. What would you like to know about fossils?",
-      'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned. Are you ready to begin?"
-    };
-    
-    const entriPrompts = {
-      'welcome-intro': "Welcome to Entri! We're India's leading learning platform for job seekers, with 1.4 crore+ users. This course covers Entri's journey, values, teams, and your role as an Entripreneur. By the end, you'll know how we make learning accessible to help people achieve their career dreams.\n\nI am \"Ann\" your AI onboarding guide, and feel free to stop me at any time or ask any questions.\n\nEntri is an innovative education technology company based in India, focused on providing accessible learning solutions and career development opportunities. We help people prepare for competitive exams, learn new skills, and advance their careers.\n\nBelow are the topics that we will cover in this course:\n\n First, we'll start with an introduction from our founders.\n\nNext, we'll share some inspiring user success stories, followed by a look at the different functions here at Entri.\n\nMoving on, we'll provide an overview of our vertical types and cover important HR policies.\n\nWe will also discuss our standards for the prevention of sexual harassment at work and walk you through your employee benefits.\n\nFinally, we'll wrap up with a quiz, which you'll need to pass to complete this module.\n\nLet's start our onboarding!",
-      'founder-video': "Here is our Founders video.",
-      'posh-info': "Let me explain about POSH - Prevention of Sexual Harassment at the Workplace. Entri has formed a POSH committee as per the POSH law to ensure that Entri remains a safe and respectful environment for all employees. The committee is here to support you if you ever find yourself in an uncomfortable situation. You can approach us in person or via email, and all concerns are handled with complete confidentiality and respect.\n\nIs everything clear so far? Do you have any questions about POSH before we move on?",
-      'employee-benefits': "Let me tell you about the comprehensive benefits we provide at Entri. We offer insurance coverage for employees, their spouses, and children. We have YourDost for free mental health counselling, a Welfare Fund for financial support, referral bonuses, and an Entri Book Club with a quarterly ₹500 allowance.\n\nIs everything clear? Do you have any questions about your benefits before we continue?",
-      'lifestyle-benefits': "Now let me tell you about the lifestyle benefits at Entri. We have a Wellness Club, Employee Happy Hours, festive and cultural celebrations, a Sports Club, a Lunch Program, and recreational facilities like table tennis, carroms, board games, and a library. These help maintain a healthy work-life balance.\n\nIs everything clear? Any questions about the lifestyle benefits before we move on?",
-      'company-rules': "Let me explain Entri's company rules and policies. We maintain a zero-tolerance policy for harassment and all employees must follow POSH guidelines. Professional conduct is expected in all work-related situations. All POSH concerns are handled with complete confidentiality. If you experience or witness any uncomfortable situation, report it to the POSH committee immediately. As Entripreneurs, we uphold Entri's values of diversity, inclusion, and respect.\n\nIs everything clear? Do you have any questions before we proceed to the final quiz?",
-      'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Are you ready to begin?"
-    };
-    
-    const modulePrompts = isEntriPersona ? entriPrompts : evolutionPrompts;
-    const prompt = modulePrompts[moduleId];
-    
-    if (moduleId === 'final-quiz') {
-      // Define quiz questions based on persona
-      let quizQuestions;
-      
-      if (isEntriPersona) {
-        // Entri onboarding quiz questions
-        quizQuestions = [
-          {
-            question: "How many users does Entri have?",
-            correctAnswer: "1.4 crore",
-            keywords: ["1.4 crore", "1.4 crore+", "1.4", "crore", "14 million", "14 million users"],
-            topic: "About Entri"
-          },
-          {
-            question: "What does POSH stand for?",
-            correctAnswer: "Prevention of Sexual Harassment",
-            keywords: ["posh", "prevention", "sexual harassment", "workplace", "prevention of sexual harassment"],
-            topic: "POSH"
-          },
-          {
-            question: "What is the quarterly allowance for the Entri Book Club?",
-            correctAnswer: "500 rupees",
-            keywords: ["500", "₹500", "500 rupees", "five hundred", "quarterly"],
-            topic: "Employee Benefits"
-          },
-          {
-            question: "What should you do if you experience an uncomfortable situation at work?",
-            correctAnswer: "report to posh committee",
-            keywords: ["report", "posh", "committee", "contact", "reach out", "email", "report to posh"],
-            topic: "Company Rules"
-          },
-          {
-            question: "What does it mean to be an Entripreneur?",
-            correctAnswer: "entri employee",
-            keywords: ["entripreneur", "entri employee", "part of entri", "entri family", "team member"],
-            topic: "Work Culture"
-          }
-        ];
-      } else {
-        // Evolution quiz questions
-        quizQuestions = [
-          {
-            question: "What is natural selection?",
-            correctAnswer: "natural selection",
-            keywords: ["natural selection", "survival", "fittest", "adaptation", "better at surviving"],
-            topic: "Natural Selection"
-          },
-          {
-            question: "What is genetic drift?",
-            correctAnswer: "genetic drift",
-            keywords: ["genetic drift", "random", "chance", "population", "random chance"],
-            topic: "Genetic Drift"
-          },
-          {
-            question: "What does the fossil record show us?",
-            correctAnswer: "fossil record",
-            keywords: ["fossil", "evidence", "evolution", "history", "fossil record", "millions of years"],
-            topic: "Fossil Record"
-          },
-          {
-            question: "How long did human evolution take?",
-            correctAnswer: "millions of years",
-            keywords: ["millions", "years", "long time", "evolution", "millions of years"],
-            topic: "Evolution Timeline"
-          }
-        ];
-      }
+    if (moduleId === 'final-quiz' && persona.hasFeature('finalQuiz')) {
+      // Get final quiz questions from persona config
+      const finalQuizConfig = persona.quizzes.finalQuiz;
+      const quizQuestions = finalQuizConfig?.questions || [];
       
       // Initialize quiz state
       setQuizState({
@@ -3355,7 +3235,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       <div
         id="tavus-video-container"
         className={`absolute inset-0 bg-black transition-all duration-300 ${
-          shouldShowLearningModules(personaId) && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf
+          shouldShowLearningModules() && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf
             ? 'left-80' 
             : 'left-0'
         }`}
@@ -3552,7 +3432,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       </div>
 
       {/* Toggle sidebar button - top left (only for Entri and Evolution personas) */}
-      {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
+      {shouldShowLearningModules() && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf && (
         <button
           onClick={() => setShowLearningModules(!showLearningModules)}
           className="absolute top-4 left-4 z-30 p-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all shadow-lg"
@@ -3664,9 +3544,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {connectionError && renderErrorState()}
         {sessionTimedOut && renderSessionTimedOutState()}
 
-        {/* Learning Modules - show only for Entri and Evolution personas when connected and not in overlays */}
-        {shouldShowLearningModules(personaId) && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
-          personaId === 'p54ceeb77022' ? (
+        {/* Learning Modules - show only for personas with learning modules enabled */}
+        {shouldShowLearningModules() && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
+          persona.hasFeature('proactiveModuleFlow') ? (
             <EntriLearningModules
               onModuleSelect={handleModuleSelect}
               activeModule={activeModule}
@@ -3714,7 +3594,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             disabled={mcqQuizState.waitingForAvatarToFinish}
             score={mcqQuizState.score}
             onSkipQuiz={skipMcqQuiz}
-            sidebarVisible={shouldShowLearningModules(personaId) && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf}
+            sidebarVisible={shouldShowLearningModules() && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf}
             sidebarWidth={320}
           />
         )}
