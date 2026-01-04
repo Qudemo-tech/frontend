@@ -1,113 +1,81 @@
-import React, { useState } from 'react';
-import { CheckCircle, BookOpen, Award, ChevronDown, ChevronRight, Unlock, Bookmark, X, Menu, Shield, Heart, Users, Building2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  CheckCircle,
+  BookOpen,
+  Award,
+  ChevronDown,
+  ChevronRight,
+  Unlock,
+  Bookmark,
+  X,
+  Menu,
+  Shield,
+  Heart,
+  Users,
+  Building2,
+  Video,
+  FileText,
+  HelpCircle
+} from 'lucide-react';
 
 /**
- * EntriLearningModules - LinkedIn Learning style sidebar for Entri onboarding
- * All modules are unlocked - no progressive unlocking
+ * Icon resolver - maps icon string names to Lucide components
  */
-const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules = [], onClose }) => {
-  const [expandedSections, setExpandedSections] = useState({
-    'module-1': true,
-    'module-2': true,
-    'module-3': true,
-    'module-4': true,
-    'module-5': true,
-    'module-6': true,
-    'quiz-section': true
-  });
+const iconMap = {
+  CheckCircle,
+  BookOpen,
+  Award,
+  Shield,
+  Heart,
+  Users,
+  Building2,
+  Video,
+  FileText,
+  HelpCircle,
+};
 
-  // All modules are unlocked - no locking logic
-  const isModuleUnlocked = (moduleId) => {
-    return true; // Everything is unlocked
-  };
+const getIcon = (iconName) => {
+  return iconMap[iconName] || BookOpen;
+};
 
-  const courseStructure = [
-    {
-      id: 'module-1',
-      title: '1. Welcome & Introduction',
-      items: [
-        {
-          id: 'welcome-intro',
-          title: 'Welcome to Entri',
-          type: 'lesson',
-          duration: '3m',
-          icon: CheckCircle
-        },
-        {
-          id: 'founder-video',
-          title: "Founder's Video",
-          type: 'video',
-          duration: '5m',
-          icon: BookOpen
-        }
-      ]
-    },
-    {
-      id: 'module-3',
-      title: '3. POSH Information',
-      items: [
-        {
-          id: 'posh-info',
-          title: 'Prevention of Sexual Harassment',
-          type: 'lesson',
-          duration: '4m',
-          icon: Shield
-        }
-      ]
-    },
-    {
-      id: 'module-4',
-      title: '4. Employee Benefits',
-      items: [
-        {
-          id: 'employee-benefits',
-          title: 'Benefits Overview',
-          type: 'lesson',
-          duration: '6m',
-          icon: Heart
-        }
-      ]
-    },
-    {
-      id: 'module-5',
-      title: '5. Lifestyle Benefits',
-      items: [
-        {
-          id: 'lifestyle-benefits',
-          title: 'Wellness & Recreation',
-          type: 'lesson',
-          duration: '5m',
-          icon: Users
-        }
-      ]
-    },
-    {
-      id: 'module-6',
-      title: '6. Company Rules and Policies',
-      items: [
-        {
-          id: 'company-rules',
-          title: 'Rules and Policies',
-          type: 'lesson',
-          duration: '7m',
-          icon: BookOpen
-        }
-      ]
-    },
-    {
-      id: 'quiz-section',
-      title: 'Assessment',
-      items: [
-        {
-          id: 'final-quiz',
-          title: 'Final Quiz',
-          type: 'quiz',
-          questions: 5,
-          icon: Award
-        }
-      ]
-    }
-  ];
+/**
+ * EntriLearningModules - Dynamic sidebar for Entri onboarding
+ *
+ * Renders course structure from persona config - no hardcoded modules.
+ * All module data comes from persona.modules.courseStructure and persona.modules.definitions.
+ *
+ * Props:
+ * - persona: The persona configuration object
+ * - onModuleSelect: Callback when a module is clicked
+ * - activeModule: Currently active module ID
+ * - completedModules: Array of completed module IDs
+ * - onClose: Callback to close the sidebar
+ */
+const EntriLearningModules = ({
+  persona,
+  onModuleSelect,
+  activeModule,
+  completedModules = [],
+  onClose
+}) => {
+  // Get course data from persona config
+  const courseStructure = persona?.modules?.courseStructure || [];
+  const moduleDefinitions = persona?.modules?.definitions || {};
+  const courseMeta = persona?.modules?.courseMeta || { title: 'Course' };
+
+  // Initialize all sections as expanded
+  const initialExpandedState = useMemo(() => {
+    const state = {};
+    courseStructure.forEach(section => {
+      state[section.id] = true;
+    });
+    return state;
+  }, [courseStructure]);
+
+  const [expandedSections, setExpandedSections] = useState(initialExpandedState);
+
+  // All modules are unlocked for Entri (linear flow handled by avatar)
+  const isModuleUnlocked = () => true;
 
   const toggleSection = (sectionId) => {
     setExpandedSections(prev => ({
@@ -117,17 +85,22 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
   };
 
   const handleItemClick = (itemId) => {
-    // All modules are unlocked, so always allow clicking
     onModuleSelect(itemId);
   };
 
-  const isItemActive = (itemId) => {
-    return activeModule === itemId;
-  };
+  const isItemActive = (itemId) => activeModule === itemId;
+  const isItemCompleted = (itemId) => completedModules.includes(itemId);
 
-  const isItemCompleted = (itemId) => {
-    return completedModules.includes(itemId);
-  };
+  // If no course structure, show empty state
+  if (!courseStructure.length) {
+    return (
+      <div className="fixed left-0 top-0 bottom-0 w-80 bg-gray-800 text-white z-50 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-center h-full text-gray-400">
+          No modules configured
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed left-0 top-0 bottom-0 w-80 bg-gray-800 text-white z-50 flex flex-col shadow-2xl">
@@ -138,8 +111,8 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
           <h2 className="font-semibold text-sm">Contents</h2>
         </div>
         {onClose && (
-          <X 
-            className="w-5 h-5 cursor-pointer hover:text-gray-300" 
+          <X
+            className="w-5 h-5 cursor-pointer hover:text-gray-300"
             onClick={onClose}
           />
         )}
@@ -147,14 +120,14 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
 
       {/* Course Title */}
       <div className="p-4 border-b border-gray-700">
-        <h1 className="font-semibold text-base">Entri Employee Onboarding</h1>
+        <h1 className="font-semibold text-base">{courseMeta.title}</h1>
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         {courseStructure.map((section) => {
           const isExpanded = expandedSections[section.id];
-          
+
           return (
             <div key={section.id} className="border-b border-gray-700">
               {/* Section Header */}
@@ -173,20 +146,22 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
               {/* Section Items */}
               {isExpanded && (
                 <div className="bg-gray-800">
-                  {section.items.map((item) => {
-                    const isActive = isItemActive(item.id);
-                    const isCompleted = isItemCompleted(item.id);
-                    const isUnlocked = isModuleUnlocked(item.id);
-                    const Icon = item.icon;
-                    
+                  {section.items.map((itemId) => {
+                    const item = moduleDefinitions[itemId];
+                    if (!item) return null; // Skip if module not defined
+
+                    const isActive = isItemActive(itemId);
+                    const isCompleted = isItemCompleted(itemId);
+                    const Icon = getIcon(item.icon);
+
                     return (
                       <button
-                        key={item.id}
-                        onClick={() => handleItemClick(item.id)}
+                        key={itemId}
+                        onClick={() => handleItemClick(itemId)}
                         className={`
                           w-full flex items-center gap-3 p-3 text-left transition-colors
-                          ${isActive 
-                            ? 'bg-black text-white' 
+                          ${isActive
+                            ? 'bg-black text-white'
                             : 'hover:bg-gray-700 text-gray-200 cursor-pointer'
                           }
                         `}
@@ -196,13 +171,13 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
                           w-2 h-2 rounded-full flex-shrink-0
                           ${isActive ? 'bg-white' : 'bg-gray-500'}
                         `} />
-                        
+
                         {/* Icon */}
                         <Icon className={`
                           w-4 h-4 flex-shrink-0
                           ${isActive ? 'text-white' : 'text-gray-400'}
                         `} />
-                        
+
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -228,7 +203,7 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
                           )}
                         </div>
 
-                        {/* Unlock Icon - always shown since everything is unlocked */}
+                        {/* Unlock Icon */}
                         <Unlock className="w-4 h-4 text-gray-400 flex-shrink-0" />
 
                         {/* Bookmark Icon */}
@@ -247,4 +222,3 @@ const EntriLearningModules = ({ onModuleSelect, activeModule, completedModules =
 };
 
 export default EntriLearningModules;
-

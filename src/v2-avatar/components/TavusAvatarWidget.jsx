@@ -3548,6 +3548,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         {shouldShowLearningModules() && !isConnecting && !connectionError && !sessionTimedOut && hasLiveVideo && showLearningModules && !isDemoPlaying && !showCalendly && !showPdf && (
           persona.hasFeature('proactiveModuleFlow') ? (
             <EntriLearningModules
+              persona={persona}
               onModuleSelect={handleModuleSelect}
               activeModule={activeModule}
               completedModules={completedModules}
