@@ -1,0 +1,172 @@
+/**
+ * usePdfPresentation Hook
+ *
+ * Manages PDF presentations with pre-scripted avatar narrations.
+ *
+ * Flow:
+ * 1. Show PDF slide to user
+ * 2. Avatar speaks pre-scripted narration using TTS (echo mode)
+ * 3. When avatar finishes speaking → advance to next slide
+ */
+
+import { useState, useRef, useCallback, useEffect } from 'react';
+
+export const usePdfPresentation = ({
+  sessionManager,
+  dailyEventManager,
+  sendMessage,
+  log,
+  onPresentationEnd,
+}) => {
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [currentPdfUrl, setCurrentPdfUrl] = useState(null);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [presentationConfig, setPresentationConfig] = useState(null);
+
+  const waitingForNarrationRef = useRef(false);
+
+  /**
+   * Start a PDF presentation
+   */
+  const startPresentation = useCallback(async (config) => {
+    const { pdfUrl, slides, moduleId } = config;
+
+    if (!pdfUrl || !slides || slides.length === 0) {
+      log('PDF', '⚠️ Invalid presentation config', config);
+      return false;
+    }
+
+    log('PDF', `Starting presentation: ${moduleId}`, { pdfUrl, slideCount: slides.length });
+
+    setPresentationConfig(config);
+    setCurrentPdfUrl(pdfUrl);
+    setCurrentSlideIndex(0);
+    setIsPresenting(true);
+
+    return true;
+  }, [log]);
+
+
+  /**
+   * Narrate current slide using pre-scripted narration
+   */
+  const narrateSlide = useCallback(async (slideIndex) => {
+    if (!presentationConfig) return;
+
+    const slide = presentationConfig.slides[slideIndex];
+    if (!slide) {
+      log('PDF', `⚠️ Slide ${slideIndex} not found`);
+      return;
+    }
+
+    log('PDF', `Narrating slide ${slideIndex + 1}/${presentationConfig.slides.length}`);
+
+    // Mark that we're waiting for narration
+    waitingForNarrationRef.current = true;
+
+    // Use pre-scripted narration
+    log('PDF', '📝 Playing pre-scripted narration');
+    if (slide.narration) {
+      sendMessage(slide.narration, 'echo');
+    }
+  }, [presentationConfig, sendMessage, log]);
+
+  /**
+   * Called when avatar finishes speaking
+   */
+  const onNarrationComplete = useCallback(() => {
+    waitingForNarrationRef.current = false;
+    log('PDF', '✅ Slide narration complete');
+  }, [log]);
+
+  /**
+   * Advance to next slide
+   */
+  const nextSlide = useCallback(() => {
+    if (!presentationConfig) return;
+
+    const nextIndex = currentSlideIndex + 1;
+
+    if (nextIndex >= presentationConfig.slides.length) {
+      log('PDF', '🎬 Presentation complete');
+      endPresentation();
+      return;
+    }
+
+    log('PDF', `Advancing to slide ${nextIndex + 1}`);
+    setCurrentSlideIndex(nextIndex);
+
+    // Narrate the new slide after a brief delay
+    setTimeout(() => {
+      narrateSlide(nextIndex);
+    }, 500);
+  }, [currentSlideIndex, presentationConfig, narrateSlide, log]);
+
+  /**
+   * Go to previous slide
+   */
+  const previousSlide = useCallback(() => {
+    if (currentSlideIndex > 0) {
+      const prevIndex = currentSlideIndex - 1;
+      log('PDF', `Going back to slide ${prevIndex + 1}`);
+      setCurrentSlideIndex(prevIndex);
+
+      setTimeout(() => {
+        narrateSlide(prevIndex);
+      }, 500);
+    }
+  }, [currentSlideIndex, narrateSlide, log]);
+
+  /**
+   * Go to a specific slide
+   */
+  const goToSlide = useCallback((slideIndex) => {
+    if (slideIndex < 0 || slideIndex >= presentationConfig.slides.length) {
+      log('PDF', `⚠️ Invalid slide index: ${slideIndex}`);
+      return;
+    }
+
+    log('PDF', `Going to slide ${slideIndex + 1}`);
+    setCurrentSlideIndex(slideIndex);
+
+    setTimeout(() => {
+      narrateSlide(slideIndex);
+    }, 500);
+  }, [presentationConfig, narrateSlide, log]);
+
+  /**
+   * End presentation and cleanup
+   */
+  const endPresentation = useCallback(async () => {
+    log('PDF', 'Ending presentation');
+
+    // Reset state
+    setIsPresenting(false);
+    setCurrentPdfUrl(null);
+    setCurrentSlideIndex(0);
+    setPresentationConfig(null);
+    waitingForNarrationRef.current = false;
+
+    // Notify parent
+    onPresentationEnd?.();
+  }, [onPresentationEnd, log]);
+
+  return {
+    // State
+    isPresenting,
+    currentPdfUrl,
+    currentSlideIndex,
+    presentationConfig,
+
+    // Methods
+    startPresentation,
+    endPresentation,
+    narrateSlide,
+    onNarrationComplete,
+    nextSlide,
+    previousSlide,
+    goToSlide,
+  };
+};
+
+export default usePdfPresentation;

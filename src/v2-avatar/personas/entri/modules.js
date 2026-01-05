@@ -15,6 +15,9 @@ const ICONS = {
   AWARD: 'Award',
   BUILDING: 'Building2',
   VIDEO: 'Video',
+  BRIEFCASE: 'Briefcase',
+  LAYERS: 'Layers',
+  STAR: 'Star',
 };
 
 /**
@@ -28,23 +31,38 @@ export const courseStructure = [
     items: ['welcome-intro', 'founder-video'],
   },
   {
+    id: 'section-success-stories',
+    title: '2. User Success Stories',
+    items: ['user-success-stories'],
+  },
+  {
+    id: 'section-functions',
+    title: '3. Functions at Entri',
+    items: ['functions-at-entri'],
+  },
+  {
+    id: 'section-verticals',
+    title: '4. Vertical Types at Entri',
+    items: ['vertical-types'],
+  },
+  {
     id: 'section-posh',
-    title: '2. POSH Information',
+    title: '5. POSH Information',
     items: ['posh-info'],
   },
   {
     id: 'section-employee-benefits',
-    title: '3. Employee Benefits',
+    title: '6. Employee Benefits',
     items: ['employee-benefits'],
   },
   {
     id: 'section-lifestyle',
-    title: '4. Lifestyle Benefits',
+    title: '7. Lifestyle Benefits',
     items: ['lifestyle-benefits'],
   },
   {
     id: 'section-rules',
-    title: '5. Company Rules and Policies',
+    title: '8. Company Rules and Policies',
     items: ['company-rules'],
   },
   {
@@ -76,6 +94,36 @@ export const moduleDefinitions = {
     icon: ICONS.VIDEO,
     hasVideo: true,
     videoUrl: 'https://www.youtube.com/watch?v=YtB5fjEO1zc',
+  },
+  'user-success-stories': {
+    id: 'user-success-stories',
+    title: 'User Success Stories',
+    description: 'Inspiring stories from Entri users',
+    type: 'video',
+    duration: '5m',
+    icon: ICONS.STAR,
+    hasVideo: true,
+    videoUrl: 'https://www.youtube.com/watch?v=5R35-Yxkw2Y',
+  },
+  'functions-at-entri': {
+    id: 'functions-at-entri',
+    title: 'Functions at Entri',
+    description: 'Different functions and teams',
+    type: 'presentation',
+    duration: '4m',
+    icon: ICONS.BRIEFCASE,
+    hasVideo: false,
+    hasPresentation: true,
+    presentationConfig: 'functions-at-entri', // References presentation file
+  },
+  'vertical-types': {
+    id: 'vertical-types',
+    title: 'Vertical Types',
+    description: 'Business verticals at Entri',
+    type: 'lesson',
+    duration: '4m',
+    icon: ICONS.LAYERS,
+    hasVideo: false,
   },
   'posh-info': {
     id: 'posh-info',
@@ -131,6 +179,9 @@ export const moduleDefinitions = {
 export const moduleOrder = [
   'welcome-intro',
   'founder-video',
+  'user-success-stories',
+  'functions-at-entri',
+  'vertical-types',
   'posh-info',
   'employee-benefits',
   'lifestyle-benefits',
@@ -144,6 +195,8 @@ export const moduleOrder = [
  */
 export const modulesRequiringConfirmation = [
   'welcome-intro',
+  'functions-at-entri',
+  'vertical-types',
   'posh-info',
   'employee-benefits',
   'lifestyle-benefits',

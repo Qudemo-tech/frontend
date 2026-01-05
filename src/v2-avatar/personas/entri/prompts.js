@@ -32,9 +32,11 @@ Here's what we'll cover in this onboarding:
 
 First... a video message from our founders.
 
-Then... we'll discuss important workplace policies... including POSH guidelines.
+Then... some inspiring user success stories.
 
-After that... I'll walk you through your employee benefits... and lifestyle perks.
+After that... we'll explore the different functions at Entri... and our business verticals.
+
+Then... we'll discuss POSH guidelines... employee benefits... and lifestyle perks.
 
 And finally... a short quiz to wrap things up.
 
@@ -47,6 +49,32 @@ That's the overview of what we'll cover today.
 Do you have any questions before we watch the founders' video? ... Just say "yes" or "continue" when you're ready to proceed.`,
 
   'founder-video': "Now... let me show you a special video message from our founders. ... Please watch, and I'll be right here when it's done.",
+
+  'user-success-stories': "Now... let me show you some inspiring success stories from our users. ... Please watch, and I'll be right here when it's done.",
+
+  'functions-at-entri': `Let's explore the different functions at Entri. ... In this section, you'll learn about the key teams that work together to make our mission possible.`,
+
+  'vertical-types': `Now let's explore the different verticals at Entri.
+
+...
+
+We serve learners across multiple categories.
+
+Government Jobs... helping candidates prepare for PSC, SSC, Banking, and Railway exams.
+
+Spoken English... building communication skills for career growth.
+
+Coding and Tech... preparing learners for IT careers.
+
+Upskilling... helping professionals learn new skills.
+
+...
+
+Each vertical is designed to meet specific career goals of our users.
+
+...
+
+Any questions about our verticals? ... Say "continue" when you're ready.`,
 
   'posh-info': `Alright... let's talk about something really important.
 

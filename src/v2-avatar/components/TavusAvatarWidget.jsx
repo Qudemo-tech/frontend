@@ -23,12 +23,15 @@ import {
 import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
+import { usePdfPresentation } from '../hooks/usePdfPresentation';
 import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
 import EntriLearningModules from './EntriLearningModules';
 import MCQQuizOverlay from './MCQQuizOverlay';
+import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
+import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -80,9 +83,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [showQuiz, setShowQuiz] = useState(false);
   const [showLearningModules, setShowLearningModules] = useState(shouldShowLearningModules());
 
-  // Get module configuration from persona (empty arrays for personas without modules)
+  // Get module configuration from persona (empty arrays/objects for personas without modules)
   const moduleOrder = persona.modules.order || [];
   const modulesRequiringConfirmation = persona.modules.requiresConfirmation || [];
+  const moduleDefinitions = persona.modules.definitions || {};
 
   // Track if onboarding has started (for personas with proactive flow)
   const entriOnboardingStartedRef = useRef(false);
@@ -133,6 +137,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const preCalendlyAudioEnabledRef = useRef(true);
   const pendingCalendlyRef = useRef(false);
   const pendingDemoVideoRef = useRef(null); // Store pending video URL
+  const pendingPresentationRef = useRef(null); // Store pending presentation data
+  const startingPresentationRef = useRef(false); // Guard flag to prevent race condition
+  const transitioningSlideRef = useRef(false); // Guard flag for slide transitions
   const prePdfWidgetStateRef = useRef(null);
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
@@ -276,69 +283,80 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
 
-  // Callback for when founder video stops - move to next module
-  const handleFounderVideoStop = useCallback(() => {
-    if (activeModuleRef.current === 'founder-video' && persona.hasFeature('founderVideo')) {
-      addDebugLog('[DEMO] Founder video finished');
+  // Video modules that should auto-advance after video ends
+  const videoModules = ['user-success-stories', 'founder-video'];
 
-      // Unlock the module lock
-      moduleSpeechLockRef.current = false;
-      currentModulePromptRef.current = '';
+  // Callback for when a video module stops - move to next module
+  const handleVideoModuleStop = useCallback(() => {
+    const currentModule = activeModuleRef.current;
 
-      // Mark founder-video as complete
-      setCompletedModules(prev => {
-        if (prev.includes('founder-video')) {
-          return prev;
+    // Check if current module is a video module
+    if (!videoModules.includes(currentModule)) {
+      return;
+    }
+
+    addDebugLog(`[DEMO] Video module finished: ${currentModule}`);
+
+    // Unlock the module lock
+    moduleSpeechLockRef.current = false;
+    currentModulePromptRef.current = '';
+
+    // Mark module as complete
+    setCompletedModules(prev => {
+      if (prev.includes(currentModule)) {
+        return prev;
+      }
+      return [...prev, currentModule];
+    });
+
+    // Check if this module has a quiz (use persona config)
+    if (persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz(currentModule)) {
+      addDebugLog(`[DEMO] ${currentModule} has quiz - starting MCQ quiz`);
+
+      // Keep microphone muted during quiz
+      if (sessionManagerRef.current?.isInitialized) {
+        sessionManagerRef.current.setMicrophoneMuted(true);
+        setIsMuted(true);
+      }
+
+      // Keep Tavus listening disabled during quiz
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        listeningStateRef.current = 'disabled';
+      }
+
+      // Start the quiz after a short delay
+      setTimeout(() => {
+        if (mountedRef.current && startMcqQuizRef.current) {
+          startMcqQuizRef.current(currentModule);
         }
-        return [...prev, 'founder-video'];
-      });
+      }, 1000);
+    } else {
+      // No quiz - move to next module
+      addDebugLog(`[DEMO] No quiz for ${currentModule} - moving to next module`);
 
-      // Check if founder-video has a quiz (use persona config)
-      if (persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz('founder-video')) {
-        addDebugLog('[DEMO] Founder video has quiz - starting MCQ quiz');
+      // 🔇 Ensure microphone stays muted
+      if (sessionManagerRef.current?.isInitialized) {
+        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+          addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
+        });
+        setIsMuted(true);
+      }
 
-        // Keep microphone muted during quiz
-        if (sessionManagerRef.current?.isInitialized) {
-          sessionManagerRef.current.setMicrophoneMuted(true);
-          setIsMuted(true);
-        }
+      // 🔴 Keep Tavus listening disabled
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
+      }
 
-        // Keep Tavus listening disabled during quiz
-        if (dailyEventManagerRef.current) {
-          dailyEventManagerRef.current.disableListening();
-          listeningStateRef.current = 'disabled';
-        }
-
-        // Start the quiz after a short delay
-        setTimeout(() => {
-          if (mountedRef.current && startMcqQuizRef.current) {
-            startMcqQuizRef.current('founder-video');
-          }
-        }, 1000);
-      } else {
-        // No quiz - move to next module (posh-info)
-        addDebugLog('[DEMO] No quiz for founder video - moving to next module');
-
-        // 🔇 Ensure microphone stays muted
-        if (sessionManagerRef.current?.isInitialized) {
-          sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-            addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
-          });
-          setIsMuted(true);
-        }
-
-        // 🔴 Keep Tavus listening disabled
-        if (dailyEventManagerRef.current) {
-          dailyEventManagerRef.current.disableListening();
-          addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
-        }
-
-        // Move to next main module (posh-info)
-        const nextModuleId = moduleOrder[1]; // posh-info
+      // Find and move to next module
+      const currentIndex = moduleOrder.indexOf(currentModule);
+      if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+        const nextModuleId = moduleOrder[currentIndex + 1];
         addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
         setTimeout(() => {
           if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
-            addDebugLog(`[DEMO] ✅ Moving to next module after founder video: ${nextModuleId}`);
+            addDebugLog(`[DEMO] ✅ Moving to next module after video: ${nextModuleId}`);
             if (sessionManagerRef.current?.isInitialized) {
               sessionManagerRef.current.setMicrophoneMuted(true);
               setIsMuted(true);
@@ -376,9 +394,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Restore avatar audio when video stops
       addDebugLog('[DEMO] Video stopped - restoring avatar audio');
       setAudioEnabled(true);
-      
+
       // Handle founder video completion (video will be closed and next module will start)
-      handleFounderVideoStop();
+      handleVideoModuleStop();
     },
   });
 
@@ -400,6 +418,24 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
     }
   }, []);
+
+  // PDF Presentation hook (must be after sendMessageToReplica is defined)
+  const pdfPresentation = usePdfPresentation({
+    sessionManager: sessionManagerRef.current,
+    dailyEventManager: dailyEventManagerRef.current,
+    sendMessage: sendMessageToReplica,
+    log: addDebugLog,
+    onPresentationEnd: () => {
+      addDebugLog('[PDF] Presentation ended - advancing to next module');
+
+      // Find current module index and advance (use ref for current state)
+      const currentIndex = moduleOrder.indexOf(activeModuleRef.current);
+      if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
+        const nextModuleId = moduleOrder[currentIndex + 1];
+        handleModuleSelectRef.current?.(nextModuleId);
+      }
+    },
+  });
 
   // Setup DailyEventManager callbacks
   useEffect(() => {
@@ -520,6 +556,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           return; // Skip all module completion logic - quiz handles its own flow
         }
 
+        // ⚡ PRIORITY CHECK: If PDF presentation is active, handle slide narration
+        if (pdfPresentation.isPresenting && !transitioningSlideRef.current) {
+          transitioningSlideRef.current = true;
+          addDebugLog('[PDF] Avatar finished narrating slide - marking complete');
+
+          // Notify hook that narration is complete
+          pdfPresentation.onNarrationComplete();
+
+          // Advance to next slide after a brief pause
+          setTimeout(() => {
+            pdfPresentation.nextSlide();
+            setTimeout(() => {
+              transitioningSlideRef.current = false;
+            }, 500);
+          }, 1000);
+
+          setIsAvatarSpeaking(false);
+          isAvatarSpeakingRef.current = false;
+          setAvatarState("idle");
+          return; // Skip all module completion logic - presentation handles its own flow
+        }
+
         // Check for pending module transition
         // Note: We now do DIRECT transitions in handleUserSpeech, but this handles edge cases
         // where Tavus auto-responds (e.g., says "Sure") before our transition timer fires
@@ -539,8 +597,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
 
         // Handle module completion when avatar stops speaking
-        // Skip founder-video (handled by video stop callback) and final-quiz (handled separately)
-        if (activeModuleRef.current && activeModuleRef.current !== 'founder-video' && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+        // Skip video modules (handled by video stop callback) and final-quiz (handled separately)
+        if (activeModuleRef.current && !videoModules.includes(activeModuleRef.current) && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
           // Skip module completion if MCQ quiz is active (quiz handles its own flow)
           if (mcqQuizStateRef.current.isActive) {
             addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active`);
@@ -1450,6 +1508,33 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   }, [isAvatarSpeaking, isUserSpeaking, state, log, playDemoVideo, activeModule]);
 
+  // Wait for avatar to finish intro before starting PDF presentation
+  useEffect(() => {
+    if (pendingPresentationRef.current && !isAvatarSpeaking && !isUserSpeaking && !startingPresentationRef.current) {
+      startingPresentationRef.current = true;
+      const presentationData = pendingPresentationRef.current;
+      pendingPresentationRef.current = null;
+
+      addDebugLog('[PDF] Intro finished - starting PDF presentation now');
+
+      // Start the PDF presentation
+      pdfPresentation.startPresentation(presentationData).then(() => {
+        // Narrate first slide
+        setTimeout(() => {
+          pdfPresentation.narrateSlide(0);
+          startingPresentationRef.current = false;
+        }, 800);
+      }).catch((error) => {
+        addDebugLog(`[PDF] Failed to start presentation: ${error.message}`);
+        startingPresentationRef.current = false;
+        // Reset state on error
+        if (mountedRef.current) {
+          // Optionally notify user or try to recover
+        }
+      });
+    }
+  }, [isAvatarSpeaking, isUserSpeaking, pdfPresentation, addDebugLog]);
+
   // Wait for both user and avatar to finish speaking before showing PDF
   useEffect(() => {
     if (pendingPdfUrl && !isAvatarSpeaking && !isUserSpeaking) {
@@ -1489,28 +1574,55 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   }, [showPdf, log]);
 
   // Clone avatar video to PDF PIP
+  // Note: showPdf is for simple PDF/image display, pdfPresentation.isPresenting is for narrated presentations
   useEffect(() => {
-    if (showPdf && hasLiveVideo) {
+    if ((showPdf || pdfPresentation.isPresenting) && hasLiveVideo) {
       const sourceVideo = document.querySelector('#tavus-video-container video');
       const pipContainer = document.getElementById('pdf-avatar-pip');
 
       if (sourceVideo && pipContainer) {
+        // Check if video is already cloned (to avoid re-cloning on every render)
+        const existingVideo = pipContainer.querySelector('video');
+        if (existingVideo) {
+          return; // Video already cloned, controls are already in DOM via React
+        }
+
         const pipVideo = sourceVideo.cloneNode(true);
         pipVideo.style.width = '100%';
         pipVideo.style.height = '100%';
         pipVideo.style.objectFit = 'cover';
+        pipVideo.style.position = 'absolute';
+        pipVideo.style.top = '0';
+        pipVideo.style.left = '0';
+        pipVideo.style.zIndex = '10'; // Below controls (z-30)
         pipVideo.muted = false;
 
         if (sourceVideo.srcObject) {
           pipVideo.srcObject = sourceVideo.srcObject;
         }
 
-        pipContainer.innerHTML = '';
-        pipContainer.appendChild(pipVideo);
+        // Prepend video (so controls rendered by React stay on top)
+        pipContainer.prepend(pipVideo);
         pipVideo.play().catch(e => console.log('PDF PIP video play failed:', e));
       }
     }
-  }, [showPdf, hasLiveVideo]);
+
+    // Cleanup: Remove cloned video when presentation ends
+    return () => {
+      if (!pdfPresentation.isPresenting && !showPdf) {
+        const pipContainer = document.getElementById('pdf-avatar-pip');
+        if (pipContainer) {
+          const clonedVideo = pipContainer.querySelector('video');
+          if (clonedVideo) {
+            clonedVideo.pause();
+            clonedVideo.srcObject = null;
+            clonedVideo.parentNode.removeChild(clonedVideo);
+            addDebugLog('[PDF] Cleaned up cloned video element');
+          }
+        }
+      }
+    };
+  }, [showPdf, pdfPresentation.isPresenting, hasLiveVideo, addDebugLog]);
 
   // Clone avatar video to calendly PIP
   useEffect(() => {
@@ -2081,8 +2193,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           // Proactive flow: When avatar stops speaking, trigger module completion
           const currentModule = activeModuleRef.current;
 
-          // Handle module completion for all modules except founder-video (handled by video callback) and final-quiz
-          if (currentModule && currentModule !== 'founder-video' && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+          // Handle module completion for all modules except video modules (handled by video callback) and final-quiz
+          if (currentModule && !videoModules.includes(currentModule) && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
             // Check if this module requires user confirmation before advancing
             if (modulesRequiringConfirmation.includes(currentModule)) {
               addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
@@ -2685,9 +2797,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       });
     }
 
-    // Special handling for founder-video: Transition handled by video stop callback
-    if (currentModule === 'founder-video') {
-      addDebugLog('[MODULE-LOCK] Founder video - transition handled by handleFounderVideoStop');
+    // Special handling for video modules: Transition handled by video stop callback
+    if (videoModules.includes(currentModule)) {
+      addDebugLog(`[MODULE-LOCK] Video module ${currentModule} - transition handled by handleVideoModuleStop`);
       return;
     }
 
@@ -2712,15 +2824,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (activeModule === 'welcome-intro') {
       // Don't trigger from periodic checks - completion happens when avatar stops speaking
       return;
-    } else if (activeModule === 'founder-video' || activeModule === 'final-quiz') {
-      // Founder video: Complete when announcement is spoken (short phrase)
-      const hasFounderVideoAnnouncement = 
-        text.includes("founder's video") || 
+    } else if (videoModules.includes(activeModule) || activeModule === 'final-quiz') {
+      // Video modules: Complete when announcement is spoken (short phrase)
+      const hasVideoAnnouncement =
+        text.includes("success stories") ||
+        text.includes("founder's video") ||
         text.includes('founder video') ||
-        text.includes("here is our founder");
-      
-      if (hasFounderVideoAnnouncement && text.length > 20) {
-        addDebugLog('[MODULE-LOCK] ✅ Founder video announcement complete detected');
+        text.includes("here is our founder") ||
+        text.includes("please watch");
+
+      if (hasVideoAnnouncement && text.length > 20) {
+        addDebugLog(`[MODULE-LOCK] ✅ Video module announcement complete detected: ${activeModule}`);
         acc.completed = true;
         finishModuleSpeech();
         return;
@@ -2830,6 +2944,39 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       return;
     }
 
+    // 🛑 Interrupt any ongoing avatar speech when switching modules
+    if (dailyEventManagerRef.current) {
+      addDebugLog('[MODULE-SWITCH] 🛑 Interrupting avatar for module switch');
+      dailyEventManagerRef.current.interruptReplica();
+    }
+
+    // 🔴 CRITICAL: Close any active MCQ quiz when switching modules
+    if (mcqQuizStateRef.current.isActive) {
+      addDebugLog('[MCQ] Closing active quiz due to module switch');
+      setMcqQuizState({
+        isActive: false,
+        currentQuestionIndex: 0,
+        quizData: null,
+        score: 0,
+        totalQuestions: 0,
+        userAnswers: [],
+        showResults: false,
+        waitingForAvatarToFinish: false,
+      });
+    }
+
+    // 🔴 CRITICAL: End any active PDF presentation when switching modules
+    if (pdfPresentation.isPresenting) {
+      addDebugLog('[PDF] Ending presentation due to module switch');
+      await pdfPresentation.endPresentation();
+    }
+
+    // Clear any pending state
+    pendingPresentationRef.current = null;
+    pendingDemoVideoRef.current = null;
+    startingPresentationRef.current = false;
+    transitioningSlideRef.current = false;
+
     setActiveModule(moduleId);
     activeModuleRef.current = moduleId; // Update ref immediately for callbacks
 
@@ -2873,58 +3020,122 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       );
       
       // Set waiting for answer after avatar finishes speaking (detected via transcript)
-    } else if (moduleId === 'founder-video') {
-      // Special handling for founder-video: Announce and play video automatically
-      // 🔒 LOCK IS ALREADY ACTIVE from welcome-intro - keep it active
-      addDebugLog('[MODULE-LOCK] Founder video module - lock already active, announcing and playing video');
-      
-      const founderVideoUrl = 'https://www.youtube.com/watch?v=YtB5fjEO1zc';
-      
-      // 🔇 Ensure microphone is muted (should already be muted from welcome-intro)
+    } else if (videoModules.includes(moduleId)) {
+      // Special handling for video modules: Announce and play video automatically
+      const moduleConfig = moduleDefinitions[moduleId];
+      const videoUrl = moduleConfig?.videoUrl;
+
+      if (!videoUrl) {
+        addDebugLog(`[MODULE-LOCK] ⚠️ No video URL for module: ${moduleId}`);
+        return;
+      }
+
+      addDebugLog(`[MODULE-LOCK] Video module ${moduleId} - announcing and playing video`);
+
+      // 🔇 Ensure microphone is muted
       if (sessionManagerRef.current?.isInitialized) {
-        addDebugLog('[MODULE-LOCK] 🔇 Ensuring microphone is muted for founder video');
+        addDebugLog(`[MODULE-LOCK] 🔇 Ensuring microphone is muted for ${moduleId}`);
         sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
           addDebugLog(`[MODULE-LOCK] Failed to mute microphone: ${err.message}`);
         });
         setIsMuted(true);
       }
-      
-      // 🔴 Keep Tavus listening disabled (should already be disabled from welcome-intro)
+
+      // 🔴 Keep Tavus listening disabled
       if (dailyEventManagerRef.current) {
         dailyEventManagerRef.current.disableListening();
-        addDebugLog('[MODULE-LOCK] 🔇 Keeping Tavus listening disabled for founder video');
+        addDebugLog(`[MODULE-LOCK] 🔇 Keeping Tavus listening disabled for ${moduleId}`);
       }
-      
-      // Use the video tool mechanism to play the founder video
-      // Store video URL in pendingDemoVideoRef - this will trigger the useEffect that plays videos
-      // The useEffect at line 1086 has special handling for founder-video to play immediately
-      addDebugLog(`[MODULE-LOCK] 🎬 Queuing founder video for playback: ${founderVideoUrl}`);
-      pendingDemoVideoRef.current = founderVideoUrl;
-      addDebugLog('[MODULE-LOCK] ✅ Founder video queued - useEffect will play it immediately');
-      
-      // Send announcement message (non-blocking, don't wait for it)
+
+      // Queue video for playback - will play after avatar finishes speaking
+      addDebugLog(`[MODULE-LOCK] 🎬 Queuing video for playback: ${videoUrl}`);
+      pendingDemoVideoRef.current = videoUrl;
+
+      // Send announcement message
       if (prompt) {
         currentModulePromptRef.current = prompt;
-        // Send announcement in background
         setTimeout(() => {
           if (mountedRef.current) {
-            addDebugLog(`[MODULE-LOCK] Sending founder video announcement as ECHO`);
+            addDebugLog(`[MODULE-LOCK] Sending video module announcement as ECHO`);
             sendMessageToReplica(prompt, 'echo');
           }
         }, 100);
       }
     } else {
-      // 🔴 CRITICAL: Send module prompt as ECHO (not RESPOND) to prevent Tavus from treating it as user input
-      // ECHO makes agent speak exactly what we send without processing it as user speech
-      if (prompt) {
-        // Store prompt text to detect and ignore matching user utterances
-        currentModulePromptRef.current = prompt;
-        addDebugLog(`[MODULE-LOCK] Sending module prompt as ECHO (not RESPOND) to prevent user speech detection`);
-        sendMessageToReplica(prompt, 'echo'); // Use 'echo' type for module prompts
+      // Get module config to check for presentation
+      const moduleConfig = moduleDefinitions[moduleId];
+
+      if (moduleConfig?.hasPresentation && moduleConfig.presentationConfig) {
+        // Special handling for presentation modules: Speak intro first, then show PDF and narrate slides
+        addDebugLog(`[MODULE-LOCK] Presentation module ${moduleId} - will speak intro then load PDF`);
+
+        // Get presentation config
+        const presentationData = moduleConfig.presentationConfig === 'functions-at-entri'
+        ? functionsAtEntriPresentation
+        : null;
+
+      if (!presentationData) {
+        addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);
+        return;
       }
-      // Mark module as completed after avatar finishes (handled via transcript)
+
+      // 🛑 Interrupt any ongoing avatar speech
+      if (dailyEventManagerRef.current) {
+        addDebugLog(`[MODULE-LOCK] 🛑 Interrupting avatar to start presentation`);
+        dailyEventManagerRef.current.interruptReplica();
+      }
+
+      // 🔇 Ensure microphone is muted
+      if (sessionManagerRef.current?.isInitialized) {
+        addDebugLog(`[MODULE-LOCK] 🔇 Muting microphone for presentation`);
+        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+          addDebugLog(`[MODULE-LOCK] Failed to mute microphone: ${err.message}`);
+        });
+        setIsMuted(true);
+      }
+
+      // 🔴 Keep Tavus listening disabled
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        addDebugLog(`[MODULE-LOCK] 🔇 Keeping Tavus listening disabled for presentation`);
+      }
+
+      // First, speak the intro prompt (avatar visible, no PDF yet)
+      if (prompt) {
+        currentModulePromptRef.current = prompt;
+        addDebugLog(`[MODULE-LOCK] 📢 Speaking presentation intro first`);
+        sendMessageToReplica(prompt, 'echo');
+
+        // Store presentation data to start after intro completes
+        pendingPresentationRef.current = {
+          ...presentationData,
+          moduleId,
+        };
+      } else {
+        // No intro, start presentation immediately
+        addDebugLog(`[MODULE-LOCK] 📊 No intro prompt, starting PDF presentation immediately`);
+        await pdfPresentation.startPresentation({
+          ...presentationData,
+          moduleId,
+        });
+
+        setTimeout(() => {
+          pdfPresentation.narrateSlide(0);
+        }, 800);
+      }
+      } else {
+        // 🔴 CRITICAL: Send module prompt as ECHO (not RESPOND) to prevent Tavus from treating it as user input
+        // ECHO makes agent speak exactly what we send without processing it as user speech
+        if (prompt) {
+          // Store prompt text to detect and ignore matching user utterances
+          currentModulePromptRef.current = prompt;
+          addDebugLog(`[MODULE-LOCK] Sending module prompt as ECHO (not RESPOND) to prevent user speech detection`);
+          sendMessageToReplica(prompt, 'echo'); // Use 'echo' type for module prompts
+        }
+        // Mark module as completed after avatar finishes (handled via transcript)
+      }
     }
-  }, [personaId, quizState.isActive, sendMessageToReplica, setQuizState, setActiveModule, setTranscripts, isModuleUnlocked]);
+  }, [personaId, quizState.isActive, sendMessageToReplica, setQuizState, setActiveModule, setTranscripts, isModuleUnlocked, pdfPresentation, addDebugLog, setMcqQuizState]);
   
   // Store handleModuleSelect in ref for proactive continuation
   useEffect(() => {
@@ -3567,7 +3778,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         )}
 
         {/* Control bar - only show when connected and NOT in PIP mode (demo/calendly/pdf) and NOT during MCQ quiz */}
-        {!isConnecting && !connectionError && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && !mcqQuizState.isActive && renderControlBar()}
+        {!isConnecting && !connectionError && !sessionTimedOut && !isDemoPlaying && !showCalendly && !showPdf && !pdfPresentation.isPresenting && !mcqQuizState.isActive && renderControlBar()}
 
         {/* MCQ Quiz Overlay - show when MCQ quiz is active */}
         {mcqQuizState.isActive && mcqQuizState.quizData && (
@@ -3585,6 +3796,44 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             sidebarVisible={shouldShowLearningModules() && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf}
             sidebarWidth={320}
           />
+        )}
+
+        {/* PDF Presentation overlay - PIP mode like video */}
+        {pdfPresentation.isPresenting && pdfPresentation.currentPdfUrl && (
+          <div className="absolute inset-0 z-10 bg-black">
+            {/* PDF viewer - main area, avoid sidebar (left-[340px]) and avatar PIP (right-[420px]) */}
+            <div className="absolute top-6 bottom-6 left-[340px] right-[420px] rounded-2xl overflow-hidden border border-white/30 shadow-[0_0_60px_rgba(255,255,255,0.25)] bg-white">
+              <PdfPresentation
+                pdfUrl={pdfPresentation.currentPdfUrl}
+                slides={pdfPresentation.presentationConfig?.slides || []}
+                currentSlideIndex={pdfPresentation.currentSlideIndex}
+                onSlideChange={(index) => {
+                  addDebugLog(`[PDF] Manual slide change to: ${index}`);
+                  pdfPresentation.goToSlide(index);
+                }}
+              />
+              {/* Close presentation button */}
+              <button
+                onClick={() => {
+                  addDebugLog('[PDF] User closed presentation');
+                  pdfPresentation.endPresentation();
+                }}
+                className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white z-20 border border-white/30 hover:bg-black/70 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Avatar PIP - bottom right */}
+            <div
+              id="pdf-avatar-pip"
+              className={`absolute bottom-4 right-4 overflow-hidden rounded-2xl border border-white/30 shadow-[0_0_50px_rgba(255,255,255,0.2)] bg-black ${
+                isMobile ? 'w-80 h-96' : 'w-96 h-[500px]'
+              }`}
+            >
+              {/* PIP controls inside avatar */}
+              {renderPipControlBar()}
+            </div>
+          </div>
         )}
       </motion.div>
     );
