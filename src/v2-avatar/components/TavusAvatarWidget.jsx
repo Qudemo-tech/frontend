@@ -426,12 +426,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     sendMessage: sendMessageToReplica,
     log: addDebugLog,
     onPresentationEnd: () => {
-      addDebugLog('[PDF] Presentation ended - advancing to next module');
+      const currentModule = activeModuleRef.current;
+      addDebugLog('[PDF] Presentation ended for module:', currentModule);
 
-      // Find current module index and advance (use ref for current state)
-      const currentIndex = moduleOrder.indexOf(activeModuleRef.current);
+      // Advance to next module (which might be a quiz or another lesson)
+      const currentIndex = moduleOrder.indexOf(currentModule);
       if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
         const nextModuleId = moduleOrder[currentIndex + 1];
+        addDebugLog('[PDF] Advancing to next module:', nextModuleId);
         handleModuleSelectRef.current?.(nextModuleId);
       }
     },
@@ -494,53 +496,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
         if (mcqQuizStateRef.current.isActive) {
           const quizState = mcqQuizStateRef.current;
-          addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - pendingNextQuestion: ${quizState.pendingNextQuestion}, pendingQuizComplete: ${quizState.pendingQuizComplete}`);
+          addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - pendingNextQuestion: ${quizState.pendingNextQuestion}, pendingQuizComplete: ${quizState.pendingQuizComplete}, waitingForAvatarToFinish: ${quizState.waitingForAvatarToFinish}`);
 
-          // Check if we need to ask next question (avatar finished feedback)
-          if (quizState.pendingNextQuestion) {
-            addDebugLog('[MCQ-QUIZ] Avatar finished feedback - asking next question');
-
-            // Reset flags and ask next question
+          // Clear waitingForAvatarToFinish when avatar finishes speaking feedback
+          // (Advancement is now handled by calculated timeout in handleMcqAnswerSelect)
+          if (quizState.waitingForAvatarToFinish && (quizState.pendingNextQuestion || quizState.pendingQuizComplete)) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished feedback - clearing flags (advancement handled by timeout)');
             setMcqQuizState(prev => ({
               ...prev,
               waitingForAvatarToFinish: false,
               pendingNextQuestion: false,
+              pendingQuizComplete: false,
             }));
 
-            // Small delay before next question for smoother UX
-            setTimeout(() => {
-              if (askNextMcqQuestionRef.current) {
-                askNextMcqQuestionRef.current();
-              }
-            }, 500);
-
-            // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+            // Keep listening disabled
             if (dailyEventManagerRef.current) {
               dailyEventManagerRef.current.disableListening();
               listeningStateRef.current = 'disabled';
             }
           }
-          // Check if we need to complete quiz (avatar finished last feedback)
-          else if (quizState.pendingQuizComplete) {
-            addDebugLog('[MCQ-QUIZ] Avatar finished last feedback - completing quiz');
-
-            // Reset flags and complete quiz
-            setMcqQuizState(prev => ({
-              ...prev,
-              waitingForAvatarToFinish: false,
-              pendingQuizComplete: false,
-            }));
-
-            // Small delay before completion for smoother UX
-            setTimeout(() => {
-              if (completeMcqQuizRef.current) {
-                completeMcqQuizRef.current();
-              }
-            }, 500);
-          }
           // Enable MCQ selection when avatar finishes speaking question (not feedback)
           else if (quizState.waitingForAvatarToFinish) {
-            addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection, keeping listening DISABLED');
+            addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection');
             setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
 
             // CRITICAL: Keep Tavus listening disabled during MCQ quiz
@@ -579,20 +556,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
 
         // Check for pending module transition
-        // Note: We now do DIRECT transitions in handleUserSpeech, but this handles edge cases
-        // where Tavus auto-responds (e.g., says "Sure") before our transition timer fires
+        // This handles transitions after quiz completion or when Tavus auto-responds
         if (pendingModuleTransitionRef.current) {
           const nextModuleId = pendingModuleTransitionRef.current;
 
-          // Tavus said something (likely auto-response like "Sure" or "Okay")
-          // We don't care what it said - we have a pending transition to execute
           addDebugLog(`[MODULE-TRANSITION] Pending transition detected after Tavus speech: "${lastSpeech}" - proceeding to: ${nextModuleId}`);
 
-          // Don't clear pendingModuleTransitionRef here - let the setTimeout in handleUserSpeech handle it
-          // Just mark avatar as not speaking
+          // Clear the pending transition
+          pendingModuleTransitionRef.current = null;
+
+          // Mark avatar as not speaking
           setIsAvatarSpeaking(false);
           isAvatarSpeakingRef.current = false;
           setAvatarState("idle");
+
+          // Execute the module transition after a brief delay
+          setTimeout(() => {
+            if (mountedRef.current && handleModuleSelectRef.current) {
+              addDebugLog(`[MODULE-TRANSITION] Executing transition to: ${nextModuleId}`);
+              handleModuleSelectRef.current(nextModuleId);
+            }
+          }, 500);
+
           return;
         }
 
@@ -2109,51 +2094,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             const quizState = mcqQuizStateRef.current;
             addDebugLog(`[MCQ-QUIZ] Avatar stopped speaking during quiz - pendingNextQuestion: ${quizState.pendingNextQuestion}, pendingQuizComplete: ${quizState.pendingQuizComplete}`);
 
-            // Check if we need to ask next question (avatar finished feedback)
-            if (quizState.pendingNextQuestion) {
-              addDebugLog('[MCQ-QUIZ] Avatar finished feedback - asking next question');
-
-              // Reset flags and ask next question
+            // Clear waitingForAvatarToFinish when avatar finishes speaking feedback
+            // (Advancement is now handled by calculated timeout in handleMcqAnswerSelect)
+            if (quizState.waitingForAvatarToFinish && (quizState.pendingNextQuestion || quizState.pendingQuizComplete)) {
+              addDebugLog('[MCQ-QUIZ] Avatar finished feedback - clearing flags (advancement handled by timeout)');
               setMcqQuizState(prev => ({
                 ...prev,
                 waitingForAvatarToFinish: false,
                 pendingNextQuestion: false,
+                pendingQuizComplete: false,
               }));
 
-              // Small delay before next question for smoother UX
-              setTimeout(() => {
-                if (askNextMcqQuestionRef.current) {
-                  askNextMcqQuestionRef.current();
-                }
-              }, 500);
-
-              // CRITICAL: Keep Tavus listening disabled during MCQ quiz
+              // Keep listening disabled
               if (dailyEventManagerRef.current) {
                 dailyEventManagerRef.current.disableListening();
                 listeningStateRef.current = 'disabled';
               }
             }
-            // Check if we need to complete quiz (avatar finished last feedback)
-            else if (quizState.pendingQuizComplete) {
-              addDebugLog('[MCQ-QUIZ] Avatar finished last feedback - completing quiz');
-
-              // Reset flags and complete quiz
-              setMcqQuizState(prev => ({
-                ...prev,
-                waitingForAvatarToFinish: false,
-                pendingQuizComplete: false,
-              }));
-
-              // Small delay before completion for smoother UX
-              setTimeout(() => {
-                if (completeMcqQuizRef.current) {
-                  completeMcqQuizRef.current();
-                }
-              }, 500);
-            }
             // Enable MCQ selection when avatar finishes speaking question (not feedback)
             else if (quizState.waitingForAvatarToFinish) {
-              addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection, keeping listening DISABLED');
+              addDebugLog('[MCQ-QUIZ] Avatar finished speaking question - enabling selection');
               setMcqQuizState(prev => ({ ...prev, waitingForAvatarToFinish: false }));
 
               // CRITICAL: Keep Tavus listening disabled during MCQ quiz
@@ -2170,20 +2130,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }
 
           // Check for pending module transition
-          // Note: We now do DIRECT transitions in handleUserSpeech, but this handles edge cases
-          // where Tavus auto-responds (e.g., says "Sure") before our transition timer fires
+          // This handles transitions after quiz completion or when Tavus auto-responds
           if (pendingModuleTransitionRef.current) {
             const nextModuleId = pendingModuleTransitionRef.current;
 
-            // Tavus said something (likely auto-response like "Sure" or "Okay")
-            // We don't care what it said - we have a pending transition to execute
             addDebugLog(`[MODULE-TRANSITION] Pending transition detected after Tavus speech: "${lastSpeech}" - proceeding to: ${nextModuleId}`);
 
-            // Don't clear pendingModuleTransitionRef here - let the setTimeout in handleUserSpeech handle it
-            // Just mark avatar as not speaking
+            // Clear the pending transition
+            pendingModuleTransitionRef.current = null;
+
+            // Mark avatar as not speaking
             setIsAvatarSpeaking(false);
             isAvatarSpeakingRef.current = false;
             setAvatarState("idle");
+
+            // Execute the module transition after a brief delay
+            setTimeout(() => {
+              if (mountedRef.current && handleModuleSelectRef.current) {
+                addDebugLog(`[MODULE-TRANSITION] Executing transition to: ${nextModuleId}`);
+                handleModuleSelectRef.current(nextModuleId);
+              }
+            }, 500);
+
             return;
           }
 
@@ -2594,11 +2562,32 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       feedbackMessage += " Let me read the next question.";
     }
 
-    addDebugLog(`[MCQ-QUIZ] Sending feedback, pendingNextQuestion: ${!isLastQuestion}, pendingQuizComplete: ${isLastQuestion}`);
+    addDebugLog(`[MCQ-QUIZ] Sending feedback (${feedbackMessage.length} chars), pendingNextQuestion: ${!isLastQuestion}, pendingQuizComplete: ${isLastQuestion}`);
 
     // Use ECHO mode - avatar speaks exactly this feedback without LLM processing
-    // The next question will be triggered in onReplicaStopSpeaking when avatar finishes
     sendMessageToReplica(feedbackMessage, 'echo');
+
+    // Calculate speaking time based on message length
+    // Avatar speaks faster than average human: ~180 words/min = 3 words/sec
+    // Average word length: ~5 chars, so ~15 chars/sec
+    // Add minimal buffer (500ms) for natural pauses
+    const estimatedSpeakingTime = Math.ceil((feedbackMessage.length / 15) * 1000) + 500;
+    addDebugLog(`[MCQ-QUIZ] Estimated speaking time: ${estimatedSpeakingTime}ms`);
+
+    // Schedule next action after avatar finishes speaking
+    setTimeout(() => {
+      if (!isLastQuestion) {
+        addDebugLog('[MCQ-QUIZ] Asking next question after feedback');
+        if (askNextMcqQuestionRef.current) {
+          askNextMcqQuestionRef.current();
+        }
+      } else {
+        addDebugLog('[MCQ-QUIZ] Completing quiz after last feedback');
+        if (completeMcqQuizRef.current) {
+          completeMcqQuizRef.current();
+        }
+      }
+    }, estimatedSpeakingTime);
   }, [addDebugLog, sendMessageToReplica]);
 
   // Ask the next MCQ question
@@ -2968,7 +2957,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // 🔴 CRITICAL: End any active PDF presentation when switching modules
     if (pdfPresentation.isPresenting) {
       addDebugLog('[PDF] Ending presentation due to module switch');
-      await pdfPresentation.endPresentation();
+      await pdfPresentation.endPresentation(false); // Don't trigger callback to prevent infinite loop
     }
 
     // Clear any pending state
@@ -2992,34 +2981,24 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     // Get module prompt from persona config
     const prompt = persona.getModulePrompt(moduleId);
-    
-    if (moduleId === 'final-quiz' && persona.hasFeature('finalQuiz')) {
-      // Get final quiz questions from persona config
-      const finalQuizConfig = persona.quizzes.finalQuiz;
-      const quizQuestions = finalQuizConfig?.questions || [];
-      
-      // Initialize quiz state
-      setQuizState({
-        isActive: true,
-        currentQuestionIndex: 0,
-        questions: quizQuestions,
-        score: 0,
-        waitingForAnswer: false,
-        waitingForConfirmation: false,
-        lastQuestionAsked: null,
-        questionResults: [],
-        isAskingQuestion: true // Avatar will ask first question
-      });
-      
-      // Send message to avatar to start quiz with first question
-      // Use ECHO for quiz prompts too to prevent user speech detection
-      const firstQuestion = quizQuestions[0].question;
-      sendMessageToReplica(
-        `${prompt} Now ask the first question: "${firstQuestion}" IMPORTANT: When the student answers, only say if it's correct, partially correct, or wrong. Do NOT explain the answer or provide corrections. Just say "That's correct!" or "That's not quite right" and immediately ask the next question. Save all explanations for the end of the quiz.`,
-        'echo' // Use echo to prevent treating as user input
-      );
-      
-      // Set waiting for answer after avatar finishes speaking (detected via transcript)
+
+    // Check if this is a quiz module (either final quiz or module quiz)
+    const moduleConfig = moduleDefinitions[moduleId];
+    const isQuizModule = moduleConfig?.type === 'quiz';
+
+    if (isQuizModule && persona.hasFeature('mcqQuiz')) {
+      // Use MCQ quiz system for all quiz modules (both module quizzes and final quiz)
+      addDebugLog(`[MODULE-LOCK] Quiz module detected: ${moduleId} - using MCQ quiz system`);
+
+      // Start MCQ quiz (this will handle muting, listening disable, etc.)
+      if (startMcqQuizRef.current) {
+        startMcqQuizRef.current(moduleId);
+      } else {
+        addDebugLog(`[MODULE-LOCK] ⚠️ startMcqQuiz not initialized yet`);
+      }
+
+      // Module lock will be released when quiz completes
+      return; // Don't execute any other module handling logic for quiz modules
     } else if (videoModules.includes(moduleId)) {
       // Special handling for video modules: Announce and play video automatically
       const moduleConfig = moduleDefinitions[moduleId];

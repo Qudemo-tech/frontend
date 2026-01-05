@@ -28,7 +28,7 @@ export const courseStructure = [
   {
     id: 'section-welcome',
     title: '1. Welcome & Introduction',
-    items: ['welcome-intro', 'founder-video'],
+    items: ['welcome-intro', 'founder-video', 'founder-video-quiz'],
   },
   {
     id: 'section-success-stories',
@@ -38,7 +38,7 @@ export const courseStructure = [
   {
     id: 'section-functions',
     title: '3. Functions at Entri',
-    items: ['functions-at-entri'],
+    items: ['functions-at-entri', 'functions-at-entri-quiz'],
   },
   {
     id: 'section-verticals',
@@ -95,6 +95,15 @@ export const moduleDefinitions = {
     hasVideo: true,
     videoUrl: 'https://www.youtube.com/watch?v=YtB5fjEO1zc',
   },
+  'founder-video-quiz': {
+    id: 'founder-video-quiz',
+    title: "Founder's Video Quiz",
+    description: 'Test your understanding of the video',
+    type: 'quiz',
+    questions: 8,
+    icon: ICONS.AWARD,
+    hasVideo: false,
+  },
   'user-success-stories': {
     id: 'user-success-stories',
     title: 'User Success Stories',
@@ -115,6 +124,15 @@ export const moduleDefinitions = {
     hasVideo: false,
     hasPresentation: true,
     presentationConfig: 'functions-at-entri', // References presentation file
+  },
+  'functions-at-entri-quiz': {
+    id: 'functions-at-entri-quiz',
+    title: 'Functions Quiz',
+    description: 'Test your knowledge of Entri functions',
+    type: 'quiz',
+    questions: 8,
+    icon: ICONS.AWARD,
+    hasVideo: false,
   },
   'vertical-types': {
     id: 'vertical-types',
@@ -179,8 +197,10 @@ export const moduleDefinitions = {
 export const moduleOrder = [
   'welcome-intro',
   'founder-video',
+  'founder-video-quiz',
   'user-success-stories',
   'functions-at-entri',
+  'functions-at-entri-quiz',
   'vertical-types',
   'posh-info',
   'employee-benefits',

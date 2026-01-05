@@ -136,19 +136,24 @@ export const usePdfPresentation = ({
 
   /**
    * End presentation and cleanup
+   * @param {boolean} notifyParent - Whether to call onPresentationEnd callback (default: true)
    */
-  const endPresentation = useCallback(async () => {
-    log('PDF', 'Ending presentation');
+  const endPresentation = useCallback(async (notifyParent = true) => {
+    log('PDF', `Ending presentation (notifyParent: ${notifyParent})`);
 
-    // Reset state
+    // Reset state FIRST before calling callback to prevent race conditions
     setIsPresenting(false);
     setCurrentPdfUrl(null);
     setCurrentSlideIndex(0);
     setPresentationConfig(null);
     waitingForNarrationRef.current = false;
 
-    // Notify parent
-    onPresentationEnd?.();
+    // Only notify parent if this is a natural completion (not forced termination)
+    if (notifyParent) {
+      // Small delay to ensure state updates propagate before callback
+      await new Promise(resolve => setTimeout(resolve, 100));
+      onPresentationEnd?.();
+    }
   }, [onPresentationEnd, log]);
 
   return {

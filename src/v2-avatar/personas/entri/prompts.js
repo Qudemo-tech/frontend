@@ -50,9 +50,13 @@ Do you have any questions before we watch the founders' video? ... Just say "yes
 
   'founder-video': "Now... let me show you a special video message from our founders. ... Please watch, and I'll be right here when it's done.",
 
+  'founder-video-quiz': `Alright! ... Now that you've watched the founder's video, ... let's test your understanding with a quick quiz. ... I'll ask you a few questions... Please select your answer from the options on screen.`,
+
   'user-success-stories': "Now... let me show you some inspiring success stories from our users. ... Please watch, and I'll be right here when it's done.",
 
   'functions-at-entri': `Let's explore the different functions at Entri. ... In this section, you'll learn about the key teams that work together to make our mission possible.`,
+
+  'functions-at-entri-quiz': `Alright! ... It's time to test your knowledge about Entri's functions. ... I'll ask you a few questions... Please select your answer from the options on screen.`,
 
   'vertical-types': `Now let's explore the different verticals at Entri.
 

@@ -5,7 +5,100 @@
  */
 
 export const moduleQuizzes = {
-  'founder-video': {
+  'functions-at-entri-quiz': {
+    intro: "Now that you've learned about Entri's functions, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    questions: [
+      {
+        question: "Which team is responsible for creating and maintaining the product features that users interact with?",
+        options: [
+          "Academics and Content",
+          "Growth",
+          "Engineering, Product and Design",
+          "User Happiness"
+        ],
+        correctIndex: 2,
+        explanation: "The Engineering, Product, and Design team is responsible for developing all aspects of Entri's products, including the features that users interact with. Their main focus is to ensure that the product delivers a high-quality user experience."
+      },
+      {
+        question: "What is the main responsibility of the Academics and Content team?",
+        options: [
+          "Managing Financial reports",
+          "Providing Placement assistance",
+          "Designing and creating course syllabus and content",
+          "Driving user acquisition and retention"
+        ],
+        correctIndex: 2,
+        explanation: "The Academics and Content team is responsible for developing the educational materials, including well-structured syllabuses and content, to ensure that learners have a high-quality learning experience."
+      },
+      {
+        question: "Which team ensures that users have a positive experience and are valued?",
+        options: [
+          "Media",
+          "User Happiness",
+          "Inside Sales",
+          "Finance and Accounting"
+        ],
+        correctIndex: 1,
+        explanation: "The User Happiness team is dedicated to making sure that users feel satisfied and valued by addressing their concerns promptly and ensuring a positive interaction throughout their journey with Entri."
+      },
+      {
+        question: "The Media team is responsible for:",
+        options: [
+          "Creating educational content and managing placements",
+          "Financial budgeting and payroll management",
+          "Producing in-app videos and managing content on platforms like YouTube",
+          "Overseeing recruitment and employee training"
+        ],
+        correctIndex: 2,
+        explanation: "The Media team focuses on creating and managing engaging content, including in-app videos and social media materials, such as content for YouTube. Their role is to create promotional and educational content across all platforms."
+      },
+      {
+        question: "Which team works closely with industry partners to assist learners with job placements?",
+        options: [
+          "Engineering, Product, and Design",
+          "Placements",
+          "Inside Sales",
+          "Administration and Operations"
+        ],
+        correctIndex: 1,
+        explanation: "The Placements team is responsible for helping learners transition from education to employment by offering job placement assistance, resume building, and interview preparation, while also working closely with industry partners."
+      },
+      {
+        question: "What is the focus of Entri's Growth team?",
+        options: [
+          "Managing human resources and employee benefits",
+          "Generating creative media content",
+          "Driving user acquisition and retention through data and marketing",
+          "Ensuring customer happiness and resolving user issues"
+        ],
+        correctIndex: 2,
+        explanation: "The Growth team focuses on expanding Entri's user base by using data-driven strategies, marketing campaigns, and partnerships to attract new users and retain current ones, which is essential for the company's overall business goals."
+      },
+      {
+        question: "What is the largest team at Entri that focuses on reaching out to potential clients and driving revenue?",
+        options: [
+          "Growth",
+          "Inside Sales",
+          "Placement",
+          "Finance and Accounting"
+        ],
+        correctIndex: 1,
+        explanation: "Inside Sales is the largest team at Entri, responsible for driving revenue by reaching out to potential clients, qualifying leads, and supporting the company's overall growth. They focus on user acquisition and delivering excellent service."
+      },
+      {
+        question: "Which function ensures that Entri complies with labor laws and manages employee benefits?",
+        options: [
+          "Finance and Accounting",
+          "Human Resources",
+          "Administration and Operations",
+          "Founder's Office"
+        ],
+        correctIndex: 1,
+        explanation: "The Human Resources (HR) team ensures compliance with labor laws and manages employee relations, benefits, recruitment, and training. They play a vital role in maintaining a positive work environment."
+      }
+    ]
+  },
+  'founder-video-quiz': {
     intro: "Now that you have seen the video, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
     questions: [
       {
