@@ -205,6 +205,91 @@ export const moduleQuizzes = {
     completionMessage: "Great job completing the Entri quiz! You now have a good understanding of our company. Let's continue with the next topic."
   },
 
+  'hr-policies-quiz': {
+    intro: "Now that you've learned about HR Policies, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    questions: [
+      {
+        question: "How many earned leaves can an employee carry forward per year?",
+        options: [
+          "10",
+          "20",
+          "30",
+          "40"
+        ],
+        correctIndex: 2,
+        explanation: "Employees are granted 18 earned leaves annually, with 1.5 leaves credited monthly."
+      },
+      {
+        question: "Which software is used for internal communication within the company?",
+        options: [
+          "Jira",
+          "Slack",
+          "Gsuite",
+          "Gitlab"
+        ],
+        correctIndex: 1,
+        explanation: "Slack is designated as the official platform for internal communication."
+      },
+      {
+        question: "How many days of wedding leave are granted to eligible employees?",
+        options: [
+          "3 days",
+          "5 days",
+          "7 days",
+          "10 days"
+        ],
+        correctIndex: 1,
+        explanation: "Eligible team members are granted 5 days of wedding leave."
+      },
+      {
+        question: "How many sick leaves are employees granted annually at Entri?",
+        options: [
+          "10 days",
+          "8 days",
+          "6 days",
+          "5 days"
+        ],
+        correctIndex: 2,
+        explanation: "Entri grants employees 6 sick leaves annually, credited at the beginning of the year."
+      },
+      {
+        question: "Comp Off can be claimed for working on which of the following?",
+        options: [
+          "Sick days",
+          "Public Holidays or Weekends",
+          "Personal Holidays",
+          "Paid Time off"
+        ],
+        correctIndex: 1,
+        explanation: "Employees can apply for Comp Off when they work on public holidays or weekends."
+      },
+      {
+        question: "What is the total number of holidays (mandatory, regional, and festival) provided annually?",
+        options: [
+          "10",
+          "19",
+          "15",
+          "18"
+        ],
+        correctIndex: 2,
+        explanation: "The company provides 15 holidays annually, including mandatory, regional, and festival holidays."
+      },
+      {
+        question: "How many days of paternity leave are provided for new fathers?",
+        options: [
+          "3",
+          "5",
+          "7",
+          "10"
+        ],
+        correctIndex: 1,
+        explanation: "New fathers are eligible for 5 days of paternity leave."
+      }
+    ],
+    passingScore: 5,
+    completionMessage: "Excellent work! You've completed the HR Policies quiz. Let's continue with the next topic."
+  },
+
   'posh-info': {
     intro: "Now let's do a quick quiz to check your understanding of POSH. I'll read each question with 4 options. Please click your answer on the screen.",
     questions: [

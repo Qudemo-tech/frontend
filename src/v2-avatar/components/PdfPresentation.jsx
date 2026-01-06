@@ -3,10 +3,12 @@
  *
  * Displays PDF presentations with synchronized avatar narration.
  * Uses pre-scripted narrations for avatar TTS.
+ * Includes navigation controls for user to move between slides.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
 // Configure PDF.js worker - use local worker from public directory
 // This avoids CDN issues and CORS problems
@@ -22,6 +24,7 @@ const PdfPresentation = ({
   slides = [],
   currentSlideIndex = 0,
   onSlideChange,
+  onRepeatSlide,
   onPresentationEnd,
   onClose,
 }) => {
@@ -66,6 +69,13 @@ const PdfPresentation = ({
     onClose?.();
   };
 
+  const handleRepeat = () => {
+    onRepeatSlide?.(currentSlideIndex);
+  };
+
+  const isFirstSlide = currentSlideIndex === 0;
+  const isLastSlide = currentSlideIndex === slides.length - 1;
+
   return (
     <div className="pdf-embedded-container" ref={containerRef}>
       {/* PDF Viewer - full screen, no padding */}
@@ -102,6 +112,42 @@ const PdfPresentation = ({
         </Document>
       </div>
 
+      {/* Navigation Controls - at bottom */}
+      <div className="pdf-nav-controls">
+        <button
+          className={`pdf-nav-btn ${isFirstSlide ? 'disabled' : ''}`}
+          onClick={handlePrevious}
+          disabled={isFirstSlide}
+          title="Previous slide"
+        >
+          <ChevronLeft size={24} />
+          <span>Previous</span>
+        </button>
+
+        <div className="pdf-nav-center">
+          <span className="pdf-slide-indicator">
+            {currentSlideIndex + 1} / {slides.length}
+          </span>
+          <button
+            className="pdf-nav-btn repeat-btn"
+            onClick={handleRepeat}
+            title="Repeat this slide"
+          >
+            <RotateCcw size={18} />
+            <span>Repeat</span>
+          </button>
+        </div>
+
+        <button
+          className="pdf-nav-btn"
+          onClick={handleNext}
+          title={isLastSlide ? "Finish presentation" : "Next slide"}
+        >
+          <span>{isLastSlide ? 'Finish' : 'Next'}</span>
+          <ChevronRight size={24} />
+        </button>
+      </div>
+
       <style jsx>{`
         .pdf-embedded-container {
           width: 100%;
@@ -109,6 +155,61 @@ const PdfPresentation = ({
           display: flex;
           flex-direction: column;
           background: transparent;
+        }
+
+        .pdf-nav-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 20px;
+          background: rgba(0, 0, 0, 0.8);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          z-index: 10;
+        }
+
+        .pdf-nav-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 16px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          color: white;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .pdf-nav-btn:hover:not(.disabled) {
+          background: rgba(255, 255, 255, 0.2);
+          border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .pdf-nav-btn.disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .pdf-nav-center {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .pdf-slide-indicator {
+          color: white;
+          font-size: 14px;
+          font-weight: 600;
+          padding: 6px 12px;
+          background: rgba(59, 130, 246, 0.3);
+          border-radius: 6px;
+        }
+
+        .repeat-btn {
+          padding: 8px 12px;
+          font-size: 13px;
         }
 
         .pdf-viewer {

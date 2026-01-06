@@ -32,6 +32,7 @@ import MCQQuizOverlay from './MCQQuizOverlay';
 import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
 import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
+import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -140,6 +141,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const pendingPresentationRef = useRef(null); // Store pending presentation data
   const startingPresentationRef = useRef(false); // Guard flag to prevent race condition
   const transitioningSlideRef = useRef(false); // Guard flag for slide transitions
+  const userNavigatedToSlideRef = useRef(null); // Track slide user navigated to via voice command
   const prePdfWidgetStateRef = useRef(null);
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
@@ -155,6 +157,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
   const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
   const pendingModuleTransitionRef = useRef(null); // Pending module ID to transition to after avatar finishes speaking
+  const pdfPresentationRef = useRef({ isPresenting: false, currentSlideIndex: 0, totalSlides: 0 }); // Track PDF state for voice commands
 
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
@@ -439,6 +442,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     },
   });
 
+  // Keep pdfPresentationRef in sync for use in callbacks
+  useEffect(() => {
+    pdfPresentationRef.current = {
+      isPresenting: pdfPresentation.isPresenting,
+      currentSlideIndex: pdfPresentation.currentSlideIndex,
+      totalSlides: pdfPresentation.presentationConfig?.slides?.length || 0,
+    };
+  }, [pdfPresentation.isPresenting, pdfPresentation.currentSlideIndex, pdfPresentation.presentationConfig]);
+
   // Setup DailyEventManager callbacks
   useEffect(() => {
     if (!dailyEventManagerRef.current) {
@@ -535,6 +547,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // ⚡ PRIORITY CHECK: If PDF presentation is active, handle slide narration
         if (pdfPresentation.isPresenting && !transitioningSlideRef.current) {
+          // Check if user navigated via voice command - skip auto-advance until we're on that slide
+          if (userNavigatedToSlideRef.current !== null) {
+            const targetSlide = userNavigatedToSlideRef.current;
+            const currentSlide = pdfPresentation.currentSlideIndex;
+
+            if (currentSlide === targetSlide) {
+              // We've reached the target slide and narration finished - clear the flag
+              addDebugLog(`[PDF] User navigation complete - now on slide ${currentSlide + 1}`);
+              userNavigatedToSlideRef.current = null;
+            } else {
+              // Still transitioning (this is the interrupted narration event)
+              addDebugLog(`[PDF] Ignoring stop event during user navigation (current: ${currentSlide}, target: ${targetSlide})`);
+            }
+
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
+            return;
+          }
+
           transitioningSlideRef.current = true;
           addDebugLog('[PDF] Avatar finished narrating slide - marking complete');
 
@@ -875,7 +907,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
 
     log('USER_SPEECH', `User said (${source})`, { text });
-    
+
+    // During PDF presentation, ignore voice commands (use UI buttons instead)
+    if (pdfPresentation.isPresenting) {
+      addDebugLog('[PDF] Ignoring speech during presentation - use navigation buttons');
+      return;
+    }
+
     // Check if we're in quiz mode and waiting for an answer
     if (quizState.isActive && quizState.waitingForAnswer && quizState.currentQuestionIndex < quizState.questions.length) {
       // Double-check avatar is not speaking (safety check)
@@ -3050,8 +3088,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // Get presentation config
         const presentationData = moduleConfig.presentationConfig === 'functions-at-entri'
-        ? functionsAtEntriPresentation
-        : null;
+          ? functionsAtEntriPresentation
+          : moduleConfig.presentationConfig === 'hr-policies'
+          ? hrPoliciesPresentation
+          : null;
 
       if (!presentationData) {
         addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);
@@ -3787,8 +3827,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 slides={pdfPresentation.presentationConfig?.slides || []}
                 currentSlideIndex={pdfPresentation.currentSlideIndex}
                 onSlideChange={(index) => {
-                  addDebugLog(`[PDF] Manual slide change to: ${index}`);
+                  addDebugLog(`[PDF] User clicked navigation to slide: ${index}`);
+                  // Interrupt current narration
+                  if (dailyEventManagerRef.current) {
+                    dailyEventManagerRef.current.interruptReplica();
+                  }
+                  // Set target slide to prevent auto-advance
+                  userNavigatedToSlideRef.current = index;
                   pdfPresentation.goToSlide(index);
+                }}
+                onRepeatSlide={(index) => {
+                  addDebugLog(`[PDF] User clicked repeat slide: ${index}`);
+                  // Interrupt current narration
+                  if (dailyEventManagerRef.current) {
+                    dailyEventManagerRef.current.interruptReplica();
+                  }
+                  // Set target slide to prevent auto-advance
+                  userNavigatedToSlideRef.current = index;
+                  pdfPresentation.narrateSlide(index);
+                }}
+                onPresentationEnd={() => {
+                  addDebugLog('[PDF] User clicked finish presentation');
+                  pdfPresentation.endPresentation();
                 }}
               />
               {/* Close presentation button */}

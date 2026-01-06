@@ -58,6 +58,10 @@ Do you have any questions before we watch the founders' video? ... Just say "yes
 
   'functions-at-entri-quiz': `Alright! ... It's time to test your knowledge about Entri's functions. ... I'll ask you a few questions... Please select your answer from the options on screen.`,
 
+  'hr-policies': `Let's dive into HR Policies. ... In this section, you'll learn about working hours, leave policies, holidays, and important HR guidelines that apply to you.`,
+
+  'hr-policies-quiz': `Great! ... Now let's test your understanding of HR Policies with a quick quiz. ... I'll ask you a few questions... Please select your answer from the options on screen.`,
+
   'vertical-types': `Now let's explore the different verticals at Entri.
 
 ...
