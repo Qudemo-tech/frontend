@@ -53,21 +53,11 @@ export const courseStructure = [
   {
     id: 'section-employee-benefits',
     title: '6. Employee Benefits',
-    items: ['employee-benefits'],
-  },
-  {
-    id: 'section-lifestyle',
-    title: '7. Lifestyle Benefits',
-    items: ['lifestyle-benefits'],
-  },
-  {
-    id: 'section-rules',
-    title: '8. Company Rules and Policies',
-    items: ['company-rules'],
+    items: ['employee-benefits', 'employee-benefits-quiz'],
   },
   {
     id: 'section-assessment',
-    title: 'Assessment',
+    title: '7. Final Assessment',
     items: ['final-quiz'],
   },
 ];
@@ -177,27 +167,20 @@ export const moduleDefinitions = {
     id: 'employee-benefits',
     title: 'Benefits Overview',
     description: 'Your benefits at Entri',
-    type: 'lesson',
-    duration: '6m',
+    type: 'presentation',
+    duration: '8m',
     icon: ICONS.HEART,
     hasVideo: false,
+    hasPresentation: true,
+    presentationConfig: 'employee-benefits',
   },
-  'lifestyle-benefits': {
-    id: 'lifestyle-benefits',
-    title: 'Wellness & Recreation',
-    description: 'Work-life balance at Entri',
-    type: 'lesson',
-    duration: '5m',
-    icon: ICONS.USERS,
-    hasVideo: false,
-  },
-  'company-rules': {
-    id: 'company-rules',
-    title: 'Rules and Policies',
-    description: 'Company guidelines',
-    type: 'lesson',
-    duration: '7m',
-    icon: ICONS.BOOK_OPEN,
+  'employee-benefits-quiz': {
+    id: 'employee-benefits-quiz',
+    title: 'Employee Benefits Quiz',
+    description: 'Test your knowledge of employee benefits',
+    type: 'quiz',
+    questions: 5,
+    icon: ICONS.AWARD,
     hasVideo: false,
   },
   'final-quiz': {
@@ -227,8 +210,7 @@ export const moduleOrder = [
   'posh-info',
   'posh-quiz',
   'employee-benefits',
-  'lifestyle-benefits',
-  'company-rules',
+  'employee-benefits-quiz',
   'final-quiz',
 ];
 
@@ -240,9 +222,6 @@ export const modulesRequiringConfirmation = [
   'welcome-intro',
   'functions-at-entri',
   'hr-policies',
-  'employee-benefits',
-  'lifestyle-benefits',
-  'company-rules',
 ];
 
 /**

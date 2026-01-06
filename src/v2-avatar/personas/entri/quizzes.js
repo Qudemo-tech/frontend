@@ -396,6 +396,132 @@ export const moduleQuizzes = {
     passingScore: 6,
     completionMessage: "Excellent! You've completed the POSH quiz. Let's move on to the next topic."
   },
+
+  'employee-benefits-quiz': {
+    intro: "Now that you've learned about Employee Benefits, let's take a quick quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    questions: [
+      {
+        question: "What is the insured amount offered under the group medical insurance for employee, spouse and children?",
+        options: [
+          "2 Lakhs",
+          "3 Lakhs",
+          "5 Lakhs",
+          "10 Lakhs"
+        ],
+        correctIndex: 2,
+        explanation: "5 lakhs. Under the group medical insurance program, employees at Entri receive medical coverage of rupees 5 lakhs for their families through Niva Bupa."
+      },
+      {
+        question: "What does YourDOST offer to Entri employees?",
+        options: [
+          "Financial support",
+          "Medical insurance",
+          "Counseling and emotional support",
+          "Book club discussion"
+        ],
+        correctIndex: 2,
+        explanation: "Counseling and emotional support. YourDOST is a comprehensive mental health and well-being platform designed to provide support and resources for individuals facing emotional and psychological challenges."
+      },
+      {
+        question: "How long does a referred candidate need to work at Entri for the referring employee to receive the referral bonus?",
+        options: [
+          "1 month",
+          "2 months",
+          "3 months",
+          "6 months"
+        ],
+        correctIndex: 2,
+        explanation: "3 months. The referral bonus is given to team members once the referred candidate completes 3 successful months of employment at Entri."
+      },
+      {
+        question: "How often is the book allowance reimbursed to employees for the Entri Book Club?",
+        options: [
+          "Monthly",
+          "Quarterly",
+          "Annually",
+          "Bi-annually"
+        ],
+        correctIndex: 1,
+        explanation: "Quarterly. Employees receive a quarterly allowance to purchase books for the Entri Book Club, where they can discuss and share their reading experiences with colleagues."
+      },
+      {
+        question: "Who is covered under the Group Medical Insurance plan provided by Entri?",
+        options: [
+          "Only the employee",
+          "Employee and spouse",
+          "Employee, spouse and children",
+          "Employee and parents"
+        ],
+        correctIndex: 2,
+        explanation: "Employee, spouse, and children. The Group Medical Insurance provided by Entri covers the employee, their spouse, and children."
+      }
+    ],
+    passingScore: 3,
+    completionMessage: "Great job! You've completed the Employee Benefits quiz. Let's continue with the next topic."
+  },
+
+  'final-quiz': {
+    intro: "This is the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Please click your answer on the screen.",
+    questions: [
+      {
+        question: "What is the main goal of Entri as a learning platform?",
+        options: [
+          "Entertainment content creation",
+          "Job-oriented learning and skill development",
+          "Social media engagement",
+          "Freelance opportunities for educators"
+        ],
+        correctIndex: 1,
+        explanation: "Job-oriented learning and skill development. Entri is India's leading learning platform focused on helping job seekers prepare for competitive exams, learn new skills, and advance their careers."
+      },
+      {
+        question: "Which of the following verticals is primarily focused on preparing students for competitive exams?",
+        options: [
+          "Study Abroad",
+          "Skilling",
+          "Test Prep",
+          "Finacademy"
+        ],
+        correctIndex: 2,
+        explanation: "Test Prep. The Test Prep vertical is dedicated to helping candidates prepare for competitive exams like PSC, SSC, Banking, and Railway exams."
+      },
+      {
+        question: "Which software is used for internal communication within the company?",
+        options: [
+          "Jira",
+          "Slack",
+          "Gsuite",
+          "Gitlab"
+        ],
+        correctIndex: 1,
+        explanation: "Slack is designated as the official platform for internal communication at Entri."
+      },
+      {
+        question: "Is your complaint kept confidential in the POSH process?",
+        options: [
+          "No, your complaint details will be shared with everyone in the company.",
+          "Yes, but only if the complaint is deemed serious.",
+          "Yes, confidentiality is a key principle of the POSH process, and your complaint details will be kept confidential to protect your privacy.",
+          "No, the details are publicly disclosed once the investigation starts."
+        ],
+        correctIndex: 2,
+        explanation: "Yes, confidentiality is a key principle in the POSH process. When you file a complaint, the details are kept confidential and shared only with those directly involved in the investigation."
+      },
+      {
+        question: "Which team is responsible for creating and maintaining the product features that users interact with?",
+        options: [
+          "Academics and Content",
+          "Growth",
+          "Engineering, Product, and Design",
+          "User Happiness"
+        ],
+        correctIndex: 2,
+        explanation: "The Engineering, Product, and Design team is responsible for developing all aspects of Entri's products, including the features that users interact with."
+      }
+    ],
+    passingScore: 3,
+    completionMessage: "You've now completed your onboarding. ... I'll always be here to help, so feel free to ask me anything related to the company whenever you need. ... We're excited to have you on the team. ... Welcome aboard, and all the best as you get started!"
+  },
 };
 
 export const finalQuiz = {
@@ -433,7 +559,7 @@ export const finalQuiz = {
     }
   ],
   passingScore: 3,
-  completionMessage: "Congratulations! You've completed the Entri onboarding quiz."
+  completionMessage: "You've now completed your onboarding. ... I'll always be here to help, so feel free to ask me anything related to the company whenever you need. ... We're excited to have you on the team. ... Welcome aboard, and all the best as you get started!"
 };
 
 export default {

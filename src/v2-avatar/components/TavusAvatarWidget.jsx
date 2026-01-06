@@ -33,6 +33,7 @@ import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
 import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
 import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
+import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -3115,6 +3116,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           ? functionsAtEntriPresentation
           : moduleConfig.presentationConfig === 'hr-policies'
           ? hrPoliciesPresentation
+          : moduleConfig.presentationConfig === 'employee-benefits'
+          ? employeeBenefitsPresentation
           : null;
 
       if (!presentationData) {
