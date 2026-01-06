@@ -84,29 +84,9 @@ Each vertical is designed to meet specific career goals of our users.
 
 Any questions about our verticals? ... Say "continue" when you're ready.`,
 
-  'posh-info': `Alright... let's talk about something really important.
+  'posh-info': "Now... let's talk about something really important. ... POSH, Prevention of Sexual Harassment at the Workplace. ... Please watch this video carefully... as it covers essential guidelines for maintaining a safe and respectful work environment. ... I'll be right here when it's done.",
 
-POSH, Prevention of Sexual Harassment at the Workplace.
-
-...
-
-At Entri... we take this very seriously. ... We've formed a dedicated POSH committee... as required by law... to ensure our workplace remains safe and respectful for everyone.
-
-...
-
-If you ever find yourself in an uncomfortable situation... please know that you're not alone. ... You can reach out to the committee in person... or via email. ... Everything is handled with complete confidentiality... and respect.
-
-...
-
-Your safety matters to us.
-
-...
-
-That concludes our POSH overview.
-
-...
-
-Do you have any questions about workplace safety... or the POSH committee? ... Say "continue" when you're ready... or ask me anything.`,
+  'posh-quiz': `Great! ... Now that you've watched the POSH video, ... let's test your understanding with a quiz. ... I'll ask you a few questions... Please select your answer from the options on screen.`,
 
   'employee-benefits': `Now... let's talk about something exciting, your benefits!
 

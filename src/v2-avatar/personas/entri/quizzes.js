@@ -290,44 +290,110 @@ export const moduleQuizzes = {
     completionMessage: "Excellent work! You've completed the HR Policies quiz. Let's continue with the next topic."
   },
 
-  'posh-info': {
-    intro: "Now let's do a quick quiz to check your understanding of POSH. I'll read each question with 4 options. Please click your answer on the screen.",
+  'posh-quiz': {
+    intro: "Now that you've watched the POSH video, let's take a quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
     questions: [
       {
         question: "What does POSH stand for?",
         options: [
-          "Prevention of Sexual Harassment",
           "Protection of Staff Health",
-          "Policy on Safety and Hygiene",
-          "Prevention of Staff Harassment"
-        ],
-        correctIndex: 0,
-        explanation: "POSH stands for Prevention of Sexual Harassment at the Workplace."
-      },
-      {
-        question: "Who can you approach if you face an uncomfortable situation at work?",
-        options: [
-          "Only your manager",
-          "The POSH Committee",
-          "External lawyers only",
-          "No one, handle it yourself"
+          "Prevention of Sexual Harassment",
+          "Policy on Staff Happiness",
+          "Procedures for Office Safety"
         ],
         correctIndex: 1,
-        explanation: "You can approach the POSH Committee in person or via email. All concerns are handled with complete confidentiality."
+        explanation: "POSH stands for Prevention of Sexual Harassment. The goal of POSH is to ensure a safe and respectful environment for all employees, protecting them from unwanted and inappropriate behavior."
       },
       {
-        question: "How are POSH complaints handled at Entri?",
+        question: "Who can be a victim of sexual harassment?",
         options: [
-          "Publicly announced to all employees",
-          "Ignored unless severe",
-          "With complete confidentiality and respect",
-          "Only if submitted in writing"
+          "Only full-time employees",
+          "Only female employees",
+          "Any employee, regardless of their gender or employment status",
+          "Only temporary and contract workers"
         ],
         correctIndex: 2,
-        explanation: "All POSH concerns are handled with complete confidentiality and respect."
+        explanation: "Anyone in the workplace, regardless of their gender or employment status, can be a victim of sexual harassment. This includes full-time, part-time, temporary, and contract workers."
+      },
+      {
+        question: "Is your complaint kept confidential in the POSH process?",
+        options: [
+          "No, your complaint details will be shared with everyone in the company.",
+          "Yes, but only if the complaint is deemed serious.",
+          "Yes, confidentiality is a key principle of the POSH process, and your complaint details will be kept confidential to protect your privacy.",
+          "No, the details are publicly disclosed once the investigation starts."
+        ],
+        correctIndex: 2,
+        explanation: "In the POSH process, confidentiality is a key principle to protect the privacy of those involved. This means that when you file a complaint, the details are kept confidential and shared only with those directly involved in the investigation."
+      },
+      {
+        question: "If an employee experiences sexual harassment, whom should they approach within the POSH process?",
+        options: [
+          "Their colleagues",
+          "The Human Resources department or Internal Committee",
+          "The senior involved in the violence",
+          "The company's security team"
+        ],
+        correctIndex: 1,
+        explanation: "If an employee experiences sexual harassment, they should approach the Human Resources department or the Internal Committee. These are the designated bodies within the POSH framework responsible for handling such complaints, conducting investigations, and ensuring appropriate actions are taken."
+      },
+      {
+        question: "What constitutes a sexual harassment?",
+        options: [
+          "Inappropriate jokes or comments",
+          "Unwanted physical contact",
+          "Display of offensive materials",
+          "All of the Above"
+        ],
+        correctIndex: 3,
+        explanation: "All of the above. Sexual harassment includes any unwelcome behavior of a sexual nature that creates a hostile or intimidating work environment."
+      },
+      {
+        question: "What should I do if I experience or witness sexual harassment?",
+        options: [
+          "Ignore the incident and hope it stops",
+          "Report the incident immediately to the Internal Complaints Committee (ICC) or your HR department",
+          "Document the details of the incident, including dates, times, and any witnesses",
+          "Both B and C"
+        ],
+        correctIndex: 3,
+        explanation: "Both B and C. If you experience or witness sexual harassment, immediately report the incident to HR or the Internal Complaints Committee to ensure a formal investigation and accountability. Simultaneously, document all details—including dates, times, and witnesses—to provide an essential evidentiary record that supports your case."
+      },
+      {
+        question: "What is the role of the Internal Complaints Committee (ICC)?",
+        options: [
+          "Receiving and investigating complaints",
+          "Ensuring confidentiality throughout the process",
+          "Taking appropriate actions based on the findings",
+          "All of the above"
+        ],
+        correctIndex: 3,
+        explanation: "All of the above. The ICC maintains a safe workplace by investigating harassment complaints thoroughly while ensuring strict confidentiality to protect all parties. They are also responsible for implementing disciplinary actions against perpetrators to ensure professional accountability and a respectful environment."
+      },
+      {
+        question: "How is a complaint investigated?",
+        options: [
+          "Conduct a thorough investigation, which may include interviews with the complainant, the accused, and any witnesses",
+          "Review any relevant evidence",
+          "Provide both parties with an opportunity to present their case",
+          "All of the above"
+        ],
+        correctIndex: 3,
+        explanation: "All of the above. The ICC ensures a fair investigation by interviewing all parties, reviewing physical evidence, and allowing both the complainant and accused to present their cases. This multifaceted approach culminates in a comprehensive report with findings and recommendations."
+      },
+      {
+        question: "What actions can be taken if someone is found guilty of sexual harassment?",
+        options: [
+          "Transfer or change in role",
+          "Suspension or termination of employment",
+          "Legal action if necessary",
+          "All of the above"
+        ],
+        correctIndex: 3,
+        explanation: "All of the above. When an individual is found guilty of sexual harassment, the company must take decisive action to ensure workplace safety. Depending on the severity, responses range from formal warnings and role transfers to suspension or termination. In cases involving legal violations, the company may also pursue litigation to ensure full accountability and maintain a respectful environment."
       }
     ],
-    passingScore: 2,
+    passingScore: 6,
     completionMessage: "Excellent! You've completed the POSH quiz. Let's move on to the next topic."
   },
 };

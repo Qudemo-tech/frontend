@@ -138,6 +138,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const preCalendlyAudioEnabledRef = useRef(true);
   const pendingCalendlyRef = useRef(false);
   const pendingDemoVideoRef = useRef(null); // Store pending video URL
+  const videoAnnouncementStartedRef = useRef(false); // Track if avatar has started the video announcement
   const pendingPresentationRef = useRef(null); // Store pending presentation data
   const startingPresentationRef = useRef(false); // Guard flag to prevent race condition
   const transitioningSlideRef = useRef(false); // Guard flag for slide transitions
@@ -287,7 +288,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const isDemoPlayingRef = useRef(false);
 
   // Video modules that should auto-advance after video ends
-  const videoModules = ['user-success-stories', 'founder-video'];
+  const videoModules = ['user-success-stories', 'founder-video', 'posh-info'];
 
   // Callback for when a video module stops - move to next module
   const handleVideoModuleStop = useCallback(() => {
@@ -464,12 +465,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Ignoring avatar speech - video is playing');
           return;
         }
-        
+
         addDebugLog('[TAVUS] 🤖 TAVUS STARTED SPEAKING');
         setIsAvatarSpeaking(true);
         isAvatarSpeakingRef.current = true;
         setAvatarState("speaking");
-        
+
+        // Mark that video announcement has started (avatar is now speaking the intro)
+        if (pendingDemoVideoRef.current && !videoAnnouncementStartedRef.current) {
+          videoAnnouncementStartedRef.current = true;
+          addDebugLog('[DEMO] Video announcement started - will wait for avatar to finish');
+        }
+
         // If module lock is active, ensure Tavus listening is disabled
         if (moduleSpeechLockRef.current && dailyEventManagerRef.current) {
           dailyEventManagerRef.current.disableListening();
@@ -1411,6 +1418,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             if (pendingDemoVideoRef.current) {
               log('DEMO', 'Pending video timeout - clearing stuck pending state');
               pendingDemoVideoRef.current = null;
+              videoAnnouncementStartedRef.current = false;
             }
             pendingVideoTimeoutRef.current = null;
           }, 30000);
@@ -1504,27 +1512,33 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Wait for avatar to finish speaking before playing demo video
   // This applies to ALL videos including founder-video - avatar should finish intro first
+  // CRITICAL: Only play after avatar has STARTED and FINISHED the announcement
   useEffect(() => {
-    if (pendingDemoVideoRef.current) {
+    if (pendingDemoVideoRef.current && videoAnnouncementStartedRef.current) {
       const videoUrl = pendingDemoVideoRef.current;
 
       // Wait for avatar to finish speaking before playing any video
+      // videoAnnouncementStartedRef ensures avatar has started the intro
+      // !isAvatarSpeaking ensures avatar has finished the intro
       if (!isAvatarSpeaking && !isUserSpeaking) {
-        log('DEMO', 'Avatar finished speaking - playing video now');
+        log('DEMO', 'Avatar finished speaking announcement - playing video now');
 
-      // Save current state for restoration later
-      preDemoWidgetStateRef.current = state;
+        // Reset the announcement flag
+        videoAnnouncementStartedRef.current = false;
 
-      // Maximize if not already, then play
-      // Note: Avatar audio will be muted by onVideoStart callback in useDemoVideo
-      if (state !== "maximized") {
-        setState("maximized");
-        setTimeout(() => {
-          playDemoVideo(videoUrl);
+        // Save current state for restoration later
+        preDemoWidgetStateRef.current = state;
+
+        // Maximize if not already, then play
+        // Note: Avatar audio will be muted by onVideoStart callback in useDemoVideo
+        if (state !== "maximized") {
+          setState("maximized");
+          setTimeout(() => {
+            playDemoVideo(videoUrl);
             pendingDemoVideoRef.current = null;
-        }, 300);
-      } else {
-        playDemoVideo(videoUrl);
+          }, 300);
+        } else {
+          playDemoVideo(videoUrl);
           pendingDemoVideoRef.current = null;
         }
       }
@@ -1952,6 +1966,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     preCalendlyAudioEnabledRef.current = true;
     pendingCalendlyRef.current = false;
     pendingDemoVideoRef.current = null;
+    videoAnnouncementStartedRef.current = false;
     prePdfWidgetStateRef.current = null;
     hasAutoExpandedRef.current = false;
     entriOnboardingStartedRef.current = false;
@@ -2119,6 +2134,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           setIsAvatarSpeaking(true);
           isAvatarSpeakingRef.current = true;
           setAvatarState("speaking");
+
+          // Mark that video announcement has started (avatar is now speaking the intro)
+          if (pendingDemoVideoRef.current && !videoAnnouncementStartedRef.current) {
+            videoAnnouncementStartedRef.current = true;
+            log('DEMO', 'Video announcement started - will wait for avatar to finish');
+          }
         },
         onReplicaStopSpeaking: (lastSpeech, interrupted) => {
           // Ignore avatar speech when video is playing
@@ -2858,7 +2879,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         text.includes("founder's video") ||
         text.includes('founder video') ||
         text.includes("here is our founder") ||
-        text.includes("please watch");
+        text.includes("please watch") ||
+        text.includes("posh") ||
+        text.includes("sexual harassment");
 
       if (hasVideoAnnouncement && text.length > 20) {
         addDebugLog(`[MODULE-LOCK] ✅ Video module announcement complete detected: ${activeModule}`);
@@ -3001,6 +3024,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Clear any pending state
     pendingPresentationRef.current = null;
     pendingDemoVideoRef.current = null;
+    videoAnnouncementStartedRef.current = false;
     startingPresentationRef.current = false;
     transitioningSlideRef.current = false;
 
