@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, XCircle, HelpCircle, X, SkipForward } from 'lucide-react';
+import { CheckCircle, XCircle, HelpCircle, SkipForward, RefreshCw, LogOut } from 'lucide-react';
 
 /**
  * MCQQuizOverlay - Displays MCQ options at the bottom of the video panel
@@ -14,7 +14,9 @@ import { CheckCircle, XCircle, HelpCircle, X, SkipForward } from 'lucide-react';
  * - isCorrect: Whether the selected answer was correct (only valid if isAnswered)
  * - disabled: Whether selection is disabled (e.g., waiting for avatar to finish speaking)
  * - score: Current score { correct: number, total: number }
- * - onSkipQuiz: Callback to skip/exit the quiz
+ * - onRepeatQuestion: Callback to repeat the current question
+ * - onSkipQuestion: Callback to skip the current question
+ * - onEndQuiz: Callback to end/exit the quiz
  * - sidebarVisible: Whether the left sidebar is visible (default: false)
  * - sidebarWidth: Width of the sidebar in pixels (default: 320)
  */
@@ -28,7 +30,9 @@ const MCQQuizOverlay = ({
   isCorrect,
   disabled,
   score,
-  onSkipQuiz,
+  onRepeatQuestion,
+  onSkipQuestion,
+  onEndQuiz,
   sidebarVisible = false,
   sidebarWidth = 320
 }) => {
@@ -91,18 +95,50 @@ const MCQQuizOverlay = ({
           <span className="text-white font-medium">
             Question {questionNumber} of {totalQuestions}
           </span>
+          <span className="text-green-400 text-sm ml-2">Score: {score.correct}/{score.total}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-green-400 text-sm">Score: {score.correct}/{score.total}</span>
-          {/* Skip/Exit Quiz Button */}
-          {onSkipQuiz && (
+        <div className="flex items-center gap-2">
+          {/* Repeat Question Button */}
+          {onRepeatQuestion && !isAnswered && (
             <button
-              onClick={onSkipQuiz}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm transition-all border border-white/20"
-              title="Skip Quiz"
+              onClick={onRepeatQuestion}
+              disabled={disabled}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all border ${
+                disabled
+                  ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+                  : 'bg-white/10 hover:bg-blue-500/30 border-white/20 hover:border-blue-400 text-white/70 hover:text-white'
+              }`}
+              title="Repeat Question"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Repeat</span>
+            </button>
+          )}
+          {/* Skip Question Button */}
+          {onSkipQuestion && !isAnswered && (
+            <button
+              onClick={onSkipQuestion}
+              disabled={disabled}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all border ${
+                disabled
+                  ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+                  : 'bg-white/10 hover:bg-yellow-500/30 border-white/20 hover:border-yellow-400 text-white/70 hover:text-white'
+              }`}
+              title="Skip Question"
             >
               <SkipForward className="w-4 h-4" />
               <span>Skip</span>
+            </button>
+          )}
+          {/* End Quiz Button */}
+          {onEndQuiz && (
+            <button
+              onClick={onEndQuiz}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-red-500/30 text-white/70 hover:text-white text-sm transition-all border border-white/20 hover:border-red-400"
+              title="End Quiz"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>End Quiz</span>
             </button>
           )}
         </div>
@@ -146,7 +182,7 @@ const MCQQuizOverlay = ({
       {/* Instructions */}
       {!isAnswered && (
         <p className="text-center text-white/50 text-xs mt-3">
-          Click an option to answer. Say "repeat" to hear the question again.
+          Click an option to answer
         </p>
       )}
 
