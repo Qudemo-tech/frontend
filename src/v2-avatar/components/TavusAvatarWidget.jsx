@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactPlayer from 'react-player/lazy';
 import {
   X,
   Maximize2,
@@ -34,6 +35,7 @@ import { getPersona } from '../personas';
 import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
 import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
 import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
+import { moduleTransitionPrompts, videoCompletionPrompts } from '../personas/entri/prompts';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -88,6 +90,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Get module configuration from persona (empty arrays/objects for personas without modules)
   const moduleOrder = persona.modules.order || [];
   const modulesRequiringConfirmation = persona.modules.requiresConfirmation || [];
+  const sectionEndingModules = persona.modules.sectionEndingModules || [];
   const moduleDefinitions = persona.modules.definitions || {};
 
   // Track if onboarding has started (for personas with proactive flow)
@@ -158,7 +161,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
   const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
   const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
+  const pendingQuizDataRef = useRef(null); // Stores quiz data while instructions are being spoken
   const pendingModuleTransitionRef = useRef(null); // Pending module ID to transition to after avatar finishes speaking
+  const waitingForSectionConfirmationRef = useRef(false); // True when waiting for user to say "continue" to move to next section
+  const pendingSectionTransitionRef = useRef(null); // Next module ID when waiting for section confirmation
+  const waitingForVideoQuizConfirmationRef = useRef(false); // True when waiting for user to say "continue" to start quiz after video
+  const pendingVideoQuizModuleRef = useRef(null); // Module ID for pending video quiz
+  const lastVideoUrlRef = useRef(null); // Store last video URL for replay functionality
   const pdfPresentationRef = useRef({ isPresenting: false, currentSlideIndex: 0, totalSlides: 0 }); // Track PDF state for voice commands
 
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
@@ -291,6 +300,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Video modules that should auto-advance after video ends
   const videoModules = ['user-success-stories', 'founder-video', 'posh-info'];
 
+  // Mapping from video modules to their associated quiz modules
+  // The video module (founder-video) has its quiz named differently (founder-video-quiz)
+  const videoToQuizMap = {
+    'founder-video': 'founder-video-quiz',
+    'posh-info': 'posh-quiz',
+    // user-success-stories has no quiz - it's section-ending
+  };
+
   // Callback for when a video module stops - move to next module
   const handleVideoModuleStop = useCallback(() => {
     const currentModule = activeModuleRef.current;
@@ -314,66 +331,111 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       return [...prev, currentModule];
     });
 
-    // Check if this module has a quiz (use persona config)
-    if (persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz(currentModule)) {
-      addDebugLog(`[DEMO] ${currentModule} has quiz - starting MCQ quiz`);
+    // Check if this video module has an associated quiz
+    // Use the video-to-quiz mapping since quiz IDs are different from video IDs
+    const associatedQuizId = videoToQuizMap[currentModule];
+    const hasAssociatedQuiz = associatedQuizId && persona.hasFeature('mcqQuiz') && persona.hasModuleQuiz(associatedQuizId);
 
-      // Keep microphone muted during quiz
-      if (sessionManagerRef.current?.isInitialized) {
-        sessionManagerRef.current.setMicrophoneMuted(true);
-        setIsMuted(true);
-      }
+    if (hasAssociatedQuiz) {
+      addDebugLog(`[DEMO] ${currentModule} has quiz (${associatedQuizId}) - speaking video completion message and waiting for confirmation`);
 
-      // Keep Tavus listening disabled during quiz
+      // Enable listening for user confirmation
       if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        listeningStateRef.current = 'disabled';
+        dailyEventManagerRef.current.enableListening();
+        listeningStateRef.current = 'enabled';
+        addDebugLog('[DEMO] 🎤 Enabled listening for video quiz confirmation');
       }
 
-      // Start the quiz after a short delay
-      setTimeout(() => {
-        if (mountedRef.current && startMcqQuizRef.current) {
-          startMcqQuizRef.current(currentModule);
-        }
-      }, 1000);
+      // Unmute microphone for user to respond
+      if (sessionManagerRef.current?.isInitialized) {
+        sessionManagerRef.current.setMicrophoneMuted(false);
+        setIsMuted(false);
+      }
+
+      // Set up waiting for confirmation before starting quiz
+      // Store the QUIZ module ID, not the video module ID
+      waitingForVideoQuizConfirmationRef.current = true;
+      pendingVideoQuizModuleRef.current = associatedQuizId;
+
+      // Speak video completion message if available
+      const completionMessage = videoCompletionPrompts[currentModule];
+      if (completionMessage && dailyEventManagerRef.current) {
+        addDebugLog(`[DEMO] Speaking video completion message for ${currentModule}`);
+        dailyEventManagerRef.current.sendEchoMessage(completionMessage);
+      }
+      // Quiz will start when user says "continue" - handled in handleUserSpeech
     } else {
-      // No quiz - move to next module
-      addDebugLog(`[DEMO] No quiz for ${currentModule} - moving to next module`);
-
-      // 🔇 Ensure microphone stays muted
-      if (sessionManagerRef.current?.isInitialized) {
-        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-          addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
-        });
-        setIsMuted(true);
-      }
-
-      // 🔴 Keep Tavus listening disabled
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
-      }
-
-      // Find and move to next module
+      // No quiz - check if this is a section-ending module
+      const isSectionEnding = sectionEndingModules.includes(currentModule);
       const currentIndex = moduleOrder.indexOf(currentModule);
-      if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
-        const nextModuleId = moduleOrder[currentIndex + 1];
-        addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
-        setTimeout(() => {
-          if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
-            addDebugLog(`[DEMO] ✅ Moving to next module after video: ${nextModuleId}`);
-            if (sessionManagerRef.current?.isInitialized) {
-              sessionManagerRef.current.setMicrophoneMuted(true);
-              setIsMuted(true);
+      const nextModuleId = (currentIndex >= 0 && currentIndex < moduleOrder.length - 1)
+        ? moduleOrder[currentIndex + 1]
+        : null;
+
+      if (isSectionEnding && nextModuleId) {
+        // Section-ending video without quiz - speak transition prompt and wait for confirmation
+        addDebugLog(`[DEMO] ${currentModule} is section-ending - speaking transition prompt and waiting for confirmation`);
+
+        // Enable listening for user confirmation
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.enableListening();
+          listeningStateRef.current = 'enabled';
+          addDebugLog('[DEMO] 🎤 Enabled listening for section transition confirmation');
+        }
+
+        // Unmute microphone
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(false);
+          setIsMuted(false);
+        }
+
+        // Set up waiting for confirmation
+        waitingForSectionConfirmationRef.current = true;
+        pendingSectionTransitionRef.current = nextModuleId;
+
+        // Speak transition prompt
+        const transitionPrompt = moduleTransitionPrompts[currentModule];
+        if (transitionPrompt && dailyEventManagerRef.current) {
+          addDebugLog(`[DEMO] Speaking section transition prompt for ${currentModule}`);
+          dailyEventManagerRef.current.sendEchoMessage(transitionPrompt);
+        }
+      } else {
+        // Not section-ending - just move to next module
+        addDebugLog(`[DEMO] No quiz for ${currentModule} - moving to next module`);
+
+        // 🔇 Ensure microphone stays muted
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
+            addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
+          });
+          setIsMuted(true);
+        }
+
+        // 🔴 Keep Tavus listening disabled
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
+        }
+
+        // Find and move to next module
+        if (nextModuleId) {
+          addDebugLog(`[DEMO] Scheduling transition to next module: ${nextModuleId}`);
+          setTimeout(() => {
+            if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
+              addDebugLog(`[DEMO] ✅ Moving to next module after video: ${nextModuleId}`);
+              if (sessionManagerRef.current?.isInitialized) {
+                sessionManagerRef.current.setMicrophoneMuted(true);
+                setIsMuted(true);
+              }
+              handleModuleSelectRef.current(nextModuleId);
+            } else {
+              addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
             }
-            handleModuleSelectRef.current(nextModuleId);
-          } else {
-            addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
-          }
-        }, 500);
+          }, 500);
+        }
       }
     }
-  }, [personaId, moduleOrder, quizState.isActive, addDebugLog]);
+  }, [personaId, moduleOrder, sectionEndingModules, quizState.isActive, addDebugLog]);
 
   // Demo video hook
   const { isDemoPlaying, currentVideoUrl, isYouTube, youTubeEmbedUrl, demoVideoRef, playDemoVideo, stopDemoVideo } = useDemoVideo({
@@ -513,6 +575,58 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[TAVUS] This means Tavus listening was NOT properly disabled');
         }
 
+        // ⚡ PRIORITY CHECK: If MCQ quiz instructions are being spoken (quiz not yet active)
+        // After instructions finish, activate the quiz panel and ask first question
+        // CRITICAL: If speaking instructions and interrupted, ignore this event
+        // This prevents premature activation when user clicks quiz and interrupt arrives after state is set
+        if (mcqQuizStateRef.current.speakingInstructions && interrupted) {
+          addDebugLog('[MCQ-QUIZ] Ignoring interrupted event during instructions phase');
+          return;
+        }
+
+        if (mcqQuizStateRef.current.speakingInstructions && pendingQuizDataRef.current) {
+          addDebugLog('[MCQ-QUIZ] Avatar finished speaking instructions - now activating quiz panel');
+
+          const pending = pendingQuizDataRef.current;
+          const { moduleId, quizData } = pending;
+          pendingQuizDataRef.current = null;
+
+          // Create new state with quiz panel active
+          const activeQuizState = {
+            isActive: true, // NOW show the quiz panel
+            moduleId: moduleId,
+            currentQuestionIndex: 0,
+            selectedIndex: null,
+            isAnswered: false,
+            isCorrect: false,
+            score: { correct: 0, total: 0 },
+            quizData: quizData,
+            waitingForAvatarToFinish: true, // Wait for avatar to read the first question
+            speakingInstructions: false,
+          };
+
+          // CRITICAL: Update ref IMMEDIATELY (synchronously)
+          mcqQuizStateRef.current = activeQuizState;
+
+          // Also update React state for UI
+          setMcqQuizState(activeQuizState);
+
+          // Ask the first question
+          const firstQuestion = quizData.questions[0];
+          const questionMessage = `Question 1: ${firstQuestion.question} Your options are: A: ${firstQuestion.options[0]}. B: ${firstQuestion.options[1]}. C: ${firstQuestion.options[2]}. D: ${firstQuestion.options[3]}.`;
+
+          setTimeout(() => {
+            if (dailyEventManagerRef.current) {
+              dailyEventManagerRef.current.sendEchoMessage(questionMessage);
+            }
+          }, 500); // Brief pause before asking first question
+
+          setIsAvatarSpeaking(false);
+          isAvatarSpeakingRef.current = false;
+          setAvatarState("idle");
+          return;
+        }
+
         // ⚡ PRIORITY CHECK: If MCQ quiz is active, handle quiz flow FIRST before any module logic
         if (mcqQuizStateRef.current.isActive) {
           const quizState = mcqQuizStateRef.current;
@@ -624,9 +738,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Handle module completion when avatar stops speaking
         // Skip video modules (handled by video stop callback) and final-quiz (handled separately)
         if (activeModuleRef.current && !videoModules.includes(activeModuleRef.current) && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
-          // Skip module completion if MCQ quiz is active (quiz handles its own flow)
-          if (mcqQuizStateRef.current.isActive) {
-            addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active`);
+          // Skip module completion if MCQ quiz is active OR speaking instructions (quiz handles its own flow)
+          if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
+            addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active or speaking instructions`);
             // Don't process module completion - quiz is in control
           } else {
             // For all modules (including welcome-intro): Check if confirmation is required before completing
@@ -795,8 +909,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       },
       onUserTranscript: (text, source) => {
         // 🔒 HARD BLOCK: Ignore ALL user transcripts when module lock is active
-        // EXCEPTION: Allow transcripts when waiting for module confirmation or MCQ quiz
-        if (moduleSpeechLockRef.current && !waitingForModuleConfirmationRef.current && !mcqQuizStateRef.current.isActive) {
+        // EXCEPTION: Allow transcripts when waiting for module confirmation, section confirmation, video quiz confirmation, or MCQ quiz
+        if (moduleSpeechLockRef.current && !waitingForModuleConfirmationRef.current && !waitingForSectionConfirmationRef.current && !waitingForVideoQuizConfirmationRef.current && !mcqQuizStateRef.current.isActive) {
           // Additional check: Ignore if text matches module prompt (Tavus sometimes echoes prompts as user speech)
           const promptText = currentModulePromptRef.current;
           if (promptText && (text.includes(promptText.substring(0, 100)) || promptText.includes(text.substring(0, 100)))) {
@@ -902,11 +1016,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const handleUserSpeech = (text, source) => {
     if (!text) return;
 
-    // IMPORTANT: When waiting for module confirmation, ALWAYS process user speech
+    // IMPORTANT: When waiting for module, section, or video quiz confirmation, ALWAYS process user speech
     // even if avatar is speaking (Tavus may auto-respond with "Okay" but we still
     // need to catch the user's "continue" to trigger our transition)
     if (waitingForModuleConfirmationRef.current) {
-      log('USER_SPEECH', `Processing during confirmation wait (avatar may be speaking): "${text}"`, { text });
+      log('USER_SPEECH', `Processing during module confirmation wait (avatar may be speaking): "${text}"`, { text });
+      // Don't return - fall through to process confirmation
+    } else if (waitingForSectionConfirmationRef.current) {
+      log('USER_SPEECH', `Processing during section confirmation wait (avatar may be speaking): "${text}"`, { text });
+      // Don't return - fall through to process confirmation
+    } else if (waitingForVideoQuizConfirmationRef.current) {
+      log('USER_SPEECH', `Processing during video quiz confirmation wait (avatar may be speaking): "${text}"`, { text });
       // Don't return - fall through to process confirmation
     } else if (isAvatarSpeakingRef.current) {
       // Normal case: ignore user speech when avatar is speaking (especially during quiz)
@@ -1166,6 +1286,176 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // If neither clear confirmation nor question, let it fall through to normal processing
     }
 
+    // Check if we're waiting for section transition confirmation
+    if (waitingForSectionConfirmationRef.current && pendingSectionTransitionRef.current) {
+      const lowerText = text.toLowerCase().trim();
+
+      // Keywords that indicate user wants to proceed
+      const confirmationKeywords = [
+        'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'clear', 'understood',
+        'got it', 'i understand', 'no questions', 'let\'s continue', 'continue',
+        'move on', 'next', 'proceed', 'go ahead', 'all clear', 'makes sense',
+        'i got it', 'perfect', 'great', 'good', 'fine', 'alright', 'right'
+      ];
+
+      // Check if user's response contains confirmation
+      const isConfirmation = confirmationKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      // Keywords that indicate user has questions or needs clarification
+      const questionKeywords = [
+        'question', 'what', 'how', 'why', 'can you', 'could you', 'explain',
+        'tell me more', 'clarify', 'not clear', 'confused', 'don\'t understand',
+        'repeat', 'again', 'no', 'wait', 'hold on'
+      ];
+
+      const hasQuestion = questionKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      if (isConfirmation && !hasQuestion) {
+        // User confirmed - proceed to next section
+        addDebugLog(`[SECTION-CONFIRM] ✅ User confirmed section transition: "${text}"`);
+
+        const nextModuleId = pendingSectionTransitionRef.current;
+
+        // Reset section confirmation state
+        waitingForSectionConfirmationRef.current = false;
+        pendingSectionTransitionRef.current = null;
+
+        // Mute microphone before transitioning
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
+        }
+
+        // Disable listening and interrupt any pending Tavus response
+        if (dailyEventManagerRef.current) {
+          listeningStateRef.current = 'disabled';
+          dailyEventManagerRef.current.disableListening();
+          dailyEventManagerRef.current.interruptReplica();
+        }
+
+        addDebugLog(`[SECTION-CONFIRM] Transitioning to next section: ${nextModuleId}`);
+
+        // Wait a bit for the interrupt to process, then transition
+        setTimeout(() => {
+          if (mountedRef.current && handleModuleSelectRef.current) {
+            addDebugLog(`[SECTION-CONFIRM] Executing transition to: ${nextModuleId}`);
+            handleModuleSelectRef.current(nextModuleId);
+          }
+        }, 500);
+
+        return; // Don't process as regular speech
+      } else if (hasQuestion) {
+        // User has a question - let avatar respond naturally
+        addDebugLog(`[SECTION-CONFIRM] 🤔 User has question: "${text}" - letting avatar respond`);
+        // Keep waiting for confirmation, but let the question go through to avatar
+      }
+      // If neither clear confirmation nor question, let it fall through to normal processing
+    }
+
+    // Check if we're waiting for video quiz confirmation (after video ends, before quiz starts)
+    if (waitingForVideoQuizConfirmationRef.current && pendingVideoQuizModuleRef.current) {
+      const lowerText = text.toLowerCase().trim();
+
+      // Keywords that indicate user wants to proceed to quiz
+      const confirmationKeywords = [
+        'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'clear', 'understood',
+        'got it', 'i understand', 'no questions', 'let\'s continue', 'continue',
+        'move on', 'next', 'proceed', 'go ahead', 'all clear', 'makes sense',
+        'i got it', 'perfect', 'great', 'good', 'fine', 'alright', 'right',
+        'start quiz', 'ready', 'let\'s go', 'begin'
+      ];
+
+      // Check if user's response contains confirmation
+      const isConfirmation = confirmationKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      // Check for "repeat video" command
+      const repeatKeywords = ['repeat the video', 'replay the video', 'watch again', 'play again', 'replay', 'watch it again'];
+      const wantsReplay = repeatKeywords.some(keyword => lowerText.includes(keyword));
+
+      // Keywords that indicate user has questions
+      const questionKeywords = [
+        'question', 'what', 'how', 'why', 'can you', 'could you', 'explain',
+        'tell me more', 'clarify', 'not clear', 'confused', 'don\'t understand',
+        'no', 'wait', 'hold on'
+      ];
+
+      const hasQuestion = questionKeywords.some(keyword =>
+        lowerText.includes(keyword)
+      );
+
+      if (wantsReplay && lastVideoUrlRef.current) {
+        // User wants to replay the video
+        addDebugLog(`[VIDEO-QUIZ-CONFIRM] 🔁 User wants to replay video: "${text}"`);
+
+        // Reset confirmation state - will be set again after video ends
+        waitingForVideoQuizConfirmationRef.current = false;
+        const moduleToReplay = pendingVideoQuizModuleRef.current;
+        pendingVideoQuizModuleRef.current = null;
+
+        // Mute microphone and disable listening during video
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
+        }
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          listeningStateRef.current = 'disabled';
+        }
+
+        // Play the video again
+        sendMessageToReplica("Sure, let me replay the video for you.", 'echo');
+        setTimeout(() => {
+          if (playDemoVideoRef.current && lastVideoUrlRef.current) {
+            playDemoVideoRef.current(lastVideoUrlRef.current);
+          }
+        }, 2000);
+
+        return;
+      } else if (isConfirmation && !hasQuestion) {
+        // User confirmed - start the quiz
+        addDebugLog(`[VIDEO-QUIZ-CONFIRM] ✅ User confirmed to start quiz: "${text}"`);
+
+        const moduleId = pendingVideoQuizModuleRef.current;
+
+        // Reset confirmation state
+        waitingForVideoQuizConfirmationRef.current = false;
+        pendingVideoQuizModuleRef.current = null;
+
+        // Mute microphone and disable listening during quiz
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
+        }
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          listeningStateRef.current = 'disabled';
+          dailyEventManagerRef.current.interruptReplica();
+        }
+
+        addDebugLog(`[VIDEO-QUIZ-CONFIRM] Starting quiz for module: ${moduleId}`);
+
+        // Start the quiz after a brief delay
+        setTimeout(() => {
+          if (mountedRef.current && startMcqQuizRef.current) {
+            startMcqQuizRef.current(moduleId);
+          }
+        }, 500);
+
+        return;
+      } else if (hasQuestion) {
+        // User has a question - let avatar respond naturally
+        addDebugLog(`[VIDEO-QUIZ-CONFIRM] 🤔 User has question: "${text}" - letting avatar respond`);
+        // Keep waiting for confirmation, but let the question go through to avatar
+      }
+      // If neither clear confirmation nor question, let it fall through to normal processing
+    }
+
     // Check if MCQ quiz is active - handle voice commands
     if (mcqQuizStateRef.current.isActive) {
       const lowerText = text.toLowerCase().trim();
@@ -1328,15 +1618,23 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
               }
             } else {
               // For Entri persona, automatically move to next module after completion
+              // BUT NOT if we're waiting for user confirmation (video quiz, section transition, etc.)
               const currentIndex = moduleOrder.indexOf(moduleId);
               if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
                 const nextModuleId = moduleOrder[currentIndex + 1];
-                addDebugLog(`[ENTRI-ONBOARDING] Module ${moduleId} completed, moving to ${nextModuleId}`);
-                
+                addDebugLog(`[ENTRI-ONBOARDING] Module ${moduleId} completed, checking if should auto-advance to ${nextModuleId}`);
+
                 // Wait a bit then automatically move to next module
+                // BUT skip if we're waiting for any kind of confirmation
                 setTimeout(() => {
-                  if (mountedRef.current && !quizState.isActive) {
+                  if (mountedRef.current && !quizState.isActive &&
+                      !waitingForVideoQuizConfirmationRef.current &&
+                      !waitingForSectionConfirmationRef.current &&
+                      !waitingForModuleConfirmationRef.current) {
+                    addDebugLog(`[ENTRI-ONBOARDING] Auto-advancing to ${nextModuleId}`);
                     handleModuleSelect(nextModuleId);
+                  } else {
+                    addDebugLog(`[ENTRI-ONBOARDING] Skipping auto-advance - waiting for user confirmation`);
                   }
                 }, 3000); // Wait 3 seconds after completion before moving to next
               }
@@ -1532,6 +1830,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // Maximize if not already, then play
         // Note: Avatar audio will be muted by onVideoStart callback in useDemoVideo
+        // Store the video URL for potential replay
+        lastVideoUrlRef.current = videoUrl;
+
         if (state !== "maximized") {
           setState("maximized");
           setTimeout(() => {
@@ -1760,8 +2061,51 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Track if cleanup has already been performed to prevent duplicate calls
   const cleanupPerformedRef = useRef(false);
 
-  // Centralized cleanup function using sendBeacon for reliability
-  const performCleanup = useCallback((source) => {
+  // Async cleanup with retry logic
+  const performCleanupWithRetry = useCallback(async (conversationId, source, retries = 3) => {
+    console.log(`[CLEANUP-RETRY] Starting cleanup for ${conversationId} (source: ${source}, retries: ${retries})`);
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(getEndConversationUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId }),
+          keepalive: true,
+        });
+
+        if (response.ok || response.status === 404 || response.status === 400) {
+          // 404/400 means already ended - that's fine
+          console.log(`[CLEANUP-RETRY] Success on attempt ${i + 1} (status: ${response.status})`);
+          return true;
+        }
+        console.log(`[CLEANUP-RETRY] Attempt ${i + 1} failed with status: ${response.status}`);
+      } catch (e) {
+        console.log(`[CLEANUP-RETRY] Attempt ${i + 1} failed: ${e.message}`);
+      }
+
+      // Wait before retry (except on last attempt)
+      if (i < retries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+
+    // Final fallback: sendBeacon (fire-and-forget for page unload)
+    console.log(`[CLEANUP-RETRY] All retries failed, using sendBeacon fallback`);
+    try {
+      navigator.sendBeacon(
+        getEndConversationUrl(),
+        new Blob([JSON.stringify({ conversationId })], { type: 'application/json' })
+      );
+    } catch (e) {
+      console.log(`[CLEANUP-RETRY] sendBeacon also failed: ${e.message}`);
+    }
+    return false;
+  }, []);
+
+  // Centralized cleanup function - uses sendBeacon immediately for page unload scenarios
+  // and async retry for normal cleanup
+  const performCleanup = useCallback((source, useAsyncRetry = false) => {
     // Prevent duplicate cleanup calls
     if (cleanupPerformedRef.current) {
       console.log(`[CLEANUP] Already performed, skipping (source: ${source})`);
@@ -1777,27 +2121,49 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     cleanupPerformedRef.current = true;
     console.log(`[CLEANUP] Performing cleanup (source: ${source}), conversationId: ${currentSessionInfo.conversationId}`);
 
-    // Always use sendBeacon for reliability - works even when page is closing
-    const payload = JSON.stringify({
-      conversationId: currentSessionInfo.conversationId,
-    });
+    const conversationId = currentSessionInfo.conversationId;
+    const payload = JSON.stringify({ conversationId });
 
-    try {
-      const beaconSent = navigator.sendBeacon(
-        getEndConversationUrl(),
-        new Blob([payload], { type: 'application/json' })
-      );
-      console.log(`[CLEANUP] sendBeacon result: ${beaconSent}`);
-    } catch (e) {
-      console.log(`[CLEANUP] sendBeacon failed: ${e.message}, falling back to fetch`);
-      // Fallback to fetch (may not complete if page is closing)
+    // For page unload scenarios (beforeunload, pagehide, freeze), use sendBeacon immediately
+    // It's the most reliable method when page is closing
+    if (source === 'beforeunload' || source === 'pagehide' || source === 'unload' || source === 'freeze') {
+      console.log(`[CLEANUP] Using sendBeacon for page unload scenario`);
+      try {
+        const beaconSent = navigator.sendBeacon(
+          getEndConversationUrl(),
+          new Blob([payload], { type: 'application/json' })
+        );
+        console.log(`[CLEANUP] sendBeacon result: ${beaconSent}`);
+      } catch (e) {
+        console.log(`[CLEANUP] sendBeacon failed: ${e.message}`);
+      }
+    } else if (useAsyncRetry) {
+      // For non-unload scenarios with retry requested, use async retry
+      performCleanupWithRetry(conversationId, source, 3);
+    } else {
+      // For normal cleanup (unmount, disconnect), use sendBeacon + async backup
+      try {
+        const beaconSent = navigator.sendBeacon(
+          getEndConversationUrl(),
+          new Blob([payload], { type: 'application/json' })
+        );
+        console.log(`[CLEANUP] sendBeacon result: ${beaconSent}`);
+      } catch (e) {
+        console.log(`[CLEANUP] sendBeacon failed: ${e.message}, using fetch fallback`);
+      }
+
+      // Also fire async fetch as backup (for React navigation scenarios)
       fetch(getEndConversationUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,
-        keepalive: true, // Allows request to outlive the page
+        keepalive: true,
       }).catch(() => {});
     }
+
+    // Remove from localStorage since we've cleaned up
+    localStorage.removeItem('tavus_conversation_id');
+    console.log(`[CLEANUP] Removed conversation ID from localStorage`);
 
     // Cleanup session manager
     if (sessionManagerRef.current) {
@@ -1816,7 +2182,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         console.log(`[CLEANUP] Event manager cleanup error: ${e.message}`);
       }
     }
-  }, []);
+  }, [performCleanupWithRetry]);
 
   // Component lifecycle
   useEffect(() => {
@@ -1922,6 +2288,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         visibilityTimeoutRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [performCleanup]);
 
   // Handle disconnect (user clicks disconnect button)
@@ -2086,6 +2453,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       setSessionInfo({ conversationId, conversationUrl });
 
+      // Save to localStorage for stale session cleanup on next page load
+      localStorage.setItem('tavus_conversation_id', conversationId);
+      addDebugLog(`[SESSION] Saved conversation ID to localStorage: ${conversationId}`);
+
       // Step 2: Create and initialize TavusSessionManager
       addDebugLog('Initializing TavusSessionManager...');
       sessionManagerRef.current = new TavusSessionManager();
@@ -2146,6 +2517,58 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           // Ignore avatar speech when video is playing
           if (isDemoPlayingRef.current) {
             log('DEMO', 'Ignoring avatar speech end - video is playing');
+            return;
+          }
+
+          // ⚡ PRIORITY CHECK: If MCQ quiz instructions are being spoken (quiz not yet active)
+          // After instructions finish, activate the quiz panel and ask first question
+          // CRITICAL: If speaking instructions and interrupted, ignore this event
+          // This prevents premature activation when user clicks quiz and interrupt arrives after state is set
+          if (mcqQuizStateRef.current.speakingInstructions && interrupted) {
+            addDebugLog('[MCQ-QUIZ] Ignoring interrupted event during instructions phase');
+            return;
+          }
+
+          if (mcqQuizStateRef.current.speakingInstructions && pendingQuizDataRef.current) {
+            addDebugLog('[MCQ-QUIZ] Avatar finished speaking instructions - now activating quiz panel');
+
+            const pending = pendingQuizDataRef.current;
+            const { moduleId, quizData } = pending;
+            pendingQuizDataRef.current = null;
+
+            // Create new state with quiz panel active
+            const activeQuizState = {
+              isActive: true, // NOW show the quiz panel
+              moduleId: moduleId,
+              currentQuestionIndex: 0,
+              selectedIndex: null,
+              isAnswered: false,
+              isCorrect: false,
+              score: { correct: 0, total: 0 },
+              quizData: quizData,
+              waitingForAvatarToFinish: true, // Wait for avatar to read the first question
+              speakingInstructions: false,
+            };
+
+            // CRITICAL: Update ref IMMEDIATELY (synchronously)
+            mcqQuizStateRef.current = activeQuizState;
+
+            // Also update React state for UI
+            setMcqQuizState(activeQuizState);
+
+            // Ask the first question
+            const firstQuestion = quizData.questions[0];
+            const questionMessage = `Question 1: ${firstQuestion.question} Your options are: A: ${firstQuestion.options[0]}. B: ${firstQuestion.options[1]}. C: ${firstQuestion.options[2]}. D: ${firstQuestion.options[3]}.`;
+
+            setTimeout(() => {
+              if (dailyEventManagerRef.current) {
+                dailyEventManagerRef.current.sendEchoMessage(questionMessage);
+              }
+            }, 500); // Brief pause before asking first question
+
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
             return;
           }
 
@@ -2222,7 +2645,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           const currentModule = activeModuleRef.current;
 
           // Handle module completion for all modules except video modules (handled by video callback) and final-quiz
-          if (currentModule && !videoModules.includes(currentModule) && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+          // Also skip if MCQ quiz is active or speaking instructions
+          if (currentModule && !videoModules.includes(currentModule) && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted && !mcqQuizStateRef.current.isActive && !mcqQuizStateRef.current.speakingInstructions) {
             // Check if this module requires user confirmation before advancing
             if (modulesRequiringConfirmation.includes(currentModule)) {
               addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
@@ -2528,7 +2952,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // ========== MCQ QUIZ FUNCTIONS ==========
 
-  // Start MCQ quiz for a module
+  // Start MCQ quiz for a module - first speaks instructions, then shows quiz panel
   const startMcqQuiz = useCallback((moduleId) => {
     // Get quiz data from persona config
     const quizData = persona.getModuleQuiz(moduleId);
@@ -2538,19 +2962,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
 
     addDebugLog(`[MCQ-QUIZ] Starting quiz for module: ${moduleId} with ${quizData.questions.length} questions`);
+    addDebugLog(`[MCQ-QUIZ] Step 1: Speaking quiz instructions first...`);
 
-    // Initialize quiz state
-    setMcqQuizState({
-      isActive: true,
-      moduleId: moduleId,
-      currentQuestionIndex: 0,
-      selectedIndex: null,
-      isAnswered: false,
-      isCorrect: false,
-      score: { correct: 0, total: 0 },
-      quizData: quizData,
-      waitingForAvatarToFinish: true, // Wait for avatar to read the question
-    });
+    // Check if intro exists
+    if (!quizData.intro || quizData.intro.trim() === '') {
+      addDebugLog(`[MCQ-QUIZ] ⚠️ Quiz intro is empty or missing`);
+    }
+
+    // Store quiz data for later activation
+    pendingQuizDataRef.current = { moduleId, quizData };
 
     // Mute microphone during quiz - user clicks options, not speaks
     if (sessionManagerRef.current?.isInitialized) {
@@ -2562,16 +2982,70 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (dailyEventManagerRef.current) {
       dailyEventManagerRef.current.disableListening();
       listeningStateRef.current = 'disabled';
-      addDebugLog('[MCQ-QUIZ] Disabled Tavus listening - waiting for button clicks only');
+      addDebugLog('[MCQ-QUIZ] Disabled Tavus listening');
     }
 
-    // Send quiz intro and first question to avatar using ECHO mode (not respond)
-    // Echo mode makes avatar speak exactly this text without LLM processing
-    const firstQuestion = quizData.questions[0];
-    const introMessage = `${quizData.intro} Question 1: ${firstQuestion.question} Your options are: A: ${firstQuestion.options[0]}. B: ${firstQuestion.options[1]}. C: ${firstQuestion.options[2]}. D: ${firstQuestion.options[3]}.`;
+    // Create the new quiz state
+    const newQuizState = {
+      isActive: false, // Quiz panel NOT visible yet
+      moduleId: moduleId,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: quizData,
+      waitingForAvatarToFinish: true,
+      speakingInstructions: true, // Flag: avatar is speaking instructions
+    };
 
-    sendMessageToReplica(introMessage, 'echo');
+    // CRITICAL: Update ref IMMEDIATELY (synchronously) before sending message
+    // This ensures onReplicaStopSpeaking sees the correct state
+    // (useEffect sync is async and may not run before avatar finishes speaking)
+    mcqQuizStateRef.current = newQuizState;
+    addDebugLog(`[MCQ-QUIZ] Set speakingInstructions=true in ref (synchronous)`);
+
+    // Also update React state for UI
+    setMcqQuizState(newQuizState);
+
+    // Speak ONLY the quiz instructions first
+    // The quiz panel will be shown when avatar finishes speaking (in onReplicaStopSpeaking)
+    sendMessageToReplica(quizData.intro, 'echo');
     return true;
+  }, [addDebugLog, sendMessageToReplica]);
+
+  // Activate quiz panel and ask first question (called after instructions are spoken)
+  const activateQuizPanel = useCallback(() => {
+    const pending = pendingQuizDataRef.current;
+    if (!pending) {
+      addDebugLog('[MCQ-QUIZ] No pending quiz data to activate');
+      return;
+    }
+
+    const { moduleId, quizData } = pending;
+    pendingQuizDataRef.current = null;
+
+    addDebugLog(`[MCQ-QUIZ] Step 2: Activating quiz panel and asking first question`);
+
+    // Now activate the quiz panel
+    setMcqQuizState({
+      isActive: true, // NOW show the quiz panel
+      moduleId: moduleId,
+      currentQuestionIndex: 0,
+      selectedIndex: null,
+      isAnswered: false,
+      isCorrect: false,
+      score: { correct: 0, total: 0 },
+      quizData: quizData,
+      waitingForAvatarToFinish: true, // Wait for avatar to read the first question
+      speakingInstructions: false,
+    });
+
+    // Now ask the first question
+    const firstQuestion = quizData.questions[0];
+    const questionMessage = `Question 1: ${firstQuestion.question} Your options are: A: ${firstQuestion.options[0]}. B: ${firstQuestion.options[1]}. C: ${firstQuestion.options[2]}. D: ${firstQuestion.options[3]}.`;
+
+    sendMessageToReplica(questionMessage, 'echo');
   }, [addDebugLog, sendMessageToReplica]);
 
   // Update ref for startMcqQuiz
@@ -2683,7 +3157,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     addDebugLog(`[MCQ-QUIZ] Quiz complete for ${moduleId} - Score: ${score.correct}/${score.total}, Passed: ${passed}`);
 
-    // Send completion message
+    // Build completion message with score
     let completionMessage = quizData.completionMessage || "You've completed the quiz!";
     completionMessage += ` You scored ${score.correct} out of ${score.total}.`;
 
@@ -2697,16 +3171,46 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       ? moduleOrder[currentIndex + 1]
       : null;
 
-    if (nextModuleId) {
+    // Check if this quiz is section-ending (not for final-quiz)
+    const isSectionEnding = sectionEndingModules.includes(moduleId);
+
+    if (isSectionEnding && nextModuleId) {
+      // Section-ending quiz - add transition prompt and wait for user confirmation
+      addDebugLog(`[MCQ-QUIZ] ${moduleId} is section-ending - will wait for confirmation before ${nextModuleId}`);
+
+      // Add transition prompt to completion message
+      const transitionPrompt = moduleTransitionPrompts[moduleId];
+      if (transitionPrompt) {
+        completionMessage += ` ... ${transitionPrompt}`;
+      }
+
+      // Enable listening for user confirmation
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.enableListening();
+        listeningStateRef.current = 'enabled';
+        addDebugLog('[MCQ-QUIZ] 🎤 Enabled listening for section transition confirmation');
+      }
+
+      // Unmute microphone after quiz
+      if (sessionManagerRef.current?.isInitialized) {
+        sessionManagerRef.current.setMicrophoneMuted(false);
+        setIsMuted(false);
+      }
+
+      // Set up waiting for confirmation (NOT using pendingModuleTransitionRef)
+      waitingForSectionConfirmationRef.current = true;
+      pendingSectionTransitionRef.current = nextModuleId;
+    } else if (nextModuleId) {
+      // Not section-ending - auto-transition after avatar speaks
       addDebugLog(`[MCQ-QUIZ] Setting pending module transition to: ${nextModuleId}`);
       pendingModuleTransitionRef.current = nextModuleId;
     }
 
     // Use ECHO mode for completion message
-    // The module transition will happen in onReplicaStopSpeaking when avatar finishes
+    // The module transition will happen in onReplicaStopSpeaking when avatar finishes (if not section-ending)
     sendMessageToReplica(completionMessage, 'echo');
 
-    // Reset quiz state (but pendingModuleTransitionRef persists)
+    // Reset quiz state (but pending refs persist)
     setMcqQuizState({
       isActive: false,
       moduleId: null,
@@ -2720,7 +3224,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-  }, [addDebugLog, sendMessageToReplica, moduleOrder]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder, sectionEndingModules]);
 
   // Skip/End MCQ quiz
   const skipMcqQuiz = useCallback(() => {
@@ -3001,19 +3505,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       dailyEventManagerRef.current.interruptReplica();
     }
 
-    // 🔴 CRITICAL: Close any active MCQ quiz when switching modules
-    if (mcqQuizStateRef.current.isActive) {
-      addDebugLog('[MCQ] Closing active quiz due to module switch');
-      setMcqQuizState({
+    // 🔴 CRITICAL: Close any active MCQ quiz OR pending quiz instructions when switching modules
+    if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
+      addDebugLog('[MCQ] Closing active quiz or pending instructions due to module switch');
+
+      // Clear pending quiz data ref
+      pendingQuizDataRef.current = null;
+
+      // Reset both state and ref
+      const resetState = {
         isActive: false,
+        moduleId: null,
         currentQuestionIndex: 0,
+        selectedIndex: null,
+        isAnswered: false,
+        isCorrect: false,
+        score: { correct: 0, total: 0 },
         quizData: null,
-        score: 0,
-        totalQuestions: 0,
-        userAnswers: [],
-        showResults: false,
         waitingForAvatarToFinish: false,
-      });
+        speakingInstructions: false,
+      };
+      mcqQuizStateRef.current = resetState;
+      setMcqQuizState(resetState);
     }
 
     // 🔴 CRITICAL: End any active PDF presentation when switching modules
@@ -3491,31 +4004,35 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         <div className="absolute inset-0 z-10 bg-black">
           {/* Main Video - centered, landscape */}
           <div className="absolute inset-6 right-[420px] rounded-2xl overflow-hidden border border-white/30 shadow-[0_0_60px_rgba(255,255,255,0.25)]">
-            {/* YouTube iframe or regular video element */}
-            {isYouTube && youTubeEmbedUrl ? (
-              <iframe
-                src={youTubeEmbedUrl}
-                className="w-full h-full"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                title="Demo Video"
-                onError={(e) => {
-                  log('ERROR', '❌ YouTube iframe error', { error: e, url: youTubeEmbedUrl });
-                }}
-                onLoad={() => {
-                  log('DEMO', '✅ YouTube iframe loaded successfully', { url: youTubeEmbedUrl });
-                }}
-              />
-            ) : (
-              <video
-                ref={demoVideoRef}
-                className="w-full h-full object-cover"
-                playsInline
-                muted
-                onClick={() => stopDemoVideo()}
-              />
-            )}
+            {/* ReactPlayer for YouTube/video with onEnded support */}
+            <ReactPlayer
+              url={currentVideoUrl}
+              playing={true}
+              controls={true}
+              width="100%"
+              height="100%"
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              onEnded={() => {
+                log('DEMO', '🏁 Video playback ended - closing video player');
+                stopDemoVideo();
+              }}
+              onError={(e) => {
+                log('ERROR', '❌ Video player error', { error: e, url: currentVideoUrl });
+              }}
+              onReady={() => {
+                log('DEMO', '✅ Video player ready', { url: currentVideoUrl });
+              }}
+              config={{
+                youtube: {
+                  playerVars: {
+                    autoplay: 1,
+                    rel: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                  }
+                }
+              }}
+            />
             {/* Close demo button */}
             <button
               onClick={() => stopDemoVideo()}

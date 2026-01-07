@@ -34,19 +34,17 @@ First... a video message from our founders.
 
 Then... some inspiring user success stories.
 
-After that... we'll explore the different functions at Entri... and our business verticals.
+After that... we'll explore the different functions at Entri.
 
-Then... we'll discuss POSH guidelines... employee benefits... and lifestyle perks.
+Next... we'll go through HR Policies covering working hours, leave policies, and more.
 
-And finally... a short quiz to wrap things up.
+Then... we'll cover POSH guidelines... that's Prevention of Sexual Harassment at the Workplace.
 
-...
-
-That's the overview of what we'll cover today.
+And finally... your employee benefits and a short quiz to wrap things up.
 
 ...
 
-Do you have any questions before we watch the founders' video? ... Just say "yes" or "continue" when you're ready to proceed.`,
+Ready to get started? ... Just say "continue" when you're ready to proceed.`,
 
   'founder-video': "Now... let me show you a special video message from our founders. ... Please watch, and I'll be right here when it's done.",
 
@@ -109,9 +107,119 @@ Don't worry, it's not too hard. ... Just pay attention and you'll do great.
 Ready? ... Let's begin!`
 };
 
+/**
+ * Module transition prompts - spoken when completing a section before moving to the next
+ * These are used when a module is the last item in its section
+ */
+export const moduleTransitionPrompts = {
+  // After founder-video-quiz (end of Welcome & Introduction section)
+  'founder-video-quiz': `Great job completing the Welcome section! ... You've learned about Entri and met our founders.
+
+...
+
+Next up, ... we'll watch some inspiring success stories from our users.
+
+...
+
+If you have any questions about what we've covered so far, ... feel free to ask. ... Otherwise, say "continue" when you're ready to move on.`,
+
+  // After user-success-stories (end of User Success Stories section)
+  'user-success-stories': `Those were some amazing success stories, weren't they? ... Our users have achieved incredible things.
+
+...
+
+Now we'll explore the different functions and teams at Entri.
+
+...
+
+Any questions about the success stories? ... Say "continue" when you're ready to proceed.`,
+
+  // After functions-at-entri-quiz (end of Functions at Entri section)
+  'functions-at-entri-quiz': `Excellent! ... You now have a good understanding of how Entri is organized and the different teams that work together.
+
+...
+
+Next, we'll cover HR Policies, ... including working hours, leave policies, and more important information.
+
+...
+
+Any questions before we move on? ... Say "continue" when you're ready.`,
+
+  // After hr-policies-quiz (end of HR Policies section)
+  'hr-policies-quiz': `Well done! ... You now know the key HR policies at Entri.
+
+...
+
+Next up is a very important topic, ... POSH, Prevention of Sexual Harassment at the Workplace.
+
+...
+
+Any questions about HR policies? ... Say "continue" when you're ready to proceed.`,
+
+  // After posh-quiz (end of POSH section)
+  'posh-quiz': `Great job! ... Understanding POSH guidelines is essential for maintaining a safe workplace.
+
+...
+
+Now let's talk about something exciting, ... your employee benefits!
+
+...
+
+Any questions about POSH? ... Say "continue" when you're ready.`,
+
+  // After employee-benefits-quiz (end of Employee Benefits section)
+  'employee-benefits-quiz': `Wonderful! ... You now know all the great benefits available to you at Entri.
+
+...
+
+We're almost done! ... Just one more step, the final quiz to wrap up your onboarding.
+
+...
+
+Any questions about your benefits? ... Say "continue" when you're ready for the final quiz.`,
+};
+
+/**
+ * Video completion prompts - spoken when a video ends (before quiz if applicable)
+ * These prompts ask for user confirmation before proceeding to the quiz
+ */
+export const videoCompletionPrompts = {
+  'founder-video': `That was a great message from our founders. ... I hope you feel inspired and excited to be part of the Entri family!
+
+...
+
+I hope you understood everything in the video. ... If you have any questions about what you just watched, ... feel free to ask. ... If you'd like to watch the video again, ... just say "repeat the video".
+
+...
+
+When you're ready for a quick quiz on the video, ... say "continue".`,
+
+  'user-success-stories': `Those were some truly inspiring stories! ... Our users have achieved amazing things with Entri's help.
+
+...
+
+I hope you found that inspiring! ... If you have any questions about the success stories, ... feel free to ask. ... If you'd like to watch the video again, ... just say "repeat the video".
+
+...
+
+When you're ready to move on, ... say "continue".`,
+
+  'posh-info': `That covered some very important information about POSH guidelines. ... It's essential that we all understand and follow these policies ... to maintain a safe and respectful workplace.
+
+...
+
+I hope you understood everything in the video. ... If you have any questions about POSH, ... feel free to ask. ... If you'd like to watch the video again, ... just say "repeat the video".
+
+...
+
+When you're ready for a quick quiz, ... say "continue".`,
+};
+
 export const welcomeMessage = "Hello! Welcome to Entri's onboarding. I'm Ann, your AI guide. Let's get started!";
 
 export default {
   modulePrompts,
+  moduleTransitionPrompts,
+  videoCompletionPrompts,
   welcomeMessage,
 };

@@ -46,6 +46,7 @@ const { default: stopSessionHandler } = await import('./api/liveavatar/stop-sess
 // Import Tavus API handlers
 const { default: tavusCreateConversationHandler } = await import('./api/tavus/create-conversation.mjs');
 const { default: tavusEndConversationHandler } = await import('./api/tavus/end-conversation.mjs');
+const { default: tavusCleanupAllSessionsHandler } = await import('./api/tavus/cleanup-all-sessions.mjs');
 
 // Mount the primary API route (current frontend expects this path)
 app.post('/api/liveavatar/create-session', async (req, res) => {
@@ -123,6 +124,17 @@ app.post('/api/tavus/end-conversation', async (req, res) => {
   }
 });
 
+app.post('/api/tavus/cleanup-all-sessions', async (req, res) => {
+  console.log('📡 Tavus Cleanup All Sessions Request received:', req.body);
+
+  try {
+    await tavusCleanupAllSessionsHandler(req, res);
+  } catch (error) {
+    console.error('❌ Tavus Cleanup All Sessions Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Dev server running!' });
@@ -141,6 +153,7 @@ app.listen(PORT, () => {
 📡 Tavus API Endpoints:
    - http://localhost:${PORT}/api/tavus/create-conversation (create conversation)
    - http://localhost:${PORT}/api/tavus/end-conversation (end conversation)
+   - http://localhost:${PORT}/api/tavus/cleanup-all-sessions (cleanup all sessions)
 
 ✅ Health Check: http://localhost:${PORT}/api/health
 

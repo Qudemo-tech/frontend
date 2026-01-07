@@ -225,6 +225,21 @@ export const modulesRequiringConfirmation = [
 ];
 
 /**
+ * Section-ending modules - these are the last items in each course section
+ * When these complete, the avatar should give a closing note and wait for user confirmation
+ * before transitioning to the next section
+ */
+export const sectionEndingModules = [
+  'founder-video-quiz',      // End of Welcome & Introduction
+  'user-success-stories',    // End of User Success Stories
+  'functions-at-entri-quiz', // End of Functions at Entri
+  'hr-policies-quiz',        // End of HR Policies
+  'posh-quiz',               // End of POSH Information
+  'employee-benefits-quiz',  // End of Employee Benefits
+  // final-quiz is the last module, no transition needed
+];
+
+/**
  * Course metadata
  */
 export const courseMeta = {
@@ -236,6 +251,7 @@ const entriModules = {
   order: moduleOrder,
   definitions: moduleDefinitions,
   requiresConfirmation: modulesRequiringConfirmation,
+  sectionEndingModules: sectionEndingModules,
   courseStructure: courseStructure,
   courseMeta: courseMeta,
   icons: ICONS,

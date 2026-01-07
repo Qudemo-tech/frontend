@@ -11,6 +11,7 @@ const config = {
     tavus: {
       createConversation: '/api/tavus/create-conversation',
       endConversation: '/api/tavus/end-conversation',
+      cleanupAllSessions: '/api/tavus/cleanup-all-sessions',
     },
     // Mobile logs endpoint (shared with mobile)
     mobileLogs: '/api/mobile-logs',
@@ -69,6 +70,10 @@ export const getCreateConversationUrl = () => {
 
 export const getEndConversationUrl = () => {
   return buildApiUrl(config.endpoints.tavus.endConversation);
+};
+
+export const getCleanupAllSessionsUrl = () => {
+  return buildApiUrl(config.endpoints.tavus.cleanupAllSessions);
 };
 
 export const getMobileLogsUrl = () => {
