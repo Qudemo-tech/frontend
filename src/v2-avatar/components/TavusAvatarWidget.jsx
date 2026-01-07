@@ -235,6 +235,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const quizSpeechRecognitionRef = useRef(null);
   const isQuizSpeechRecognitionActiveRef = useRef(false);
 
+  // ⏱️ Inactivity timeout - check-in after 30s, end after 60s of no response
+  const INACTIVITY_CHECKIN_MS = 30 * 1000; // 30 seconds for first check-in
+  const INACTIVITY_END_MS = 30 * 1000; // Additional 30 seconds before ending
+  const inactivityCheckInTimeoutRef = useRef(null);
+  const inactivityEndTimeoutRef = useRef(null);
+  const hasAskedCheckInRef = useRef(false); // Track if we've already asked "Are you still there?"
+  const isWaitingForUserResponseRef = useRef(false); // Track if we're in a waiting state
+
   // Keep ref in sync with state
   useEffect(() => {
     mcqQuizStateRef.current = mcqQuizState;
@@ -261,6 +269,134 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }).catch(() => {});
     } catch (e) {}
   };
+
+  // ========== INACTIVITY TIMEOUT FUNCTIONS ==========
+
+  // Clear all inactivity timeouts
+  const clearInactivityTimeouts = useCallback(() => {
+    if (inactivityCheckInTimeoutRef.current) {
+      clearTimeout(inactivityCheckInTimeoutRef.current);
+      inactivityCheckInTimeoutRef.current = null;
+    }
+    if (inactivityEndTimeoutRef.current) {
+      clearTimeout(inactivityEndTimeoutRef.current);
+      inactivityEndTimeoutRef.current = null;
+    }
+    hasAskedCheckInRef.current = false;
+    isWaitingForUserResponseRef.current = false;
+  }, []);
+
+  // Handle inactivity end - politely end the session
+  const handleInactivityEnd = useCallback(() => {
+    addDebugLog('[INACTIVITY] ⏰ 60 seconds of inactivity - ending session politely');
+
+    // Clear any waiting states
+    clearInactivityTimeouts();
+
+    // Reset all confirmation states
+    waitingForModuleConfirmationRef.current = false;
+    setWaitingForModuleConfirmation(false);
+    waitingForSectionConfirmationRef.current = false;
+    pendingSectionTransitionRef.current = null;
+    waitingForVideoQuizConfirmationRef.current = false;
+    pendingVideoQuizModuleRef.current = null;
+
+    // If in MCQ quiz, end it gracefully
+    if (mcqQuizStateRef.current.isActive) {
+      addDebugLog('[INACTIVITY] Ending active MCQ quiz due to inactivity');
+      // Reset quiz state
+      setMcqQuizState({
+        isActive: false,
+        moduleId: null,
+        currentQuestionIndex: 0,
+        selectedIndex: null,
+        isAnswered: false,
+        isCorrect: false,
+        score: { correct: 0, total: 0 },
+        quizData: null,
+        waitingForAvatarToFinish: false,
+        pendingNextQuestion: false,
+        pendingQuizComplete: false,
+      });
+    }
+
+    // Send polite goodbye message
+    const goodbyeMessage = "Thank you for your time. I'll be here whenever you want to continue. Over 80% of people complete this in a single day, you've already made a great start. See you soon!";
+
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.sendEchoMessage(goodbyeMessage);
+    }
+
+    // End the session after the message is spoken
+    // The goodbye message is ~35 words, at 150 words/min = ~14 seconds
+    // Give 15 seconds to ensure avatar finishes speaking
+    setTimeout(() => {
+      if (mountedRef.current) {
+        addDebugLog('[INACTIVITY] Ending Tavus session after goodbye message');
+        // Trigger session end UI state
+        setSessionTimedOut(true);
+
+        // Detach daily event manager first (it doesn't have cleanup, uses detachFromDaily)
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.detachFromDaily();
+        }
+
+        // Clean up session manager
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.cleanup().catch(err => {
+            addDebugLog(`[INACTIVITY] Error cleaning up session manager: ${err.message}`);
+          });
+        }
+      }
+    }, 15000);
+  }, [addDebugLog, clearInactivityTimeouts]);
+
+  // Handle inactivity check-in - ask if user is still there
+  const handleInactivityCheckIn = useCallback(() => {
+    addDebugLog('[INACTIVITY] ⏰ 30 seconds of inactivity - asking check-in');
+    hasAskedCheckInRef.current = true;
+
+    // Send check-in message
+    const checkInMessage = "Hey, are you still there?";
+
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.sendEchoMessage(checkInMessage);
+    }
+
+    // Start the final countdown - 30 more seconds before ending
+    inactivityEndTimeoutRef.current = setTimeout(() => {
+      handleInactivityEnd();
+    }, INACTIVITY_END_MS);
+  }, [addDebugLog, handleInactivityEnd]);
+
+  // Start inactivity timeout when waiting for user response
+  const startInactivityTimeout = useCallback(() => {
+    // Clear any existing timeouts first
+    clearInactivityTimeouts();
+
+    // Mark that we're waiting for a response
+    isWaitingForUserResponseRef.current = true;
+
+    addDebugLog('[INACTIVITY] ⏱️ Starting 30-second inactivity timeout');
+
+    // Start the check-in timeout (30 seconds)
+    inactivityCheckInTimeoutRef.current = setTimeout(() => {
+      // Only trigger check-in if still waiting for response
+      if (isWaitingForUserResponseRef.current) {
+        handleInactivityCheckIn();
+      }
+    }, INACTIVITY_CHECKIN_MS);
+  }, [clearInactivityTimeouts, handleInactivityCheckIn, addDebugLog]);
+
+  // Reset inactivity timeout when user responds
+  const resetInactivityTimeout = useCallback(() => {
+    if (isWaitingForUserResponseRef.current || hasAskedCheckInRef.current) {
+      addDebugLog('[INACTIVITY] ✅ User responded - clearing inactivity timeouts');
+    }
+    clearInactivityTimeouts();
+  }, [clearInactivityTimeouts, addDebugLog]);
+
+  // ========== END INACTIVITY TIMEOUT FUNCTIONS ==========
 
   // Trigger proactive continuation after 5 seconds of silence
   const triggerProactiveContinuation = useCallback(() => {
@@ -371,6 +507,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         addDebugLog(`[DEMO] Speaking video completion message for ${currentModule}`);
         dailyEventManagerRef.current.sendEchoMessage(completionMessage);
       }
+
+      // Start inactivity timeout - will ask check-in after 30s, end after 60s
+      startInactivityTimeout();
       // Quiz will start when user says "continue" - handled in handleUserSpeech
     } else {
       // No quiz - check if this is a section-ending module
@@ -407,6 +546,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog(`[DEMO] Speaking section transition prompt for ${currentModule}`);
           dailyEventManagerRef.current.sendEchoMessage(transitionPrompt);
         }
+
+        // Start inactivity timeout - will ask check-in after 30s, end after 60s
+        startInactivityTimeout();
       } else {
         // Not section-ending - just move to next module
         addDebugLog(`[DEMO] No quiz for ${currentModule} - moving to next module`);
@@ -456,6 +598,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         addDebugLog('[DEMO] Interrupting avatar speech for video playback');
         dailyEventManagerRef.current.interruptReplica();
       }
+      // Clear inactivity timeout - video is playing, user is watching
+      clearInactivityTimeouts();
       // Mute avatar audio when video starts
       addDebugLog('[DEMO] Muting avatar audio for video playback');
       setAudioEnabled(false);
@@ -541,6 +685,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         setIsAvatarSpeaking(true);
         isAvatarSpeakingRef.current = true;
         setAvatarState("speaking");
+
+        // Clear inactivity timeout - avatar is speaking, so we're not waiting for user input
+        clearInactivityTimeouts();
 
         // Mark that video announcement has started (avatar is now speaking the intro)
         if (pendingDemoVideoRef.current && !videoAnnouncementStartedRef.current) {
@@ -669,6 +816,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
               dailyEventManagerRef.current.disableListening();
               listeningStateRef.current = 'disabled';
             }
+
+            // Start inactivity timeout - waiting for user to select an answer
+            startInactivityTimeout();
           }
 
           setIsAvatarSpeaking(false);
@@ -784,6 +934,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 dailyEventManagerRef.current.disableListening();
                 addDebugLog('[MODULE-CONFIRM] 🎤 Mic unmuted but Tavus listening DISABLED - we handle confirmation manually');
               }
+
+              // Start inactivity timeout - will ask check-in after 30s, end after 60s
+              startInactivityTimeout();
 
               // Do NOT call finishModuleSpeech - wait for user confirmation
             } else {
@@ -1221,6 +1374,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // User confirmed - check if module has quiz, otherwise proceed to next module
         addDebugLog(`[MODULE-CONFIRM] ✅ User confirmed: "${text}"`);
 
+        // User responded - reset inactivity timeout
+        resetInactivityTimeout();
+
         // Reset confirmation state
         setWaitingForModuleConfirmation(false);
         waitingForModuleConfirmationRef.current = false;
@@ -1328,6 +1484,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // User confirmed - proceed to next section
         addDebugLog(`[SECTION-CONFIRM] ✅ User confirmed section transition: "${text}"`);
 
+        // User responded - reset inactivity timeout
+        resetInactivityTimeout();
+
         const nextModuleId = pendingSectionTransitionRef.current;
 
         // Reset section confirmation state
@@ -1430,6 +1589,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       } else if (isConfirmation && !hasQuestion) {
         // User confirmed - start the quiz
         addDebugLog(`[VIDEO-QUIZ-CONFIRM] ✅ User confirmed to start quiz: "${text}"`);
+
+        // User responded - reset inactivity timeout
+        resetInactivityTimeout();
 
         const moduleId = pendingVideoQuizModuleRef.current;
 
@@ -2281,9 +2443,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         clearTimeout(visibilityTimeoutRef.current);
         visibilityTimeoutRef.current = null;
       }
+
+      // Clear inactivity timeouts
+      clearInactivityTimeouts();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [performCleanup]);
+  }, [performCleanup, clearInactivityTimeouts]);
 
   // Handle disconnect (user clicks disconnect button)
   const handleDisconnect = async () => {
@@ -2501,6 +2666,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           isAvatarSpeakingRef.current = true;
           setAvatarState("speaking");
 
+          // Clear inactivity timeout - avatar is speaking, so we're not waiting for user input
+          clearInactivityTimeouts();
+
           // Mark that video announcement has started (avatar is now speaking the intro)
           if (pendingDemoVideoRef.current && !videoAnnouncementStartedRef.current) {
             videoAnnouncementStartedRef.current = true;
@@ -2598,6 +2766,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 dailyEventManagerRef.current.disableListening();
                 listeningStateRef.current = 'disabled';
               }
+
+              // Start inactivity timeout - waiting for user to select an answer
+              startInactivityTimeout();
             }
 
             setIsAvatarSpeaking(false);
@@ -2669,6 +2840,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 dailyEventManagerRef.current.disableListening();
                 addDebugLog('[MODULE-CONFIRM] 🎤 Mic unmuted but Tavus listening DISABLED - we handle confirmation manually');
               }
+
+              // Start inactivity timeout - will ask check-in after 30s, end after 60s
+              startInactivityTimeout();
 
               // Do NOT call finishModuleSpeech - wait for user confirmation
             } else {
@@ -2963,6 +3137,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       console.log('[VOICE-DEBUG] ❌ Quiz not active, ignoring');
       return;
     }
+
+    // User spoke during quiz - reset inactivity timeout
+    resetInactivityTimeout();
 
     // End quiz commands (exit the entire quiz)
     // Match various ways users might say "end quiz" including common speech recognition variations
@@ -3260,6 +3437,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       return;
     }
 
+    // User responded - reset inactivity timeout
+    resetInactivityTimeout();
+
     const currentQuestion = state.quizData.questions[state.currentQuestionIndex];
     const isCorrect = selectedIndex === currentQuestion.correctIndex;
     const optionLabels = ['A', 'B', 'C', 'D'];
@@ -3413,6 +3593,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Set up waiting for confirmation (NOT using pendingModuleTransitionRef)
       waitingForSectionConfirmationRef.current = true;
       pendingSectionTransitionRef.current = nextModuleId;
+
+      // Start inactivity timeout - will ask check-in after 30s, end after 60s
+      startInactivityTimeout();
     } else if (nextModuleId) {
       // Not section-ending - auto-transition after avatar speaks
       addDebugLog(`[MCQ-QUIZ] Setting pending module transition to: ${nextModuleId}`);
@@ -3780,6 +3963,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       );
       return;
     }
+
+    // Clear inactivity timeout - we're transitioning to a new module
+    clearInactivityTimeouts();
 
     // 🛑 Interrupt any ongoing avatar speech when switching modules
     if (dailyEventManagerRef.current) {
