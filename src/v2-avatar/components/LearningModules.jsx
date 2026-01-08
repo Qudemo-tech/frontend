@@ -4,7 +4,7 @@ import { CheckCircle, BookOpen, Award, ChevronDown, ChevronRight, Lock, Unlock, 
 /**
  * LearningModules - LinkedIn Learning style sidebar with course contents
  */
-const LearningModules = ({ onModuleSelect, activeModule, completedModules = [], onClose }) => {
+const LearningModules = ({ onModuleSelect, activeModule, completedModules = [], onClose, isMobile = false }) => {
   const [expandedSections, setExpandedSections] = useState({
     'module-1': true,
     'module-2': true,
@@ -112,7 +112,9 @@ const LearningModules = ({ onModuleSelect, activeModule, completedModules = [], 
   };
 
   return (
-    <div className="fixed left-0 top-0 bottom-0 w-80 bg-gray-800 text-white z-50 flex flex-col shadow-2xl">
+    <div className={`fixed left-0 top-0 bottom-0 bg-gray-800 text-white z-50 flex flex-col shadow-2xl transition-all duration-300 ${
+      isMobile ? 'w-full' : 'w-80'
+    }`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <div className="flex items-center gap-2">

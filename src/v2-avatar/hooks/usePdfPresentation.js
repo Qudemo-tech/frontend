@@ -48,6 +48,28 @@ export const usePdfPresentation = ({
 
 
   /**
+   * End presentation and cleanup
+   * @param {boolean} notifyParent - Whether to call onPresentationEnd callback (default: true)
+   */
+  const endPresentation = useCallback(async (notifyParent = true) => {
+    log('PDF', `Ending presentation (notifyParent: ${notifyParent})`);
+
+    // Reset state FIRST before calling callback to prevent race conditions
+    setIsPresenting(false);
+    setCurrentPdfUrl(null);
+    setCurrentSlideIndex(0);
+    setPresentationConfig(null);
+    waitingForNarrationRef.current = false;
+
+    // Only notify parent if this is a natural completion (not forced termination)
+    if (notifyParent) {
+      // Small delay to ensure state updates propagate before callback
+      await new Promise(resolve => setTimeout(resolve, 100));
+      onPresentationEnd?.();
+    }
+  }, [onPresentationEnd, log]);
+
+  /**
    * Narrate current slide using pre-scripted narration
    */
   const narrateSlide = useCallback(async (slideIndex) => {
@@ -88,7 +110,7 @@ export const usePdfPresentation = ({
     const nextIndex = currentSlideIndex + 1;
 
     if (nextIndex >= presentationConfig.slides.length) {
-      log('PDF', '🎬 Presentation complete');
+      log('PDF', '🎬 Presentation complete - ending and advancing to next module');
       endPresentation();
       return;
     }
@@ -99,8 +121,8 @@ export const usePdfPresentation = ({
     // Narrate the new slide after a brief delay
     setTimeout(() => {
       narrateSlide(nextIndex);
-    }, 500);
-  }, [currentSlideIndex, presentationConfig, narrateSlide, log]);
+    }, 300); // Reduced from 500ms
+  }, [currentSlideIndex, presentationConfig, narrateSlide, log, endPresentation]);
 
   /**
    * Go to previous slide
@@ -113,7 +135,7 @@ export const usePdfPresentation = ({
 
       setTimeout(() => {
         narrateSlide(prevIndex);
-      }, 500);
+      }, 300); // Reduced from 500ms
     }
   }, [currentSlideIndex, narrateSlide, log]);
 
@@ -121,40 +143,37 @@ export const usePdfPresentation = ({
    * Go to a specific slide
    */
   const goToSlide = useCallback((slideIndex) => {
-    if (slideIndex < 0 || slideIndex >= presentationConfig.slides.length) {
-      log('PDF', `⚠️ Invalid slide index: ${slideIndex}`);
+    log('PDF', `goToSlide called with index: ${slideIndex}`);
+
+    if (!presentationConfig || !presentationConfig.slides) {
+      log('PDF', `⚠️ Cannot go to slide - no presentation config`);
       return;
     }
 
-    log('PDF', `Going to slide ${slideIndex + 1}`);
+    if (slideIndex < 0 || slideIndex >= presentationConfig.slides.length) {
+      log('PDF', `⚠️ Invalid slide index: ${slideIndex} (valid: 0-${presentationConfig.slides.length - 1})`);
+      return;
+    }
+
+    log('PDF', `Going to slide ${slideIndex + 1} of ${presentationConfig.slides.length}`);
     setCurrentSlideIndex(slideIndex);
 
+    // Get the slide content now while we have the correct config
+    const slide = presentationConfig.slides[slideIndex];
+    const narration = slide?.narration;
+
+    log('PDF', `Slide ${slideIndex + 1} narration: ${narration ? narration.substring(0, 50) + '...' : 'NONE'}`);
+
     setTimeout(() => {
-      narrateSlide(slideIndex);
-    }, 500);
-  }, [presentationConfig, narrateSlide, log]);
-
-  /**
-   * End presentation and cleanup
-   * @param {boolean} notifyParent - Whether to call onPresentationEnd callback (default: true)
-   */
-  const endPresentation = useCallback(async (notifyParent = true) => {
-    log('PDF', `Ending presentation (notifyParent: ${notifyParent})`);
-
-    // Reset state FIRST before calling callback to prevent race conditions
-    setIsPresenting(false);
-    setCurrentPdfUrl(null);
-    setCurrentSlideIndex(0);
-    setPresentationConfig(null);
-    waitingForNarrationRef.current = false;
-
-    // Only notify parent if this is a natural completion (not forced termination)
-    if (notifyParent) {
-      // Small delay to ensure state updates propagate before callback
-      await new Promise(resolve => setTimeout(resolve, 100));
-      onPresentationEnd?.();
-    }
-  }, [onPresentationEnd, log]);
+      log('PDF', `Timer fired - narrating slide ${slideIndex + 1}`);
+      if (narration) {
+        log('PDF', '📝 Sending narration via echo');
+        sendMessage(narration, 'echo');
+      } else {
+        log('PDF', '⚠️ No narration for this slide');
+      }
+    }, 300); // Reduced from 800ms for faster response
+  }, [presentationConfig, sendMessage, log]);
 
   return {
     // State

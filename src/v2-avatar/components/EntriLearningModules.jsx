@@ -50,13 +50,15 @@ const getIcon = (iconName) => {
  * - activeModule: Currently active module ID
  * - completedModules: Array of completed module IDs
  * - onClose: Callback to close the sidebar
+ * - isMobile: Boolean indicating mobile screen size
  */
 const EntriLearningModules = ({
   persona,
   onModuleSelect,
   activeModule,
   completedModules = [],
-  onClose
+  onClose,
+  isMobile = false
 }) => {
   // Get course data from persona config
   const courseStructure = persona?.modules?.courseStructure || [];
@@ -94,7 +96,9 @@ const EntriLearningModules = ({
   // If no course structure, show empty state
   if (!courseStructure.length) {
     return (
-      <div className="fixed left-0 top-0 bottom-0 w-80 bg-gray-800 text-white z-50 flex flex-col shadow-2xl">
+      <div className={`fixed left-0 top-0 bottom-0 bg-gray-800 text-white z-50 flex flex-col shadow-2xl transition-all duration-300 ${
+        isMobile ? 'w-full' : 'w-80'
+      }`}>
         <div className="flex items-center justify-center h-full text-gray-400">
           No modules configured
         </div>
@@ -103,7 +107,9 @@ const EntriLearningModules = ({
   }
 
   return (
-    <div className="fixed left-0 top-0 bottom-0 w-80 bg-gray-800 text-white z-50 flex flex-col shadow-2xl">
+    <div className={`fixed left-0 top-0 bottom-0 bg-gray-800 text-white z-50 flex flex-col shadow-2xl transition-all duration-300 ${
+      isMobile ? 'w-full' : 'w-80'
+    }`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <div className="flex items-center gap-2">
