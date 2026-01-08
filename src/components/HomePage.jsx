@@ -2335,13 +2335,15 @@ const HomePage = () => {
         }
       `}</style>
 
-      {/* AI Chat Widget - Live Avatar */}
-      <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
-        <AIChatWidget
-          autoExpand={triggerAvatarFullscreen}
-          onDisconnect={() => setTriggerAvatarFullscreen(false)}
-        />
-      </div>
+      {/* AI Chat Widget - Live Avatar - Hidden */}
+      {false && (
+        <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
+          <AIChatWidget
+            autoExpand={triggerAvatarFullscreen}
+            onDisconnect={() => setTriggerAvatarFullscreen(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
