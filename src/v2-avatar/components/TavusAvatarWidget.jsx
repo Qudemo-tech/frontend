@@ -144,6 +144,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const prePdfWidgetStateRef = useRef(null);
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
+  const lastLogTimeRef = useRef(0); // Throttle backend logging
   const handleModuleSelectRef = useRef(null); // Ref to handleModuleSelect function
   const checkModuleCompletionRef = useRef(null); // Ref to checkModuleCompletion function
   const finishModuleSpeechRef = useRef(null); // Ref to finishModuleSpeech function
@@ -194,12 +195,27 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const { logs, log, clearLogs } = useEventLogger();
 
   // Add debug log and send to backend
+  // CRITICAL: Throttle logging to prevent rate limiting (max 1 log per second)
+  const LOG_THROTTLE_MS = 1000; // 1 second between backend logs
+  
   const addDebugLog = (message) => {
+    // CRITICAL: Guard against undefined/null messages
+    if (!message || typeof message !== 'string') {
+      return; // Silently skip invalid log messages
+    }
+    
     const timestampedMsg = `${new Date().toLocaleTimeString()}: ${message}`;
     setDebugLogs(prev => [...prev, timestampedMsg].slice(-10));
     console.log('[TAVUS-DEBUG]', message);
 
-    // Send to backend for logging
+    // CRITICAL: Throttle backend logging to prevent rate limiting
+    const now = Date.now();
+    if (now - lastLogTimeRef.current < LOG_THROTTLE_MS) {
+      return; // Skip backend logging if too frequent
+    }
+    lastLogTimeRef.current = now;
+
+    // Send to backend for logging (throttled)
     try {
       fetch(`${getApiUrl()}/api/mobile-logs`, {
         method: 'POST',
@@ -208,8 +224,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           log: `[TAVUS] ${timestampedMsg}`,
           userAgent: navigator.userAgent
         })
-      }).catch(() => {});
-    } catch (e) {}
+      }).catch(() => {}); // Silently handle fetch errors
+    } catch (e) {
+      // Silently handle errors
+    }
   };
 
   // Trigger proactive continuation after 5 seconds of silence
@@ -307,14 +325,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     log,
     setState,
     onVideoStart: () => {
-      // Interrupt avatar if speaking
-      if (dailyEventManagerRef.current && isAvatarSpeaking) {
-        addDebugLog('[DEMO] Interrupting avatar speech for video playback');
-        dailyEventManagerRef.current.interruptReplica();
-      }
+      // CRITICAL: Ensure video playing flag is set (in case it wasn't set earlier)
+      isDemoPlayingRef.current = true;
       
-      // Disable avatar listening - avatar should NOT listen when video is playing
+      // CRITICAL: Force interrupt avatar if speaking - must happen immediately
       if (dailyEventManagerRef.current) {
+        if (isAvatarSpeakingRef.current || isAvatarSpeaking) {
+          addDebugLog('[DEMO] FORCE INTERRUPT: Stopping avatar speech for video playback');
+          dailyEventManagerRef.current.interruptReplica();
+        }
+        
+        // Disable avatar listening - avatar should NOT listen when video is playing
         addDebugLog('[DEMO] Disabling avatar listening - video is playing');
         dailyEventManagerRef.current.disableListening();
       }
@@ -323,7 +344,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       addDebugLog('[DEMO] Muting avatar audio for video playback');
       setAudioEnabled(false);
       
-      // Reset speaking state
+      // CRITICAL: Force reset speaking state - avatar must be silent
       setIsAvatarSpeaking(false);
       isAvatarSpeakingRef.current = false;
       
@@ -379,7 +400,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   } = useNeuralVAD({
     audioTrack: localAudioTrack,
     enabled: !isMuted && !!localAudioTrack, // Only enable when mic is unmuted
-    log: (category, message, data) => {
+    log: (message) => {
+      // CRITICAL: Guard against undefined/null messages
+      if (!message || typeof message !== 'string') {
+        return; // Silently skip invalid log messages
+      }
       addDebugLog(`[VAD] ${message}`);
     },
     onSpeechConfirmed: (probability, duration) => {
@@ -394,7 +419,40 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       setMinSpeechDuration: vadSetMinDuration,
       reset: vadReset,
     };
-  }, [vadCheckIsSpeechConfirmed, vadSetMinDuration, vadReset]);
+    
+    // CRITICAL: Update DailyEventManager VAD checker when VAD ref changes
+    // This ensures VAD checker is set even if DailyEventManager was created before VAD was ready
+    if (dailyEventManagerRef.current && vadRef.current) {
+      dailyEventManagerRef.current.setVADSpeechChecker(
+        (isModuleLocked) => {
+          // CRITICAL: Fail-safe wrapper - return false (don't interrupt) if VAD is disabled or invalid
+          try {
+            if (!vadRef.current || !vadRef.current.checkIsSpeechConfirmed) {
+              return false; // VAD not available - fail-safe: don't interrupt
+            }
+            const result = vadRef.current.checkIsSpeechConfirmed(isModuleLocked);
+            // CRITICAL: Guard against undefined/invalid result
+            if (typeof result !== 'boolean') {
+              return false; // Invalid result - fail-safe: don't interrupt
+            }
+            return result;
+          } catch (error) {
+            // CRITICAL: Fail-safe - if VAD check throws error, don't interrupt
+            addDebugLog(`[VAD] Error in speech check - fail-safe: ${error.message}`);
+            return false;
+          }
+        },
+        () => moduleSpeechLockRef.current // isModuleLockActive function
+      );
+    }
+
+    // CRITICAL: Update video playing checker when ref changes
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.setVideoPlayingChecker(() => {
+        return isDemoPlayingRef.current; // Check if video is playing
+      });
+    }
+  }, [vadCheckIsSpeechConfirmed, vadSetMinDuration, vadReset, addDebugLog]);
 
   // Update VAD min duration when module lock changes
   // Note: We update this in startModuleSpeech and finishModuleSpeech callbacks
@@ -404,9 +462,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const sendMessageToReplica = useCallback((message, type = 'respond') => {
     if (!dailyEventManagerRef.current) return;
 
-    // Block sending messages when video is playing - avatar should be silent
+    // CRITICAL: Block ALL messages when video is playing - avatar must be completely silent
     if (isDemoPlayingRef.current) {
-      addDebugLog('[DEMO] Blocking message to avatar - video is playing');
+      addDebugLog('[DEMO] BLOCKED: Message to avatar blocked - video is playing');
+      // Force interrupt if avatar is speaking
+      if (isAvatarSpeakingRef.current) {
+        dailyEventManagerRef.current.interruptReplica();
+        setIsAvatarSpeaking(false);
+        isAvatarSpeakingRef.current = false;
+        setAvatarState("idle");
+      }
       return;
     }
 
@@ -1055,26 +1120,26 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Handle show_demo_video tool call from Tavus persona
         log('TOOL_CALL', 'show_demo_video triggered', { url: args.url, title: args.title });
 
-        // Don't send echo message - avatar should remain silent when video tool is opened
-        // User is watching the video, so avatar should not speak at all
+        // CRITICAL: Set flag FIRST to block all avatar speech immediately
+        // This must happen before any other operations to prevent race conditions
+        isDemoPlayingRef.current = true;
+        setIsAvatarSpeaking(false);
+        isAvatarSpeakingRef.current = false;
+        setAvatarState("idle");
 
-        // Immediately interrupt avatar if speaking and disable listening
+        // CRITICAL: Immediately interrupt avatar if speaking - must happen after flag is set
         if (dailyEventManagerRef.current) {
-          if (isAvatarSpeakingRef.current) {
-            log('DEMO', 'Interrupting avatar speech immediately when video tool is called');
-            dailyEventManagerRef.current.interruptReplica();
-          }
+          // Interrupt any ongoing speech immediately
+          log('DEMO', 'Interrupting avatar speech immediately when video tool is called');
+          dailyEventManagerRef.current.interruptReplica();
+          
           // Disable listening immediately - avatar should not listen when video is playing
           dailyEventManagerRef.current.disableListening();
           log('DEMO', 'Disabled avatar listening immediately when video tool is called');
         }
 
-        // Set flag immediately to prevent any new avatar speech
-        // This ensures avatar doesn't speak even before isDemoPlaying is set to true
-        isDemoPlayingRef.current = true;
-        setIsAvatarSpeaking(false);
-        isAvatarSpeakingRef.current = false;
-        setAvatarState("idle");
+        // Don't send echo message - avatar should remain silent when video tool is opened
+        // User is watching the video, so avatar should not speak at all
 
         // Play video immediately without waiting for avatar to finish speaking
         if (args.url && playDemoVideoRef.current) {
@@ -1836,9 +1901,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Setup callbacks - demo triggers handled via tool calls, no speech detection needed
       dailyEventManagerRef.current.setCallbacks({
         onReplicaStartSpeaking: () => {
-          // Ignore avatar speech when video is playing
+          // CRITICAL: Block ALL avatar speech when video is playing
           if (isDemoPlayingRef.current) {
-            log('DEMO', 'Ignoring avatar speech - video is playing');
+            log('DEMO', 'BLOCKED: Ignoring avatar speech start - video is playing');
+            // Force interrupt if avatar tries to speak during video
+            if (dailyEventManagerRef.current) {
+              dailyEventManagerRef.current.interruptReplica();
+            }
+            // Ensure state is set to idle
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
             return;
           }
           setIsAvatarSpeaking(true);
@@ -1904,8 +1977,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           handleUserSpeech(text, source);
         },
         onReplicaTranscript: (text, source) => {
+          // CRITICAL: Block ALL avatar transcripts when video is playing
           if (isDemoPlayingRef.current) {
-            log('DEMO', 'Ignoring avatar transcript - video is playing');
+            log('DEMO', 'BLOCKED: Ignoring avatar transcript - video is playing');
+            // Force interrupt if avatar tries to speak during video
+            if (dailyEventManagerRef.current) {
+              dailyEventManagerRef.current.interruptReplica();
+            }
+            // Ensure state is set to idle
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
             return;
           }
           
@@ -1941,6 +2023,41 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       // Attach to Daily
       dailyEventManagerRef.current.attachToDaily(daily, conversationId);
+
+      // CRITICAL: Set VAD speech checker with fail-safe wrapper
+      // This gates user-started-speaking events to prevent false interruptions
+      if (dailyEventManagerRef.current && vadRef.current) {
+        dailyEventManagerRef.current.setVADSpeechChecker(
+          (isModuleLocked) => {
+            // CRITICAL: Fail-safe wrapper - return false (don't interrupt) if VAD is disabled or invalid
+            try {
+              if (!vadRef.current || !vadRef.current.checkIsSpeechConfirmed) {
+                return false; // VAD not available - fail-safe: don't interrupt
+              }
+              const result = vadRef.current.checkIsSpeechConfirmed(isModuleLocked);
+              // CRITICAL: Guard against undefined/invalid result
+              if (typeof result !== 'boolean') {
+                return false; // Invalid result - fail-safe: don't interrupt
+              }
+              return result;
+            } catch (error) {
+              // CRITICAL: Fail-safe - if VAD check throws error, don't interrupt
+              addDebugLog(`[VAD] Error in speech check - fail-safe: ${error.message}`);
+              return false;
+            }
+          },
+          () => moduleSpeechLockRef.current // isModuleLockActive function
+        );
+        addDebugLog('[INIT] ✅ VAD speech checker configured with fail-safe');
+      }
+
+      // CRITICAL: Set video playing checker to block all avatar speech when video is playing
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.setVideoPlayingChecker(() => {
+          return isDemoPlayingRef.current; // Check if video is playing
+        });
+        addDebugLog('[INIT] ✅ Video playing checker configured - avatar will be blocked during video');
+      }
 
       // Enable Tavus listening (microphone is always on)
       if (dailyEventManagerRef.current) {

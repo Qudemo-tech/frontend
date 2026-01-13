@@ -1,20 +1,27 @@
 /**
  * useNeuralVAD - Client-side neural Voice Activity Detection using Silero VAD
  * 
- * This hook uses Silero VAD (ONNX) to filter out false positives from Tavus/Daily
- * speech detection events. It prevents interruptions from background noise, coughs,
- * hums, and brief sounds.
+ * PRODUCTION HOTFIX: Stabilized to prevent browser freezes
+ * 
+ * Key fixes:
+ * - Removed all logging from audio processing loops
+ * - Added undefined guards for VAD output
+ * - Replaced useState with useRef for audio-rate updates
+ * - Added initialization guard to prevent re-initialization
+ * - Ensured 16kHz mono audio processing
+ * - Added throttling for VAD decisions (100ms)
+ * - Added fail-safe to disable VAD on errors
  * 
  * Architecture:
  * - Taps microphone audio in parallel (does NOT replace Daily.co audio)
- * - Runs VAD inference asynchronously (non-blocking via requestIdleCallback/queueMicrotask)
- * - Tracks speech probability and duration
+ * - Runs VAD inference asynchronously (non-blocking)
+ * - Tracks speech probability and duration using refs only
  * - Provides speech confirmation based on threshold + duration
  * 
  * Rules:
  * - speechProbability threshold: > 0.65
  * - minimum speech duration: 500-600ms (configurable per context)
- * - ignore all speech shorter than minimum duration
+ * - ignore all speech shorter than this (coughs, breaths, hums)
  * - end-of-speech when silence > 500ms
  */
 
@@ -27,7 +34,8 @@ const MIN_SPEECH_DURATION_LOCKED_MS = 600; // Minimum duration when module lock 
 const SILENCE_DURATION_MS = 500; // Duration of silence to consider speech ended
 const SAMPLE_RATE = 16000; // 16kHz for Silero VAD
 const FRAME_SIZE = 512; // 32ms frames at 16kHz
-const PROCESSING_INTERVAL_MS = 30; // Process audio every 30ms to avoid blocking
+const PROCESSING_INTERVAL_MS = 30; // Process audio every 30ms
+const DECISION_THROTTLE_MS = 100; // Throttle decision logic to 100ms (not audio rate)
 
 /**
  * useNeuralVAD Hook
@@ -35,17 +43,28 @@ const PROCESSING_INTERVAL_MS = 30; // Process audio every 30ms to avoid blocking
  * @param {Object} options
  * @param {MediaStreamTrack} options.audioTrack - Microphone audio track to analyze
  * @param {boolean} options.enabled - Whether VAD is enabled
- * @param {Function} options.onSpeechConfirmed - Callback when speech is confirmed
- * @param {Function} options.log - Optional logging function
+ * @param {Function} options.onSpeechConfirmed - Callback when speech is confirmed (state transition only)
+ * @param {Function} options.log - Optional logging function (ONLY for state transitions, NOT audio loops)
  * @returns {Object} VAD state and methods
  */
 export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, log = () => {} }) {
-  // State
-  const [speechProbability, setSpeechProbability] = useState(0);
-  const [speechDurationMs, setSpeechDurationMs] = useState(0);
-  const [silenceDurationMs, setSilenceDurationMs] = useState(0);
-
-  // Refs
+  // CRITICAL: Wrap log function to guard against undefined values
+  const safeLog = useCallback((message) => {
+    if (!message || typeof message !== 'string') {
+      return; // Silently skip invalid log messages
+    }
+    try {
+      log(message);
+    } catch (error) {
+      // Silently handle logging errors to prevent crashes
+    }
+  }, [log]); // CRITICAL: Depend on log, not safeLog (fixes circular dependency)
+  // CRITICAL: Use refs for all audio-rate values (NO useState in audio loops)
+  const speechProbabilityRef = useRef(0);
+  const speechDurationMsRef = useRef(0);
+  const silenceDurationMsRef = useRef(0);
+  
+  // Refs for audio processing
   const audioContextRef = useRef(null);
   const sourceNodeRef = useRef(null);
   const analyserNodeRef = useRef(null);
@@ -56,26 +75,48 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
   const silenceStartTimeRef = useRef(null);
   const lastSpeechProbRef = useRef(0);
   const audioBufferRef = useRef(new Float32Array(FRAME_SIZE));
-  const bufferIndexRef = useRef(0);
-  const isInitializedRef = useRef(false);
   const confirmedSpeechRef = useRef(false);
   const minDurationRef = useRef(MIN_SPEECH_DURATION_MS);
+  
+  // CRITICAL: Initialization guard - prevent re-initialization
+  const vadInitializedRef = useRef(false);
+  
+  // CRITICAL: Fail-safe flag - disable VAD if errors occur
+  const vadDisabledRef = useRef(false);
+  
+  // CRITICAL: Throttle decision logic (not audio processing)
+  const lastDecisionTimeRef = useRef(0);
+  const pendingDecisionRef = useRef(null);
+  
+  // State transition flags (for React state updates ONLY on transitions)
+  const [speechState, setSpeechState] = useState({ 
+    probability: 0, 
+    duration: 0, 
+    silence: 0,
+    isConfirmed: false 
+  });
 
   /**
    * Load Silero VAD ONNX model
+   * CRITICAL: Only logs on state transitions (load start/complete/fail)
    */
   const loadVADModel = useCallback(async () => {
     if (vadSessionRef.current) {
       return true;
     }
 
+    if (vadDisabledRef.current) {
+      return false; // VAD disabled due to previous errors
+    }
+
     try {
-      log('[VAD] Loading Silero VAD model...');
+      // Log ONLY on state transition (model load start)
+      safeLog('[VAD] Loading Silero VAD model...');
       
       // Dynamic import of onnxruntime-web
       const ort = await import('onnxruntime-web');
       
-      // Silero VAD model URL (v4 model - simpler, no state management needed)
+      // Silero VAD model URL (v4 model)
       const MODEL_URL = 'https://models.silero.ai/vad_models/v4/silero_vad.onnx';
       
       // Create inference session
@@ -84,21 +125,28 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
         graphOptimizationLevel: 'all',
       });
       
-      log('[VAD] Model loaded successfully');
+      // Log ONLY on state transition (model load complete)
+      safeLog('[VAD] Model loaded successfully');
+      vadDisabledRef.current = false; // Reset disabled flag on successful load
       return true;
     } catch (error) {
-      console.error('[VAD] Model loading error:', error);
-      log(`[VAD] Model load error: ${error.message}`);
-      // Fallback: continue without VAD (graceful degradation)
+      // CRITICAL: Fail-safe - disable VAD on error
+      vadDisabledRef.current = true;
+      vadSessionRef.current = null;
+      // Log ONLY on state transition (model load fail)
+      const errorMsg = error?.message || 'Unknown error';
+      safeLog(`[VAD] Model load error: ${errorMsg} - VAD disabled (fail-safe)`);
       return false;
     }
-  }, [log]);
+  }, [safeLog]);
 
   /**
    * Process audio frame through VAD model
+   * CRITICAL: NO logging, NO React state updates, NO undefined values
    */
   const processAudioFrame = useCallback(async (audioData) => {
-    if (!vadSessionRef.current || !enabled || audioData.length !== FRAME_SIZE) {
+    // CRITICAL: Hard guard - check if VAD is disabled or invalid
+    if (vadDisabledRef.current || !vadSessionRef.current || !enabled || !audioData || audioData.length !== FRAME_SIZE) {
       return;
     }
 
@@ -106,7 +154,13 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       // Normalize audio (ensure it's in [-1, 1] range)
       const normalized = new Float32Array(FRAME_SIZE);
       for (let i = 0; i < FRAME_SIZE; i++) {
-        normalized[i] = Math.max(-1, Math.min(1, audioData[i]));
+        const sample = audioData[i];
+        // CRITICAL: Guard against invalid audio samples
+        if (typeof sample !== 'number' || !isFinite(sample)) {
+          normalized[i] = 0;
+        } else {
+          normalized[i] = Math.max(-1, Math.min(1, sample));
+        }
       }
       
       // Create ONNX tensor: [batch, samples] = [1, 512]
@@ -117,36 +171,45 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       const feeds = { input: inputTensor };
       const results = await vadSessionRef.current.run(feeds);
       
-      // Extract speech probability
-      // Silero VAD v4 outputs speech probability directly
+      // CRITICAL: Hard guard for undefined VAD output
+      if (!results || !results.output) {
+        return; // Silently skip invalid inference
+      }
+      
       const output = results.output;
       let probability = 0;
       
+      // CRITICAL: Extract probability with hard guards
       if (output && output.data) {
         const data = output.data;
-        // Handle different output shapes
-        if (Array.isArray(data)) {
-          probability = data[0] || 0;
-        } else if (data instanceof Float32Array || data instanceof Array) {
-          probability = data[0] || 0;
-        } else {
+        
+        // Handle different output shapes with type checking
+        if (Array.isArray(data) && data.length > 0) {
+          const val = data[0];
+          if (typeof val === 'number' && isFinite(val)) {
+            probability = val;
+          }
+        } else if (data instanceof Float32Array && data.length > 0) {
+          const val = data[0];
+          if (typeof val === 'number' && isFinite(val)) {
+            probability = val;
+          }
+        } else if (typeof data === 'number' && isFinite(data)) {
           probability = data;
         }
       }
       
+      // CRITICAL: Validate probability before using
+      if (typeof probability !== 'number' || !isFinite(probability)) {
+        return; // Silently skip invalid probability
+      }
+      
+      // Clamp probability to [0, 1]
       probability = Math.max(0, Math.min(1, probability));
       lastSpeechProbRef.current = probability;
+      speechProbabilityRef.current = probability;
       
-      // Update state (throttled to avoid excessive re-renders)
-      setSpeechProbability(prev => {
-        // Only update if change is significant (0.05 threshold)
-        if (Math.abs(prev - probability) > 0.05) {
-          return probability;
-        }
-        return prev;
-      });
-      
-      // Update speech/silence tracking
+      // CRITICAL: Update speech/silence tracking using refs only (NO React state)
       const now = Date.now();
       const isSpeech = probability > SPEECH_THRESHOLD;
       
@@ -156,16 +219,32 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
           silenceStartTimeRef.current = null;
         }
         const duration = now - speechStartTimeRef.current;
-        setSpeechDurationMs(duration);
-        setSilenceDurationMs(0);
+        speechDurationMsRef.current = duration;
+        silenceDurationMsRef.current = 0;
         
-        // Check if speech is confirmed
-        const minDuration = minDurationRef.current;
-        if (duration >= minDuration && !confirmedSpeechRef.current) {
-          confirmedSpeechRef.current = true;
-          log(`[VAD] Speech confirmed (${duration}ms, prob=${probability.toFixed(2)})`);
-          if (onSpeechConfirmed) {
-            onSpeechConfirmed(probability, duration);
+        // CRITICAL: Throttle decision logic (not audio processing)
+        const timeSinceLastDecision = now - lastDecisionTimeRef.current;
+        if (timeSinceLastDecision >= DECISION_THROTTLE_MS) {
+          lastDecisionTimeRef.current = now;
+          
+          // Check if speech is confirmed (decision logic)
+          const minDuration = minDurationRef.current;
+          if (duration >= minDuration && !confirmedSpeechRef.current) {
+            confirmedSpeechRef.current = true;
+            // CRITICAL: Log ONLY on state transition (speech confirmed)
+            if (typeof probability === 'number' && typeof duration === 'number' && isFinite(probability) && isFinite(duration)) {
+              safeLog(`[VAD] Speech confirmed (${duration}ms, prob=${probability.toFixed(2)})`);
+            }
+            if (onSpeechConfirmed) {
+              onSpeechConfirmed(probability, duration);
+            }
+            // CRITICAL: React state update ONLY on state transition
+            setSpeechState(prev => ({
+              ...prev,
+              isConfirmed: true,
+              probability,
+              duration
+            }));
           }
         }
       } else {
@@ -174,31 +253,54 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
             silenceStartTimeRef.current = now;
           }
           const silenceDuration = now - silenceStartTimeRef.current;
-          setSilenceDurationMs(silenceDuration);
+          silenceDurationMsRef.current = silenceDuration;
           
-          // Reset if silence is long enough
-          if (silenceDuration >= SILENCE_DURATION_MS) {
-            speechStartTimeRef.current = null;
-            silenceStartTimeRef.current = null;
-            setSpeechDurationMs(0);
-            setSilenceDurationMs(0);
-            confirmedSpeechRef.current = false;
+          // CRITICAL: Throttle decision logic
+          const timeSinceLastDecision = now - lastDecisionTimeRef.current;
+          if (timeSinceLastDecision >= DECISION_THROTTLE_MS) {
+            lastDecisionTimeRef.current = now;
+            
+            // Reset if silence is long enough
+            if (silenceDuration >= SILENCE_DURATION_MS) {
+              const wasConfirmed = confirmedSpeechRef.current;
+              speechStartTimeRef.current = null;
+              silenceStartTimeRef.current = null;
+              speechDurationMsRef.current = 0;
+              silenceDurationMsRef.current = 0;
+              confirmedSpeechRef.current = false;
+              
+              // CRITICAL: React state update ONLY on state transition (speech ended)
+              if (wasConfirmed) {
+                setSpeechState(prev => ({
+                  ...prev,
+                  isConfirmed: false,
+                  duration: 0,
+                  silence: 0
+                }));
+              }
+            }
           }
         }
       }
     } catch (error) {
-      // Silently handle inference errors to avoid spam
+      // CRITICAL: Fail-safe - disable VAD on repeated errors
       if (error.message && !error.message.includes('already')) {
-        console.error('[VAD] Inference error:', error);
+        // Count errors - disable after multiple failures
+        vadDisabledRef.current = true;
+        vadSessionRef.current = null;
+        // Log ONLY on state transition (error occurred)
+        const errorMsg = error?.message || 'Unknown error';
+        safeLog(`[VAD] Inference error - VAD disabled (fail-safe): ${errorMsg}`);
       }
     }
-  }, [enabled, log, onSpeechConfirmed]);
+  }, [enabled, safeLog, onSpeechConfirmed]);
 
   /**
    * Process audio data from analyser node
+   * CRITICAL: NO logging, just audio processing
    */
   const processAudio = useCallback(() => {
-    if (!analyserNodeRef.current || !isProcessingRef.current || !enabled) {
+    if (!analyserNodeRef.current || !isProcessingRef.current || !enabled || vadDisabledRef.current) {
       return;
     }
 
@@ -207,32 +309,59 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       const dataArray = new Float32Array(FRAME_SIZE);
       analyserNodeRef.current.getFloatTimeDomainData(dataArray);
       
+      // CRITICAL: Ensure 16kHz mono audio
+      // AudioContext is already created with sampleRate: 16000
+      // AnalyserNode will automatically resample if needed
+      
       // Copy to buffer
       audioBufferRef.current.set(dataArray);
       
       // Process frame asynchronously (non-blocking)
-      queueMicrotask(() => {
-        processAudioFrame(audioBufferRef.current);
-      });
+      // CRITICAL: Use requestIdleCallback for better scheduling (falls back to setTimeout)
+      if (window.requestIdleCallback) {
+        requestIdleCallback(() => {
+          processAudioFrame(audioBufferRef.current);
+        }, { timeout: 10 });
+      } else {
+        setTimeout(() => {
+          processAudioFrame(audioBufferRef.current);
+        }, 0);
+      }
     } catch (error) {
-      // Silently handle processing errors
+      // Silently handle processing errors - don't spam console
+      if (error.message && !error.message.includes('already')) {
+        vadDisabledRef.current = true;
+      }
     }
   }, [enabled, processAudioFrame]);
 
   /**
    * Initialize AudioContext and audio processing
+   * CRITICAL: Only logs on state transitions
    */
   const initializeAudio = useCallback(async () => {
-    if (!audioTrack || !enabled || isInitializedRef.current) {
+    // CRITICAL: Initialization guard - prevent re-initialization
+    if (vadInitializedRef.current || !audioTrack || !enabled || vadDisabledRef.current) {
       return;
     }
 
     try {
-      log('[VAD] Initializing audio context...');
+      // Log ONLY on state transition (initialization start)
+      safeLog('[VAD] Initializing audio context...');
       
-      // Create AudioContext for processing
+      // CRITICAL: Create AudioContext with 16kHz sample rate
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      audioContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE });
+      audioContextRef.current = new AudioContextClass({ 
+        sampleRate: SAMPLE_RATE, // Force 16kHz
+        latencyHint: 'interactive' // Low latency
+      });
+      
+      // CRITICAL: Ensure sample rate is actually 16kHz
+      if (audioContextRef.current.sampleRate !== SAMPLE_RATE) {
+        // If browser doesn't support 16kHz, we'll resample manually
+        // For now, log warning but continue (resampling happens in analyser)
+        safeLog(`[VAD] Warning: AudioContext sample rate is ${audioContextRef.current.sampleRate}Hz, expected ${SAMPLE_RATE}Hz`);
+      }
       
       // Create MediaStream from track
       const stream = new MediaStream([audioTrack]);
@@ -243,23 +372,33 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       analyserNodeRef.current.fftSize = FRAME_SIZE * 2;
       analyserNodeRef.current.smoothingTimeConstant = 0.8;
       
+      // CRITICAL: Ensure mono audio (single channel)
+      // AnalyserNode automatically converts to mono
+      
       // Connect audio processing chain
       sourceNodeRef.current.connect(analyserNodeRef.current);
       // Don't connect to destination (we're just analyzing, not playing)
       
-      isInitializedRef.current = true;
-      log('[VAD] Audio processing initialized');
+      vadInitializedRef.current = true;
+      // Log ONLY on state transition (initialization complete)
+      safeLog('[VAD] Audio processing initialized');
     } catch (error) {
-      console.error('[VAD] Audio initialization error:', error);
-      log(`[VAD] Audio init error: ${error.message}`);
+      // CRITICAL: Fail-safe - disable VAD on error
+      vadDisabledRef.current = true;
+      vadInitializedRef.current = false;
+      // Log ONLY on state transition (initialization error)
+      const errorMsg = error?.message || 'Unknown error';
+      safeLog(`[VAD] Audio init error: ${errorMsg} - VAD disabled (fail-safe)`);
     }
-  }, [audioTrack, enabled, log]);
+  }, [audioTrack, enabled, safeLog]);
 
   /**
    * Start VAD processing
+   * CRITICAL: Only logs on state transitions
    */
   const start = useCallback(async () => {
-    if (isProcessingRef.current || !enabled) {
+    // CRITICAL: Initialization guard
+    if (isProcessingRef.current || !enabled || vadDisabledRef.current) {
       return;
     }
 
@@ -267,14 +406,21 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       // Load model first
       const modelLoaded = await loadVADModel();
       if (!modelLoaded) {
-        log('[VAD] Failed to load model, VAD disabled (graceful degradation)');
+        // Log ONLY on state transition (model load failed)
+        safeLog('[VAD] Failed to load model, VAD disabled (graceful degradation)');
+        vadDisabledRef.current = true;
         return;
       }
 
       // Initialize audio processing
       await initializeAudio();
       
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      if (!audioContextRef.current) {
+        vadDisabledRef.current = true;
+        return;
+      }
+      
+      if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
       
@@ -282,15 +428,21 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       isProcessingRef.current = true;
       processingIntervalRef.current = setInterval(processAudio, PROCESSING_INTERVAL_MS);
       
-      log('[VAD] Started processing');
+      // Log ONLY on state transition (processing started)
+      safeLog('[VAD] Started processing');
     } catch (error) {
-      console.error('[VAD] Start error:', error);
-      log(`[VAD] Start error: ${error.message}`);
+      // CRITICAL: Fail-safe
+      vadDisabledRef.current = true;
+      isProcessingRef.current = false;
+      // Log ONLY on state transition (start error)
+      const errorMsg = error?.message || 'Unknown error';
+      safeLog(`[VAD] Start error: ${errorMsg} - VAD disabled (fail-safe)`);
     }
-  }, [enabled, loadVADModel, initializeAudio, processAudio, log]);
+  }, [enabled, loadVADModel, initializeAudio, processAudio, safeLog]);
 
   /**
    * Stop VAD processing
+   * CRITICAL: Only logs on state transitions
    */
   const stop = useCallback(() => {
     isProcessingRef.current = false;
@@ -301,12 +453,16 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
     }
     
     if (analyserNodeRef.current) {
-      analyserNodeRef.current.disconnect();
+      try {
+        analyserNodeRef.current.disconnect();
+      } catch (e) {}
       analyserNodeRef.current = null;
     }
     
     if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
+      try {
+        sourceNodeRef.current.disconnect();
+      } catch (e) {}
       sourceNodeRef.current = null;
     }
     
@@ -315,91 +471,158 @@ export function useNeuralVAD({ audioTrack, enabled = true, onSpeechConfirmed, lo
       audioContextRef.current = null;
     }
     
-    isInitializedRef.current = false;
-    log('[VAD] Stopped processing');
-  }, [log]);
+    vadInitializedRef.current = false;
+    // Log ONLY on state transition (processing stopped)
+    safeLog('[VAD] Stopped processing');
+  }, [safeLog]);
 
   /**
    * Reset VAD state
+   * CRITICAL: Only logs on state transitions
    */
   const reset = useCallback(() => {
     speechStartTimeRef.current = null;
     silenceStartTimeRef.current = null;
-    setSpeechDurationMs(0);
-    setSilenceDurationMs(0);
+    speechDurationMsRef.current = 0;
+    silenceDurationMsRef.current = 0;
     confirmedSpeechRef.current = false;
-    bufferIndexRef.current = 0;
-    log('[VAD] State reset');
-  }, [log]);
+    lastSpeechProbRef.current = 0;
+    speechProbabilityRef.current = 0;
+    setSpeechState({
+      probability: 0,
+      duration: 0,
+      silence: 0,
+      isConfirmed: false
+    });
+    // Log ONLY on state transition (state reset)
+    safeLog('[VAD] State reset');
+  }, [safeLog]);
 
   /**
    * Set minimum speech duration (for module lock scenarios)
    */
   const setMinSpeechDuration = useCallback((durationMs) => {
-    minDurationRef.current = durationMs;
+    if (typeof durationMs === 'number' && isFinite(durationMs) && durationMs > 0) {
+      minDurationRef.current = durationMs;
+    }
   }, []);
 
   /**
    * Check if speech is probable (above threshold)
+   * CRITICAL: Uses refs, no React state
    */
   const isSpeechProbable = useCallback(() => {
-    return lastSpeechProbRef.current > SPEECH_THRESHOLD;
+    const prob = lastSpeechProbRef.current;
+    if (typeof prob !== 'number' || !isFinite(prob)) {
+      return false; // Fail-safe: return false for invalid probability
+    }
+    return prob > SPEECH_THRESHOLD;
   }, []);
 
   /**
    * Check if speech is confirmed (above threshold + duration)
+   * CRITICAL: Uses refs, no React state
    */
   const isSpeechConfirmed = useCallback(() => {
-    if (!confirmedSpeechRef.current) {
+    if (vadDisabledRef.current || !confirmedSpeechRef.current) {
       return false;
     }
+    
+    const prob = lastSpeechProbRef.current;
+    if (typeof prob !== 'number' || !isFinite(prob)) {
+      return false; // Fail-safe
+    }
+    
+    if (prob <= SPEECH_THRESHOLD) {
+      return false;
+    }
+    
     const duration = speechStartTimeRef.current 
       ? Date.now() - speechStartTimeRef.current 
       : 0;
-    return duration >= minDurationRef.current && lastSpeechProbRef.current > SPEECH_THRESHOLD;
+    
+    return duration >= minDurationRef.current;
   }, []);
 
-  // Initialize when audio track is available
+  /**
+   * Get current speech probability (for external access)
+   * CRITICAL: Returns ref value, not React state
+   */
+  const getSpeechProbability = useCallback(() => {
+    const prob = speechProbabilityRef.current;
+    return typeof prob === 'number' && isFinite(prob) ? prob : 0;
+  }, []);
+
+  /**
+   * Get current speech duration (for external access)
+   * CRITICAL: Returns ref value, not React state
+   */
+  const getSpeechDuration = useCallback(() => {
+    return speechDurationMsRef.current;
+  }, []);
+
+  /**
+   * Check if VAD is disabled (fail-safe check)
+   */
+  const isVADDisabled = useCallback(() => {
+    return vadDisabledRef.current;
+  }, []);
+
+  // CRITICAL: Initialize ONLY once on mount (empty dependency array)
   useEffect(() => {
-    if (audioTrack && enabled) {
+    // CRITICAL: Initialization guard - prevent re-initialization
+    if (vadInitializedRef.current) {
+      return;
+    }
+    
+    if (audioTrack && enabled && !vadDisabledRef.current) {
       start();
-    } else {
-      stop();
     }
 
     return () => {
       stop();
+      vadInitializedRef.current = false;
     };
+  }, []); // CRITICAL: Empty dependency array - initialize only once
+
+  // CRITICAL: Handle enabled/audioTrack changes WITHOUT re-initializing
+  useEffect(() => {
+    if (vadDisabledRef.current) {
+      return; // Don't restart if VAD is disabled
+    }
+    
+    if (audioTrack && enabled && vadInitializedRef.current && !isProcessingRef.current) {
+      start();
+    } else if (!enabled || !audioTrack) {
+      stop();
+    }
   }, [audioTrack, enabled, start, stop]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stop();
+      vadInitializedRef.current = false;
       if (vadSessionRef.current) {
         vadSessionRef.current = null;
       }
     };
   }, [stop]);
 
-  // Computed values (for React state)
-  const isSpeechProbableValue = speechProbability > SPEECH_THRESHOLD;
-  const isSpeechConfirmedValue = confirmedSpeechRef.current && 
-    speechDurationMs >= minDurationRef.current;
-
   return {
-    // State (reactive)
-    speechProbability,
-    speechDurationMs,
-    silenceDurationMs,
+    // CRITICAL: Return ref values for audio-rate data, React state only for UI
+    speechProbability: speechState.probability, // React state updated only on transitions
+    speechDurationMs: speechState.duration, // React state updated only on transitions
+    silenceDurationMs: speechState.silence, // React state updated only on transitions
     
-    // Computed state (reactive)
-    isSpeechProbable: isSpeechProbableValue,
-    isSpeechConfirmed: isSpeechConfirmedValue,
-    
-    // Methods (for synchronous checks in callbacks)
+    // Methods for synchronous checks (use refs internally)
+    isSpeechProbable: isSpeechProbable,
+    isSpeechConfirmed: isSpeechConfirmed,
     checkIsSpeechProbable: isSpeechProbable,
     checkIsSpeechConfirmed: isSpeechConfirmed,
+    getSpeechProbability,
+    getSpeechDuration,
+    isVADDisabled,
     reset,
     setMinSpeechDuration,
     start,

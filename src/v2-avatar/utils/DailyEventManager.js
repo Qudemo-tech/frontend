@@ -52,6 +52,9 @@ class DailyEventManager {
     // This function should return true only when VAD confirms actual speech (not noise)
     this.vadSpeechChecker = null;
     this.isModuleLockActive = null; // Function to check if module lock is active
+    
+    // CRITICAL: Block avatar speech when video is playing
+    this.isVideoPlaying = null; // Function to check if video is playing
   }
 
   /**
@@ -86,6 +89,16 @@ class DailyEventManager {
   setVADSpeechChecker(checker, isModuleLockActive) {
     this.vadSpeechChecker = checker;
     this.isModuleLockActive = isModuleLockActive;
+  }
+
+  /**
+   * Set function to check if video is playing
+   * This blocks all avatar speech when video is playing
+   * 
+   * @param {Function} checker - Function that returns true if video is playing
+   */
+  setVideoPlayingChecker(checker) {
+    this.isVideoPlaying = checker;
   }
 
   /**
@@ -190,18 +203,32 @@ class DailyEventManager {
         
         // 🧠 NEURAL VAD GATING: Check if speech is confirmed before processing
         // This prevents false interruptions from background noise, coughs, hums, etc.
+        // CRITICAL: Fail-safe - if VAD is disabled or invalid, fall back to "do not interrupt"
         if (this.vadSpeechChecker) {
-          const isModuleLocked = this.isModuleLockActive ? this.isModuleLockActive() : false;
-          const isSpeechConfirmed = this.vadSpeechChecker(isModuleLocked);
-          
-          if (!isSpeechConfirmed) {
-            // VAD did not confirm speech - ignore this event (likely noise)
-            this.log('USER_SPEECH', '🔇 VAD rejected: Not confirmed speech (likely noise)');
+          try {
+            const isModuleLocked = this.isModuleLockActive ? this.isModuleLockActive() : false;
+            const isSpeechConfirmed = this.vadSpeechChecker(isModuleLocked);
+            
+            // CRITICAL: Guard against undefined/invalid VAD response
+            if (typeof isSpeechConfirmed !== 'boolean') {
+              // VAD returned invalid result - fail-safe: ignore event (don't interrupt)
+              this.log('USER_SPEECH', '⚠️ VAD returned invalid result - ignoring event (fail-safe)');
+              return; // Do NOT process the event
+            }
+            
+            if (!isSpeechConfirmed) {
+              // VAD did not confirm speech - ignore this event (likely noise)
+              this.log('USER_SPEECH', '🔇 VAD rejected: Not confirmed speech (likely noise)');
+              return; // Do NOT process the event
+            }
+            
+            // VAD confirmed speech - proceed with processing
+            this.log('USER_SPEECH', '✅ VAD confirmed: Actual speech detected');
+          } catch (error) {
+            // CRITICAL: Fail-safe - if VAD check throws error, ignore event (don't interrupt)
+            this.log('USER_SPEECH', `⚠️ VAD check error - ignoring event (fail-safe): ${error.message}`);
             return; // Do NOT process the event
           }
-          
-          // VAD confirmed speech - proceed with processing
-          this.log('USER_SPEECH', '✅ VAD confirmed: Actual speech detected');
         }
         
         // Process the event (VAD confirmed or VAD not enabled)
@@ -316,10 +343,17 @@ class DailyEventManager {
 
   /**
    * Send echo message - make replica speak exact text
+   * CRITICAL: Blocks if video is playing
    */
   sendEchoMessage(text) {
     if (!this.daily || !this.conversationId) {
       this.log('SEND', '⚠️ Cannot send echo - not connected');
+      return false;
+    }
+
+    // CRITICAL: Block if video is playing
+    if (this.isVideoPlaying && this.isVideoPlaying()) {
+      this.log('SEND', '🚫 BLOCKED: Echo message blocked - video is playing');
       return false;
     }
 
@@ -340,10 +374,17 @@ class DailyEventManager {
 
   /**
    * Send respond message - LLM processes and responds
+   * CRITICAL: Blocks if video is playing
    */
   sendRespondMessage(text) {
     if (!this.daily || !this.conversationId) {
       this.log('SEND', '⚠️ Cannot send respond - not connected');
+      return false;
+    }
+
+    // CRITICAL: Block if video is playing
+    if (this.isVideoPlaying && this.isVideoPlaying()) {
+      this.log('SEND', '🚫 BLOCKED: Respond message blocked - video is playing');
       return false;
     }
 
