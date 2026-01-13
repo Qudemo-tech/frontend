@@ -47,6 +47,11 @@ class DailyEventManager {
 
     // Bound handler for cleanup
     this._boundAppMessageHandler = null;
+
+    // Neural VAD integration - gating function to check if speech is confirmed
+    // This function should return true only when VAD confirms actual speech (not noise)
+    this.vadSpeechChecker = null;
+    this.isModuleLockActive = null; // Function to check if module lock is active
   }
 
   /**
@@ -68,6 +73,19 @@ class DailyEventManager {
    */
   setCallbacks(callbacks) {
     this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * Set VAD speech checker function
+   * This function is called before processing user-started-speaking events
+   * to gate false positives from background noise
+   * 
+   * @param {Function} checker - Function that returns true if speech is confirmed by VAD
+   * @param {Function} isModuleLockActive - Function that returns true if module lock is active
+   */
+  setVADSpeechChecker(checker, isModuleLockActive) {
+    this.vadSpeechChecker = checker;
+    this.isModuleLockActive = isModuleLockActive;
   }
 
   /**
@@ -168,7 +186,25 @@ class DailyEventManager {
 
       // User speaking state
       case 'conversation.user.started_speaking':
-        this.log('USER_SPEECH', '🗣️ User started speaking');
+        this.log('USER_SPEECH', '🗣️ User started speaking (Tavus event)');
+        
+        // 🧠 NEURAL VAD GATING: Check if speech is confirmed before processing
+        // This prevents false interruptions from background noise, coughs, hums, etc.
+        if (this.vadSpeechChecker) {
+          const isModuleLocked = this.isModuleLockActive ? this.isModuleLockActive() : false;
+          const isSpeechConfirmed = this.vadSpeechChecker(isModuleLocked);
+          
+          if (!isSpeechConfirmed) {
+            // VAD did not confirm speech - ignore this event (likely noise)
+            this.log('USER_SPEECH', '🔇 VAD rejected: Not confirmed speech (likely noise)');
+            return; // Do NOT process the event
+          }
+          
+          // VAD confirmed speech - proceed with processing
+          this.log('USER_SPEECH', '✅ VAD confirmed: Actual speech detected');
+        }
+        
+        // Process the event (VAD confirmed or VAD not enabled)
         if (this.callbacks.onUserStartSpeaking) {
           this.callbacks.onUserStartSpeaking();
         }

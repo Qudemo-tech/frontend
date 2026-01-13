@@ -23,10 +23,15 @@ import {
 import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
+import { useNeuralVAD } from '../hooks/useNeuralVAD';
 import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
 import EntriLearningModules from './EntriLearningModules';
+
+// VAD Configuration constants
+const MIN_SPEECH_DURATION_MS = 500; // Minimum speech duration to confirm (default)
+const MIN_SPEECH_DURATION_LOCKED_MS = 600; // Minimum duration when module lock is active
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -43,7 +48,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   };
 
   const [state, setState] = useState(autoExpand ? "maximized" : "minimized");
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false); // Microphone always on by default
   const [isVoiceMode, setIsVoiceMode] = useState(true);
   const [showBookingPopup, setShowBookingPopup] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
@@ -69,6 +74,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [showPdf, setShowPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState('');
   const [pendingPdfUrl, setPendingPdfUrl] = useState(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState(null);
   
   // Learning modules state - only show for Entri and Evolution personas
   const [activeModule, setActiveModule] = useState(null);
@@ -261,15 +267,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (activeModuleRef.current === 'founder-video' && personaId === 'p54ceeb77022') {
       addDebugLog('[DEMO] Founder video finished - moving to next module');
       
-      // 🔇 Ensure microphone stays muted (should already be muted)
-      if (sessionManagerRef.current?.isInitialized) {
-        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-          addDebugLog(`[DEMO] Failed to keep microphone muted: ${err.message}`);
-        });
-        setIsMuted(true);
-      }
-      
-      // 🔴 Keep Tavus listening disabled
+      // 🔴 Keep Tavus listening disabled (mic stays on)
       if (dailyEventManagerRef.current) {
         dailyEventManagerRef.current.disableListening();
         addDebugLog('[DEMO] 🔇 Keeping Tavus listening disabled after video');
@@ -294,11 +292,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       setTimeout(() => {
         if (mountedRef.current && !quizState.isActive && handleModuleSelectRef.current) {
           addDebugLog(`[DEMO] ✅ Moving to next module after founder video: ${nextModuleId}`);
-          // Ensure microphone is still muted before moving to next module
-          if (sessionManagerRef.current?.isInitialized) {
-            sessionManagerRef.current.setMicrophoneMuted(true);
-            setIsMuted(true);
-          }
+          // Microphone stays on - no muting needed
           handleModuleSelectRef.current(nextModuleId);
         } else {
           addDebugLog(`[DEMO] ❌ Cannot move to next module - mounted: ${mountedRef.current}, quizActive: ${quizState.isActive}, hasHandleModuleSelect: ${!!handleModuleSelectRef.current}`);
@@ -344,7 +338,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Re-enable avatar listening - avatar can now listen again
       if (dailyEventManagerRef.current) {
         addDebugLog('[DEMO] Re-enabling avatar listening - video finished');
-        dailyEventManagerRef.current.enableListening();
+        // Only enable listening if microphone is not muted
+        if (!isMuted) {
+          dailyEventManagerRef.current.enableListening();
+        }
       }
       
       // Set avatar back to listening state - ready to continue conversation
@@ -352,6 +349,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       
       // Handle founder video completion (video will be closed and next module will start)
       handleFounderVideoStop();
+      
+      // For non-founder videos, trigger conversation continuation
+      if (activeModuleRef.current !== 'founder-video') {
+        setTimeout(() => {
+          if (mountedRef.current && dailyEventManagerRef.current && !isAvatarSpeakingRef.current && !moduleSpeechLockRef.current) {
+            addDebugLog('[DEMO] Triggering conversation continuation after video closed');
+            dailyEventManagerRef.current.sendRespondMessage("The video has been closed. Let's continue our conversation.");
+          }
+        }, 500);
+      }
     },
   });
 
@@ -359,6 +366,39 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   useEffect(() => {
     isDemoPlayingRef.current = isDemoPlaying;
   }, [isDemoPlaying]);
+
+  // Neural VAD hook - filters false positives from Tavus speech detection
+  const vadRef = useRef(null);
+  const {
+    speechProbability: vadSpeechProb,
+    speechDurationMs: vadSpeechDuration,
+    isSpeechConfirmed: vadIsSpeechConfirmed,
+    checkIsSpeechConfirmed: vadCheckIsSpeechConfirmed,
+    setMinSpeechDuration: vadSetMinDuration,
+    reset: vadReset,
+  } = useNeuralVAD({
+    audioTrack: localAudioTrack,
+    enabled: !isMuted && !!localAudioTrack, // Only enable when mic is unmuted
+    log: (category, message, data) => {
+      addDebugLog(`[VAD] ${message}`);
+    },
+    onSpeechConfirmed: (probability, duration) => {
+      addDebugLog(`[VAD] Speech confirmed: prob=${probability.toFixed(2)}, duration=${duration}ms`);
+    },
+  });
+
+  // Store VAD checker in ref for use in callbacks
+  useEffect(() => {
+    vadRef.current = {
+      checkIsSpeechConfirmed: vadCheckIsSpeechConfirmed,
+      setMinSpeechDuration: vadSetMinDuration,
+      reset: vadReset,
+    };
+  }, [vadCheckIsSpeechConfirmed, vadSetMinDuration, vadReset]);
+
+  // Update VAD min duration when module lock changes
+  // Note: We update this in startModuleSpeech and finishModuleSpeech callbacks
+  // since refs don't trigger useEffect
 
   // Send message to replica - defined early so it can be used by other callbacks
   const sendMessageToReplica = useCallback((message, type = 'respond') => {
@@ -405,13 +445,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[MODULE-LOCK] 🔇 Re-confirmed Tavus listening disabled');
         }
         
-        // Mute microphone at Daily.co level (backup)
-        if (sessionManagerRef.current?.isInitialized) {
-          sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-            addDebugLog(`[MIC] ❌ Failed to mute: ${err.message}`);
-          });
-          setIsMuted(true);
-        }
+        // Microphone stays ON - no muting when agent speaks (like Tavus)
       },
       onReplicaStopSpeaking: (lastSpeech, interrupted) => {
         // Ignore avatar speech when video is playing
@@ -478,24 +512,16 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Wait for the full welcome script to complete (via duration check in checkModuleCompletion)
         // This ensures step-by-step course learning flow
         
-        // Don't set to "listening" when microphone is muted or module lock is active
-        if (moduleSpeechLockRef.current || isMuted) {
+        // Set to "listening" when agent stops speaking (microphone stays on)
+        if (moduleSpeechLockRef.current) {
           setAvatarState("idle");
-          addDebugLog('[AVATAR-STATE] Setting to "idle" - microphone muted or module lock active');
+          addDebugLog('[AVATAR-STATE] Setting to "idle" - module lock active');
         } else {
-        setAvatarState("listening");
+          setAvatarState("listening");
+          addDebugLog('[AVATAR-STATE] Setting to "listening" - ready for user input');
         }
         
-        // Unmute microphone after agent finishes speaking (with delay to filter background noise)
-        // Only unmute if not interrupted and session is still active
-        if (!interrupted && sessionManagerRef.current?.isInitialized) {
-          // Add delay to filter out background noise that might trigger right after agent stops
-          setTimeout(() => {
-            // DO NOT automatically unmute microphone - user must manually toggle it
-            // Microphone stays muted throughout onboarding flow
-            addDebugLog('[MIC] ⚠️ Keeping microphone muted - user must manually enable it');
-          }, 800); // 800ms delay to filter background noise
-        }
+        // Microphone stays ON - no muting/unmuting logic
         
         // Mark quiz question as complete if it wasn't interrupted
         if (!interrupted) {
@@ -553,11 +579,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           return;
         }
         
-        // If we reach here, module lock is not active, so user speech is valid
-        // DO NOT automatically unmute microphone when user starts speaking
-        // Microphone stays muted - user must manually toggle it to enable
-        addDebugLog('[MIC] ⚠️ User speech detected but microphone remains muted - user must manually enable it');
-        
+        // Microphone is always on - user speech is valid
         setIsUserSpeaking(true);
         isUserSpeakingRef.current = true;
       },
@@ -1152,9 +1174,33 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         log('CALENDLY', 'No active session - keeping minimized');
         setState("minimized");
       }
+      
+      // Re-enable avatar listening and set state to listening
+      if (dailyEventManagerRef.current) {
+        addDebugLog('[CALENDLY] Re-enabling avatar listening - Calendly closed');
+        // Only enable listening if microphone is not muted
+        if (!isMuted) {
+          dailyEventManagerRef.current.enableListening();
+        }
+      }
+      
+      // Set avatar back to listening state - ready to continue conversation
+      if (!isAvatarSpeaking && !moduleSpeechLockRef.current) {
+        setAvatarState("listening");
+        addDebugLog('[CALENDLY] Avatar state set to listening after Calendly closed');
+        
+        // Trigger conversation continuation after a brief delay
+        setTimeout(() => {
+          if (mountedRef.current && dailyEventManagerRef.current && !isAvatarSpeakingRef.current && !moduleSpeechLockRef.current) {
+            addDebugLog('[CALENDLY] Triggering conversation continuation after Calendly closed');
+            dailyEventManagerRef.current.sendRespondMessage("The calendar has been closed. Let's continue our conversation.");
+          }
+        }, 500);
+      }
+      
       preCalendlyWidgetStateRef.current = null;
     }
-  }, [showCalendly, log]);
+  }, [showCalendly, log, isMuted, isAvatarSpeaking, addDebugLog]);
 
   // Wait for both user and avatar to finish speaking before opening Calendly
   useEffect(() => {
@@ -1286,9 +1332,33 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         log('PDF', 'No active session - keeping minimized');
         setState("minimized");
       }
+      
+      // Re-enable avatar listening and set state to listening
+      if (dailyEventManagerRef.current) {
+        addDebugLog('[PDF] Re-enabling avatar listening - PDF closed');
+        // Only enable listening if microphone is not muted
+        if (!isMuted) {
+          dailyEventManagerRef.current.enableListening();
+        }
+      }
+      
+      // Set avatar back to listening state - ready to continue conversation
+      if (!isAvatarSpeaking && !moduleSpeechLockRef.current) {
+        setAvatarState("listening");
+        addDebugLog('[PDF] Avatar state set to listening after PDF closed');
+        
+        // Trigger conversation continuation after a brief delay
+        setTimeout(() => {
+          if (mountedRef.current && dailyEventManagerRef.current && !isAvatarSpeakingRef.current && !moduleSpeechLockRef.current) {
+            addDebugLog('[PDF] Triggering conversation continuation after PDF closed');
+            dailyEventManagerRef.current.sendRespondMessage("The document has been closed. Let's continue our conversation.");
+          }
+        }, 500);
+      }
+      
       prePdfWidgetStateRef.current = null;
     }
-  }, [showPdf, log]);
+  }, [showPdf, log, isMuted, isAvatarSpeaking, addDebugLog]);
 
   // Clone avatar video to PDF PIP
   useEffect(() => {
@@ -1362,32 +1432,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   }, [isDemoPlaying, hasLiveVideo]);
 
-  // Mute mic and avatar audio when calendly opens
+  // Mute avatar audio when calendly opens (mic stays on)
   useEffect(() => {
     if (showCalendly) {
-      preCalendlyMutedRef.current = isMuted;
       preCalendlyAudioEnabledRef.current = audioEnabled;
-
-      if (!isMuted && sessionManagerRef.current) {
-        sessionManagerRef.current.setMicrophoneMuted(true);
-        setIsMuted(true);
-      }
 
       if (audioEnabled) {
         setAudioEnabled(false);
       }
     } else {
       // Restore audio when calendly closes
-      if (sessionManagerRef.current?.isInitialized) {
-        sessionManagerRef.current.setMicrophoneMuted(false);
-        setIsMuted(false);
-      }
-
       if (!audioEnabled) {
         setAudioEnabled(true);
       }
     }
-  }, [showCalendly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showCalendly, audioEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync audio enabled state with session manager
   useEffect(() => {
@@ -1883,11 +1942,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Attach to Daily
       dailyEventManagerRef.current.attachToDaily(daily, conversationId);
 
-      // 🔴 CRITICAL: Disable Tavus listening immediately to prevent any listening
+      // Enable Tavus listening (microphone is always on)
       if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        listeningStateRef.current = 'disabled';
-        addDebugLog('[INIT] 🔇 Tavus listening disabled from start - will stay disabled until user enables mic');
+        dailyEventManagerRef.current.enableListening();
+        listeningStateRef.current = 'enabled';
+        addDebugLog('[INIT] 👂 Tavus listening enabled - microphone always on');
       }
 
       // Step 4: Wait for session to be ready
@@ -1899,10 +1958,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       setIsConnecting(false);
       addDebugLog('Session fully ready!');
 
-      // Step 5: DO NOT auto-enable microphone - keep it muted
-      // Microphone will only be enabled when user manually toggles it
-      addDebugLog('Microphone will remain muted - user must manually enable it');
-            setIsMuted(true);
+      // Step 5: Auto-enable microphone (keep mic always on like Tavus)
+      if (sessionManagerRef.current?.isInitialized) {
+        await sessionManagerRef.current.setMicrophoneMuted(false);
+        setIsMuted(false);
+        addDebugLog('✅ Microphone enabled - keeping mic always on');
+        
+        // Get local audio track for VAD
+        const audioTrack = sessionManagerRef.current.getLocalAudioTrack();
+        if (audioTrack) {
+          setLocalAudioTrack(audioTrack);
+          addDebugLog('[VAD] Local audio track obtained for VAD processing');
+        }
+      }
       
       // Step 6: Auto-start Entri onboarding if Entri persona
       if (personaId === 'p54ceeb77022' && !entriOnboardingStartedRef.current) {
@@ -1910,12 +1978,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           if (mountedRef.current && sessionManagerRef.current?.isInitialized) {
             addDebugLog('[ENTRI-ONBOARDING] Starting proactive onboarding with welcome module');
             entriOnboardingStartedRef.current = true;
-            // Ensure microphone is muted before starting onboarding
-            sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-              addDebugLog(`[ENTRI-ONBOARDING] Failed to mute microphone: ${err.message}`);
-            });
-            setIsMuted(true);
-            // Start with welcome module
+            // Microphone stays on - start with welcome module
             handleModuleSelect('welcome-intro');
           }
         }, 2000); // Wait 2 seconds for session to stabilize
@@ -1960,6 +2023,34 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     await sessionManagerRef.current.setMicrophoneMuted(newMuted);
     setIsMuted(newMuted);
     addDebugLog(`Microphone ${newMuted ? 'muted' : 'unmuted'}`);
+    
+    // Update local audio track for VAD when microphone is toggled
+    if (!newMuted && sessionManagerRef.current) {
+      // Microphone unmuted - get local audio track for VAD
+      const audioTrack = sessionManagerRef.current.getLocalAudioTrack();
+      if (audioTrack) {
+        setLocalAudioTrack(audioTrack);
+        addDebugLog('[VAD] Local audio track obtained for VAD processing');
+      } else {
+        addDebugLog('[VAD] ⚠️ Local audio track not available yet');
+        // Try again after a short delay (Daily.co might need time to enable)
+        setTimeout(() => {
+          if (sessionManagerRef.current && !isMuted) {
+            const track = sessionManagerRef.current.getLocalAudioTrack();
+            if (track) {
+              setLocalAudioTrack(track);
+              addDebugLog('[VAD] Local audio track obtained (retry)');
+            }
+          }
+        }, 500);
+      }
+    } else {
+      // Microphone muted - clear audio track
+      setLocalAudioTrack(null);
+      if (vadRef.current) {
+        vadRef.current.reset();
+      }
+    }
     
     // The useEffect will automatically sync Tavus listening with microphone state
     // No need to manually call disableListening/enableListening here
@@ -2087,22 +2178,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       completed: false,
     };
     
-    // No timeout for welcome-intro - will complete when avatar stops speaking
-
-    // Mute microphone at transport level (Daily.co)
-    // The useEffect will automatically disable Tavus listening when isMuted becomes true
-    if (sessionManagerRef.current?.isInitialized) {
-      sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-        addDebugLog(`[MODULE-LOCK] Failed to mute: ${err.message}`);
-      });
-      setIsMuted(true);
+    // Update VAD min duration for module lock (longer duration required)
+    if (vadRef.current && vadRef.current.setMinSpeechDuration) {
+      vadRef.current.setMinSpeechDuration(MIN_SPEECH_DURATION_LOCKED_MS);
+      addDebugLog(`[VAD] Min speech duration set to ${MIN_SPEECH_DURATION_LOCKED_MS}ms (module lock active)`);
     }
     
-    // Also explicitly disable listening immediately (useEffect will handle it, but this ensures immediate effect)
+    // No timeout for welcome-intro - will complete when avatar stops speaking
+
+    // Disable Tavus listening during module speech (but keep microphone on)
+    // Microphone stays on - only disable listening to prevent barge-in
     if (dailyEventManagerRef.current) {
       dailyEventManagerRef.current.disableListening();
       listeningStateRef.current = 'disabled'; // Update ref to prevent redundant calls
-      addDebugLog('[MODULE-LOCK] 🔇 Tavus listening disabled (barge-in prevented)');
+      addDebugLog('[MODULE-LOCK] 🔇 Tavus listening disabled (barge-in prevented, mic stays on)');
     }
   }, [addDebugLog]);
 
@@ -2163,17 +2252,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     addDebugLog('[MODULE-LOCK] ✅ Finishing module speech - unlocking');
     moduleSpeechLockRef.current = false;
     
+    // Update VAD min duration back to default (shorter duration)
+    if (vadRef.current && vadRef.current.setMinSpeechDuration) {
+      vadRef.current.setMinSpeechDuration(MIN_SPEECH_DURATION_MS);
+      addDebugLog(`[VAD] Min speech duration set to ${MIN_SPEECH_DURATION_MS}ms (module lock inactive)`);
+    }
+    
     // Clear stored prompt
     currentModulePromptRef.current = '';
 
     // 🔴 DO NOT unmute microphone automatically
-    // Microphone stays muted throughout onboarding - user must manually enable it
-    addDebugLog('[MODULE-LOCK] ⚠️ Keeping microphone muted - user must manually enable');
-    
-    // Tavus listening is controlled by the useEffect that syncs with microphone state
-    // If microphone is muted → listening will be disabled
-    // If microphone is unmuted → listening will be enabled
-    // No need to manually control it here - the useEffect handles it
+    // Microphone stays on - Tavus listening will be re-enabled by useEffect
+    // (listening is controlled by module lock state, not microphone state)
 
     // Mark current module as complete
     if (currentModule && !completedModules.includes(currentModule)) {
@@ -2205,13 +2295,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         const nextModuleId = entriModuleOrder[currentIndex + 1];
         addDebugLog(`[MODULE-LOCK] 🎯 Proactive flow: Moving to next module: ${nextModuleId}`);
         
-        // 🔇 Ensure microphone stays muted before transitioning
-        if (sessionManagerRef.current?.isInitialized) {
-          sessionManagerRef.current.setMicrophoneMuted(true);
-          setIsMuted(true);
-        }
-        
-        // 🔴 Keep Tavus listening disabled
+        // 🔴 Keep Tavus listening disabled (mic stays on)
         if (dailyEventManagerRef.current) {
           dailyEventManagerRef.current.disableListening();
         }
@@ -2512,16 +2596,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       
       const founderVideoUrl = 'https://www.youtube.com/watch?v=YtB5fjEO1zc';
       
-      // 🔇 Ensure microphone is muted (should already be muted from welcome-intro)
-      if (sessionManagerRef.current?.isInitialized) {
-        addDebugLog('[MODULE-LOCK] 🔇 Ensuring microphone is muted for founder video');
-        sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
-          addDebugLog(`[MODULE-LOCK] Failed to mute microphone: ${err.message}`);
-        });
-        setIsMuted(true);
-      }
-      
-      // 🔴 Keep Tavus listening disabled (should already be disabled from welcome-intro)
+      // 🔴 Keep Tavus listening disabled (mic stays on)
       if (dailyEventManagerRef.current) {
         dailyEventManagerRef.current.disableListening();
         addDebugLog('[MODULE-LOCK] 🔇 Keeping Tavus listening disabled for founder video');

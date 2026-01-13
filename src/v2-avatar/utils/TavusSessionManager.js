@@ -489,6 +489,51 @@ class TavusSessionManager {
   }
 
   /**
+   * Get local microphone audio track for VAD processing
+   * Returns the MediaStreamTrack from Daily.co local audio
+   * This is a parallel tap - does NOT interfere with Daily.co audio transmission
+   * 
+   * @returns {MediaStreamTrack|null} Local audio track, or null if not available
+   */
+  getLocalAudioTrack() {
+    if (!this.daily) {
+      this.log('⚠️ Cannot get local audio track - no Daily call object');
+      return null;
+    }
+
+    try {
+      // Daily.co exposes local audio via getLocalAudio() method
+      // Returns MediaStreamTrack when microphone is enabled
+      const localAudio = this.daily.getLocalAudio();
+      
+      if (localAudio && localAudio instanceof MediaStreamTrack && localAudio.kind === 'audio') {
+        this.log('✅ Local audio track retrieved for VAD');
+        return localAudio;
+      }
+      
+      // Alternative: Try to get from localParticipant
+      const localParticipant = this.daily.localParticipant();
+      if (localParticipant && localParticipant.audioTracks) {
+        const audioTracks = Object.values(localParticipant.audioTracks);
+        if (audioTracks.length > 0) {
+          const track = audioTracks[0];
+          const mediaStreamTrack = track.persistentTrack || track.track;
+          if (mediaStreamTrack && mediaStreamTrack instanceof MediaStreamTrack) {
+            this.log('✅ Local audio track retrieved from localParticipant for VAD');
+            return mediaStreamTrack;
+          }
+        }
+      }
+      
+      this.log('⚠️ Local audio track not available (microphone may be muted)');
+      return null;
+    } catch (error) {
+      this.log(`⚠️ Error getting local audio track: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Set video quality preference
    * @param {string} quality - 'low', 'medium', or 'high'
    */
