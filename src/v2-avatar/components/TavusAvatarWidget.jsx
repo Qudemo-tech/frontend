@@ -185,6 +185,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const lastPdfCommandTypeRef = useRef(null); // 'next', 'previous', 'repeat', 'end', 'goto'
   const pdfNavigationInProgressRef = useRef(false); // True while navigation is in progress
 
+  // Quiz Voice Command Debouncing - prevents spam on tab switch
+  const lastQuizUnrecognizedMessageTimeRef = useRef(0);
+  const QUIZ_UNRECOGNIZED_DEBOUNCE_MS = 5000; // 5 seconds between "let's complete the quiz" messages
+  const startQuizSpeechRecognitionRef = useRef(null); // Ref to startQuizSpeechRecognition function
+
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
   
@@ -2609,6 +2614,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           visibilityTimeoutRef.current = null;
           hiddenTimestampRef.current = null;
         }
+
+        // Restart quiz speech recognition if quiz is active
+        // Add a delay to let the page stabilize and avoid picking up noise
+        if (mcqQuizStateRef.current.isActive && !isQuizSpeechRecognitionActiveRef.current) {
+          addDebugLog('[VISIBILITY] Quiz is active - restarting speech recognition after delay');
+          setTimeout(() => {
+            if (mcqQuizStateRef.current.isActive && startQuizSpeechRecognitionRef.current) {
+              startQuizSpeechRecognitionRef.current();
+            }
+          }, 1000); // 1 second delay to avoid noise
+        }
       }
     };
 
@@ -3425,7 +3441,29 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       console.log('[VOICE-DEBUG] ⏳ Skipping A/B/C/D - already answered or waiting for avatar');
     }
 
-    // Any other voice input during quiz - let's complete the quiz first
+    // Any other voice input during quiz - but only respond if it's a meaningful input
+    // Skip very short transcripts (likely noise), and don't spam the message if avatar is speaking
+    const minTranscriptLength = 2; // At least 2 characters to be considered valid input
+    if (lowerText.length < minTranscriptLength) {
+      console.log('[VOICE-DEBUG] ⚠️ Ignoring very short transcript (likely noise):', lowerText);
+      return;
+    }
+
+    // Don't send if avatar is currently speaking (prevents spam on tab switch)
+    if (isAvatarSpeakingRef.current || state.waitingForAvatarToFinish) {
+      console.log('[VOICE-DEBUG] ⚠️ Ignoring unrecognized input - avatar is speaking or waiting');
+      return;
+    }
+
+    // Debounce: Don't spam the "complete quiz first" message
+    const now = Date.now();
+    const timeSinceLastUnrecognized = now - lastQuizUnrecognizedMessageTimeRef.current;
+    if (timeSinceLastUnrecognized < QUIZ_UNRECOGNIZED_DEBOUNCE_MS) {
+      console.log(`[VOICE-DEBUG] ⚠️ Debounced unrecognized message (${timeSinceLastUnrecognized}ms since last)`);
+      return;
+    }
+    lastQuizUnrecognizedMessageTimeRef.current = now;
+
     console.log('[VOICE-DEBUG] ⚠️ Unrecognized command - sending generic response');
     addDebugLog(`[MCQ-QUIZ] Unrecognized voice during quiz: "${transcript}" - asking to complete quiz first`);
     sendMessageToReplica("Let's complete the quiz first. You can say A, B, C, or D to select an answer, 'repeat' to hear the question again, 'skip' to skip this question, or 'end quiz' to exit.", 'echo');
@@ -3493,11 +3531,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     recognition.onend = () => {
       console.log('[VOICE-DEBUG] 🎤 Web Speech API ended');
-      // Auto-restart if quiz is still active
-      if (mcqQuizStateRef.current.isActive && isQuizSpeechRecognitionActiveRef.current) {
-        console.log('[VOICE-DEBUG] 🔄 Auto-restarting speech recognition (quiz still active)');
+      // Auto-restart if quiz is still active AND page is visible
+      // Don't restart if page is hidden (tab switched) - prevents noise pickup on return
+      const pageIsVisible = document.visibilityState === 'visible';
+      if (mcqQuizStateRef.current.isActive && isQuizSpeechRecognitionActiveRef.current && pageIsVisible) {
+        console.log('[VOICE-DEBUG] 🔄 Auto-restarting speech recognition (quiz still active, page visible)');
         setTimeout(() => {
-          if (mcqQuizStateRef.current.isActive && quizSpeechRecognitionRef.current) {
+          if (mcqQuizStateRef.current.isActive && quizSpeechRecognitionRef.current && document.visibilityState === 'visible') {
             try {
               quizSpeechRecognitionRef.current.start();
             } catch (e) {
@@ -3506,6 +3546,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }
         }, 100);
       } else {
+        if (!pageIsVisible) {
+          console.log('[VOICE-DEBUG] ⏸️ Not restarting - page is hidden (tab switched)');
+        }
         isQuizSpeechRecognitionActiveRef.current = false;
       }
     };
@@ -3521,6 +3564,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       return false;
     }
   }, [addDebugLog, processQuizVoiceCommand]);
+
+  // Update ref for visibility change handler
+  startQuizSpeechRecognitionRef.current = startQuizSpeechRecognition;
 
   // Stop Web Speech API recognition for quiz
   const stopQuizSpeechRecognition = useCallback(() => {
