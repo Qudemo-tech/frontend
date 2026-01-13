@@ -681,12 +681,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Strip markdown formatting before sending to avatar
     const cleanedMessage = stripMarkdown(message);
 
+    // 🔴 CRITICAL: Block 'respond' messages during MCQ quiz - only 'echo' allowed
+    // This prevents Tavus from interpreting messages as conversation context
+    if (type !== 'echo' && (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions)) {
+      console.error(`[SEND-MESSAGE] ⛔ BLOCKED 'respond' message during quiz: "${cleanedMessage.substring(0, 50)}..."`);
+      addDebugLog(`[SEND-MESSAGE] ⛔ BLOCKED 'respond' message during quiz`);
+      return;
+    }
+
     if (type === 'echo') {
       dailyEventManagerRef.current.sendEchoMessage(cleanedMessage);
     } else {
       dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
     }
-  }, []);
+  }, [addDebugLog]);
 
   // PDF Presentation hook (must be after sendMessageToReplica is defined)
   const pdfPresentation = usePdfPresentation({
@@ -3380,6 +3388,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (lowerText.includes('repeat') || lowerText.includes('say again') || lowerText.includes('again please') || lowerText.includes('one more time')) {
       console.log('[VOICE-DEBUG] ✅ Matched: REPEAT command');
       addDebugLog(`[MCQ-QUIZ] Voice command: repeat question - "${transcript}"`);
+
+      // 🔴 CRITICAL: Ensure Tavus listening is disabled before repeating
+      // This prevents Tavus from interpreting "repeat" as a conversation trigger
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.disableListening();
+        addDebugLog('[MCQ-QUIZ] 🔇 Re-confirmed Tavus listening disabled before repeat');
+      }
+
       repeatMcqQuestionRef.current?.();
       return;
     }
@@ -4219,7 +4235,17 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Repeat current MCQ question
   const repeatMcqQuestion = useCallback(() => {
     const state = mcqQuizStateRef.current;
-    if (!state.isActive || !state.quizData || !state.quizData.questions || state.waitingForAvatarToFinish) return;
+    if (!state.isActive || !state.quizData || !state.quizData.questions || state.waitingForAvatarToFinish) {
+      addDebugLog(`[MCQ-QUIZ] ⚠️ repeatMcqQuestion blocked - isActive: ${state.isActive}, hasQuizData: ${!!state.quizData}, waitingForAvatar: ${state.waitingForAvatarToFinish}`);
+      return;
+    }
+
+    // 🔴 CRITICAL: Ensure Tavus listening stays disabled
+    if (dailyEventManagerRef.current) {
+      dailyEventManagerRef.current.disableListening();
+      listeningStateRef.current = 'disabled';
+      addDebugLog('[MCQ-QUIZ] 🔇 Confirmed Tavus listening disabled in repeatMcqQuestion');
+    }
 
     const currentQuestion = state.quizData.questions[state.currentQuestionIndex];
     const questionMessage = `Let me repeat that. Question ${state.currentQuestionIndex + 1}: ${currentQuestion.question} Your options are: A: ${currentQuestion.options[0]}. B: ${currentQuestion.options[1]}. C: ${currentQuestion.options[2]}. D: ${currentQuestion.options[3]}.`;
@@ -4457,6 +4483,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Handle learning module selection
   const handleModuleSelect = useCallback(async (moduleId) => {
+    // 🔒 CRITICAL: Block module selection if MCQ quiz is active
+    // This prevents accidental module switches during quiz (e.g., from stale callbacks or race conditions)
+    if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
+      addDebugLog(`[MODULE-SELECT] ⛔ BLOCKED - MCQ quiz is active or speaking instructions. Requested: ${moduleId}`);
+      console.error(`[MODULE-SELECT] ⛔ BLOCKED module switch to ${moduleId} - quiz is active!`);
+      return;
+    }
+
     // Check if module is unlocked before proceeding
     if (!isModuleUnlocked(moduleId)) {
       // Send message to avatar explaining the module is locked
