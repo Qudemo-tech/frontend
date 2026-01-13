@@ -57,6 +57,17 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
   const [isYouTube, setIsYouTube] = useState(false);
   const [youTubeEmbedUrl, setYouTubeEmbedUrl] = useState('');
   const demoVideoRef = useRef(null);
+  const stopInProgressRef = useRef(false); // Guard against duplicate stopDemoVideo calls
+
+  // Use refs to always get the latest callbacks (avoid stale closures)
+  const onVideoStopRef = useRef(onVideoStop);
+  const onVideoStartRef = useRef(onVideoStart);
+
+  // Keep refs updated with latest callbacks
+  useEffect(() => {
+    onVideoStopRef.current = onVideoStop;
+    onVideoStartRef.current = onVideoStart;
+  }, [onVideoStop, onVideoStart]);
 
   // Effect to handle video loading when demo starts playing (non-YouTube only)
   useEffect(() => {
@@ -191,6 +202,9 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
       return;
     }
 
+    // Reset the stop guard when starting a new video
+    stopInProgressRef.current = false;
+
     try {
       // Check if this is a YouTube URL
       const ytUrl = isYouTubeUrl(videoUrl);
@@ -220,9 +234,9 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
       }
 
       // Notify parent component to mute avatar audio
-      if (onVideoStart) {
+      if (onVideoStartRef.current) {
         log('DEMO', '🔊 [AUDIO] Notifying parent to mute avatar audio');
-        onVideoStart();
+        onVideoStartRef.current();
       }
 
       // Clone avatar video to PIP container
@@ -307,6 +321,13 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
   };
 
   const stopDemoVideo = () => {
+    // Guard against duplicate calls
+    if (stopInProgressRef.current) {
+      log('DEMO', '⚠️ [STOP] stopDemoVideo already in progress, skipping duplicate');
+      return;
+    }
+    stopInProgressRef.current = true;
+
     try {
       log('DEMO', '⏹️ [STOP] stopDemoVideo called', {
         isDemoPlaying,
@@ -330,9 +351,9 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
       }
 
       // Notify parent component to restore avatar audio
-      if (onVideoStop) {
+      if (onVideoStopRef.current) {
         log('DEMO', '🔊 [AUDIO] Notifying parent to restore avatar audio');
-        onVideoStop();
+        onVideoStopRef.current();
       }
 
       // Clear PIP container
@@ -372,11 +393,18 @@ export function useDemoVideo({ sessionManager, log, setState, onVideoStart, onVi
 
       log('DEMO', '✅ [STOP] Demo video stopped - avatar returned to idle state');
 
+      // Reset the guard after a short delay to allow for cleanup
+      setTimeout(() => {
+        stopInProgressRef.current = false;
+      }, 1000);
+
     } catch (e) {
       log('ERROR', '❌ [STOP] Failed to stop demo video', {
         error: e.message,
         stack: e.stack
       });
+      // Reset guard even on error
+      stopInProgressRef.current = false;
     }
   };
 

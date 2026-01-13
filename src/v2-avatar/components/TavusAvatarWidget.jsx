@@ -455,6 +455,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
+  const videoCompletionInProgressRef = useRef(false); // Lock to prevent concurrent video completion handling
+  const lastVideoCompletionModuleRef = useRef(null); // Track which module's completion was last processed
 
   // Video modules that should auto-advance after video ends
   const videoModules = ['user-success-stories', 'founder-video', 'posh-info'];
@@ -470,11 +472,30 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Callback for when a video module stops - move to next module
   const handleVideoModuleStop = useCallback(() => {
     const currentModule = activeModuleRef.current;
+    addDebugLog(`[DEMO] handleVideoModuleStop called - currentModule: ${currentModule}, sectionEndingModules length: ${sectionEndingModules.length}`);
 
     // Check if current module is a video module
     if (!videoModules.includes(currentModule)) {
       return;
     }
+
+    // Guard 1: Check if we're already processing a video completion
+    if (videoCompletionInProgressRef.current) {
+      addDebugLog(`[DEMO] ⚠️ Video completion already in progress, skipping duplicate call`);
+      return;
+    }
+
+    // Guard 2: Check if we already processed this module's completion
+    // This prevents the same module from triggering twice (e.g., on replay issues)
+    if (lastVideoCompletionModuleRef.current === currentModule) {
+      addDebugLog(`[DEMO] ⚠️ Already processed completion for ${currentModule}, skipping`);
+      return;
+    }
+
+    // Set the lock IMMEDIATELY
+    videoCompletionInProgressRef.current = true;
+    lastVideoCompletionModuleRef.current = currentModule;
+    addDebugLog(`[DEMO] ✅ Video completion proceeding for ${currentModule}`);
 
     addDebugLog(`[DEMO] Video module finished: ${currentModule}`);
 
@@ -525,6 +546,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       // Start inactivity timeout - will ask check-in after 30s, end after 60s
       startInactivityTimeout();
+
+      // Release the lock - completion message sent, now waiting for user
+      videoCompletionInProgressRef.current = false;
       // Quiz will start when user says "continue" - handled in handleUserSpeech
     } else {
       // No quiz - check if this is a section-ending module
@@ -534,9 +558,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         ? moduleOrder[currentIndex + 1]
         : null;
 
+      addDebugLog(`[DEMO] Video module ${currentModule} - isSectionEnding: ${isSectionEnding}, sectionEndingModules: [${sectionEndingModules.join(', ')}]`);
+
       if (isSectionEnding && nextModuleId) {
-        // Section-ending video without quiz - speak transition prompt and wait for confirmation
-        addDebugLog(`[DEMO] ${currentModule} is section-ending - speaking transition prompt and waiting for confirmation`);
+        // Section-ending video without quiz - speak completion/transition prompt and wait for confirmation
+        addDebugLog(`[DEMO] ${currentModule} is section-ending - speaking prompt and waiting for confirmation`);
 
         // Enable listening for user confirmation
         if (dailyEventManagerRef.current) {
@@ -555,15 +581,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         waitingForSectionConfirmationRef.current = true;
         pendingSectionTransitionRef.current = nextModuleId;
 
-        // Speak transition prompt
+        // Prefer video completion prompt (has repeat/continue instructions), fall back to transition prompt
+        const completionPrompt = videoCompletionPrompts[currentModule];
         const transitionPrompt = moduleTransitionPrompts[currentModule];
-        if (transitionPrompt && dailyEventManagerRef.current) {
-          addDebugLog(`[DEMO] Speaking section transition prompt for ${currentModule}`);
-          dailyEventManagerRef.current.sendEchoMessage(transitionPrompt);
+        const promptToSpeak = completionPrompt || transitionPrompt;
+
+        if (promptToSpeak && dailyEventManagerRef.current) {
+          addDebugLog(`[DEMO] Speaking ${completionPrompt ? 'video completion' : 'section transition'} prompt for ${currentModule}`);
+          dailyEventManagerRef.current.sendEchoMessage(promptToSpeak);
         }
 
         // Start inactivity timeout - will ask check-in after 30s, end after 60s
         startInactivityTimeout();
+
+        // Release the lock - completion message sent, now waiting for user
+        videoCompletionInProgressRef.current = false;
       } else {
         // Not section-ending - just move to next module
         addDebugLog(`[DEMO] No quiz for ${currentModule} - moving to next module`);
@@ -598,6 +630,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             }
           }, 500);
         }
+
+        // Release the lock - auto-advancing to next module
+        videoCompletionInProgressRef.current = false;
       }
     }
   }, [personaId, moduleOrder, sectionEndingModules, quizState.isActive, addDebugLog]);
@@ -626,7 +661,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     },
     onVideoStop: () => {
       // Restore avatar audio when video stops
-      addDebugLog('[DEMO] Video stopped - restoring avatar audio');
+      addDebugLog(`[DEMO] Video stopped - restoring avatar audio. Active module: ${activeModuleRef.current}, sectionEndingModules: [${sectionEndingModules.join(', ')}]`);
       setAudioEnabled(true);
 
       // Handle founder video completion (video will be closed and next module will start)
@@ -1544,6 +1579,46 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (waitingForSectionConfirmationRef.current && pendingSectionTransitionRef.current) {
       const lowerText = text.toLowerCase().trim();
 
+      // Check for "repeat video" command first
+      const repeatVideoKeywords = ['repeat the video', 'replay the video', 'watch again', 'play again', 'replay', 'watch it again'];
+      const wantsVideoReplay = repeatVideoKeywords.some(keyword => lowerText.includes(keyword));
+
+      if (wantsVideoReplay && lastVideoUrlRef.current) {
+        // User wants to replay the video
+        addDebugLog(`[SECTION-CONFIRM] 🔁 User wants to replay video: "${text}"`);
+
+        // Reset confirmation state - will be set again after video ends
+        waitingForSectionConfirmationRef.current = false;
+        pendingSectionTransitionRef.current = null;
+
+        // Reset completion guards so replay can trigger new completion
+        lastVideoCompletionModuleRef.current = null;
+        videoCompletionInProgressRef.current = false;
+
+        // Reset inactivity timeout
+        resetInactivityTimeout();
+
+        // Mute microphone and disable listening during video
+        if (sessionManagerRef.current?.isInitialized) {
+          sessionManagerRef.current.setMicrophoneMuted(true);
+          setIsMuted(true);
+        }
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.disableListening();
+          listeningStateRef.current = 'disabled';
+        }
+
+        // Play the video again
+        sendMessageToReplica("Sure, let me replay the video for you.", 'echo');
+        setTimeout(() => {
+          if (playDemoVideoRef.current && lastVideoUrlRef.current) {
+            playDemoVideoRef.current(lastVideoUrlRef.current);
+          }
+        }, 2000);
+
+        return;
+      }
+
       // Keywords that indicate user wants to proceed
       const confirmationKeywords = [
         'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'clear', 'understood',
@@ -1558,10 +1633,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       );
 
       // Keywords that indicate user has questions or needs clarification
+      // Note: removed 'repeat' and 'again' since those are handled above for video replay
       const questionKeywords = [
         'question', 'what', 'how', 'why', 'can you', 'could you', 'explain',
         'tell me more', 'clarify', 'not clear', 'confused', 'don\'t understand',
-        'repeat', 'again', 'no', 'wait', 'hold on'
+        'no', 'wait', 'hold on'
       ];
 
       const hasQuestion = questionKeywords.some(keyword =>
@@ -1654,6 +1730,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         waitingForVideoQuizConfirmationRef.current = false;
         const moduleToReplay = pendingVideoQuizModuleRef.current;
         pendingVideoQuizModuleRef.current = null;
+
+        // Reset completion guards so replay can trigger new completion
+        lastVideoCompletionModuleRef.current = null;
+        videoCompletionInProgressRef.current = false;
 
         // Mute microphone and disable listening during video
         if (sessionManagerRef.current?.isInitialized) {
@@ -1776,7 +1856,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     
     // Check if avatar finished speaking about a module topic
     // Mark module as completed when avatar finishes explaining
-    if (activeModule && activeModule !== 'final-quiz' && !completedModules.includes(activeModule)) {
+    // SKIP video modules - they have their own completion handling in handleVideoModuleStop
+    // SKIP when waiting for confirmation - the avatar is speaking a completion prompt, not lesson content
+    const isVideoModule = videoModules.includes(activeModule);
+    const isWaitingForConfirmation = waitingForVideoQuizConfirmationRef.current ||
+                                      waitingForSectionConfirmationRef.current ||
+                                      waitingForModuleConfirmationRef.current;
+
+    if (activeModule && activeModule !== 'final-quiz' && !completedModules.includes(activeModule) &&
+        !isVideoModule && !isWaitingForConfirmation) {
       // Check if avatar's speech indicates completion of topic
       const completionIndicators = [
         'does that make sense',
@@ -2771,7 +2859,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       dailyEventManagerRef.current = new DailyEventManager();
       dailyEventManagerRef.current.setLogger(log);
 
-      // Setup callbacks - demo triggers handled via tool calls, no speech detection needed
+      // Setup initial callbacks - NOTE: These get overwritten by the useEffect callback setup
+      // This initial setup is needed for immediate functionality before the effect runs
       dailyEventManagerRef.current.setCallbacks({
         onReplicaStartSpeaking: () => {
           // Ignore avatar speech when video is playing

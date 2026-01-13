@@ -47,6 +47,7 @@ const entriPersona = createPersona({
     order: modules.order,
     definitions: modules.definitions,
     requiresConfirmation: modules.requiresConfirmation,
+    sectionEndingModules: modules.sectionEndingModules,
     courseStructure: modules.courseStructure,
     courseMeta: modules.courseMeta,
   },
