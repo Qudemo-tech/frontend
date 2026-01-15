@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactPlayer from 'react-player/lazy';
 import {
   X,
-  Maximize2,
-  Minimize2,
   Volume2,
   VolumeX,
   PhoneOff,
@@ -5330,9 +5328,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         </button>
       )}
 
-      {/* Control buttons - bottom center */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 bg-gradient-to-t from-black/60 to-transparent z-30">
-        <div className="flex items-center justify-center gap-3">
+      {/* Control buttons - bottom center (adjusts for sidebar on desktop) */}
+      <div
+        className="absolute bottom-0 right-0 p-4 pb-8 bg-gradient-to-t from-black/60 to-transparent z-30 transition-all duration-300"
+        style={{ left: !isMobile && showLearningModules ? '320px' : '0px' }}
+      >
+        <div className="flex items-center justify-center gap-5">
           {/* Mic toggle */}
           <button
             onClick={toggleMicrophone}
@@ -5363,14 +5364,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             className="p-3.5 rounded-full backdrop-blur-md bg-red-500/80 border border-red-400/30 text-white hover:bg-red-600/80 transition-all"
           >
             <PhoneOff className="w-5 h-5" />
-          </button>
-
-          {/* Expand/minimize */}
-          <button
-            onClick={handleExpand}
-            className="p-3.5 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all"
-          >
-            {state === "maximized" ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
           </button>
         </div>
 
