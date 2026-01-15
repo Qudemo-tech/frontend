@@ -264,17 +264,31 @@ class DailyEventManager {
   _handleToolCall(properties) {
     const { name, arguments: argsString } = properties;
 
+    // VERBOSE DEBUG LOGGING FOR PDF TOOL CALLS
+    console.log('\n╔══════════════════════════════════════════════════════════════╗');
+    console.log('║               🔧 TAVUS TOOL CALL RECEIVED                     ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log(`║ Tool Name: ${name}`);
+    console.log(`║ Raw Arguments: ${argsString}`);
+    console.log(`║ Full Properties:`, JSON.stringify(properties, null, 2));
+    console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
     this.log('TOOL_CALL', `🔧 Tool called: ${name}`, { argsString });
 
     let args = {};
     try {
       args = JSON.parse(argsString || '{}');
+      console.log(`[TOOL_CALL] Parsed args:`, args);
     } catch (e) {
       this.log('TOOL_CALL', `⚠️ Failed to parse tool arguments: ${e.message}`);
+      console.error(`[TOOL_CALL] JSON parse error for args:`, argsString, e);
     }
 
     if (this.callbacks.onToolCall) {
+      console.log(`[TOOL_CALL] Dispatching to callback: ${name}`, args);
       this.callbacks.onToolCall(name, args, properties);
+    } else {
+      console.warn(`[TOOL_CALL] No onToolCall callback registered!`);
     }
   }
 

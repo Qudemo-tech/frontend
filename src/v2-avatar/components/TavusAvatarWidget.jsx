@@ -147,6 +147,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const startingPresentationRef = useRef(false); // Guard flag to prevent race condition
   const transitioningSlideRef = useRef(false); // Guard flag for slide transitions
   const userNavigatedToSlideRef = useRef(null); // Track slide user navigated to via voice command
+  const pendingPdfNavigationRef = useRef(null); // Pending PDF navigation action (waits for avatar to finish speaking)
+  const pdfNavigationAcknowledgedRef = useRef(false); // Track if avatar started speaking the acknowledgment
+  const isQandAResponseRef = useRef(false); // Track when avatar is giving a Q&A response (prevents auto-advance)
+  const expectingNarrationRef = useRef(false); // Track when we've sent an echo for narration (auto-advance only after this)
   const prePdfWidgetStateRef = useRef(null);
   const hasAutoExpandedRef = useRef(false);
   const proactiveTimeoutRef = useRef(null); // Timeout for proactive continuation
@@ -158,8 +162,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const isAvatarSpeakingRef = useRef(false); // Ref for avatar speaking state
   const listeningStateRef = useRef(null); // Track current listening state to prevent redundant calls ('enabled' | 'disabled' | null)
   const playDemoVideoRef = useRef(null); // Ref to playDemoVideo function
-  const startPdfSpeechRecognitionRef = useRef(null); // Ref to startPdfSpeechRecognition function
-  const stopPdfSpeechRecognitionRef = useRef(null); // Ref to stopPdfSpeechRecognition function
   const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
   const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
   const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
@@ -178,12 +180,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const pdfGoToSlideRef = useRef(null); // Ref to hold latest goToSlide function
   const pdfNarrateSlideRef = useRef(null); // Ref to hold latest narrateSlide function
   const pdfEndPresentationRef = useRef(null); // Ref to hold latest endPresentation function
+  const pdfNextSlideRef = useRef(null); // Ref to hold latest nextSlide function (for auto-advance)
   const sidebarAutoHiddenRef = useRef(false); // Track if sidebar has been auto-hidden (only auto-hide once)
 
-  // PDF Voice Command Debouncing - prevents duplicate commands
-  const lastPdfCommandTimeRef = useRef(0);
-  const lastPdfCommandTypeRef = useRef(null); // 'next', 'previous', 'repeat', 'end', 'goto'
-  const pdfNavigationInProgressRef = useRef(false); // True while navigation is in progress
 
   // Quiz Voice Command Debouncing - prevents spam on tab switch
   const lastQuizUnrecognizedMessageTimeRef = useRef(0);
@@ -250,10 +249,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Web Speech API for quiz voice commands (works independently of Tavus)
   const quizSpeechRecognitionRef = useRef(null);
   const isQuizSpeechRecognitionActiveRef = useRef(false);
-
-  // Web Speech API for PDF presentation voice commands
-  const pdfSpeechRecognitionRef = useRef(null);
-  const isPdfSpeechRecognitionActiveRef = useRef(false);
 
   // ⏱️ Inactivity timeout - check-in after 30s, end after 60s of no response
   const INACTIVITY_CHECKIN_MS = 30 * 1000; // 30 seconds for first check-in
@@ -696,6 +691,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
     if (type === 'echo') {
       dailyEventManagerRef.current.sendEchoMessage(cleanedMessage);
+      // Note: expectingNarrationRef is set directly in the onReplicaStopSpeaking callback
+      // when PDF presentation is active, not here, to avoid timing issues with state sync
     } else {
       dailyEventManagerRef.current.sendRespondMessage(cleanedMessage);
     }
@@ -709,7 +706,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     log: addDebugLog,
     onPresentationEnd: () => {
       const currentModule = activeModuleRef.current;
+      console.log('\n╔══════════════════════════════════════════════════════════════╗');
+      console.log('║     🏁 PDF onPresentationEnd CALLBACK FIRED                   ║');
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+      console.log(`║ currentModule: ${currentModule}`);
+      console.trace();
+      console.log('╚══════════════════════════════════════════════════════════════╝\n');
       addDebugLog('[PDF] Presentation ended for module:', currentModule);
+
+      // CRITICAL: Reset ref immediately to avoid race conditions
+      // The useEffect that syncs pdfPresentationRef.current may not run until next render
+      pdfPresentationRef.current.isPresenting = false;
+      expectingNarrationRef.current = false;
+      isQandAResponseRef.current = false;
 
       // 🔊 Restore listening state after PDF presentation ends
       // Note: We don't re-enable listening here because handleModuleSelect will handle it
@@ -720,6 +729,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       const currentIndex = moduleOrder.indexOf(currentModule);
       if (currentIndex >= 0 && currentIndex < moduleOrder.length - 1) {
         const nextModuleId = moduleOrder[currentIndex + 1];
+        console.log(`   🚀 Advancing to next module: ${nextModuleId}`);
         addDebugLog('[PDF] Advancing to next module:', nextModuleId);
         handleModuleSelectRef.current?.(nextModuleId);
       }
@@ -737,26 +747,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     pdfGoToSlideRef.current = pdfPresentation.goToSlide;
     pdfNarrateSlideRef.current = pdfPresentation.narrateSlide;
     pdfEndPresentationRef.current = pdfPresentation.endPresentation;
-
-    // Stop PDF speech recognition when presentation ends
-    if (!pdfPresentation.isPresenting && isPdfSpeechRecognitionActiveRef.current) {
-      console.log('[PDF-VOICE] 🛑 Presentation ended - stopping speech recognition');
-      isPdfSpeechRecognitionActiveRef.current = false;
-      if (pdfSpeechRecognitionRef.current) {
-        try {
-          // Use abort() for immediate stop without triggering onend
-          pdfSpeechRecognitionRef.current.abort();
-        } catch (e) {
-          console.log('[PDF-VOICE] ⚠️ Error aborting:', e.message);
-        }
-        pdfSpeechRecognitionRef.current = null;
-      }
-      // Reset navigation state when presentation ends
-      pdfNavigationInProgressRef.current = false;
-      lastPdfCommandTypeRef.current = null;
-      lastPdfCommandTimeRef.current = 0;
-    }
-  }, [pdfPresentation.isPresenting, pdfPresentation.currentSlideIndex, pdfPresentation.presentationConfig, pdfPresentation.goToSlide, pdfPresentation.narrateSlide, pdfPresentation.endPresentation]);
+    pdfNextSlideRef.current = pdfPresentation.nextSlide;
+  }, [pdfPresentation.isPresenting, pdfPresentation.currentSlideIndex, pdfPresentation.presentationConfig, pdfPresentation.goToSlide, pdfPresentation.narrateSlide, pdfPresentation.endPresentation, pdfPresentation.nextSlide]);
 
   // Setup DailyEventManager callbacks
   useEffect(() => {
@@ -796,6 +788,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[DEMO] Video announcement started - will wait for avatar to finish');
         }
 
+        // Mark that PDF navigation acknowledgment has started (avatar is now speaking "okay, going to next slide")
+        if (pendingPdfNavigationRef.current && !pdfNavigationAcknowledgedRef.current) {
+          pdfNavigationAcknowledgedRef.current = true;
+          addDebugLog(`[PDF-NAV] Navigation acknowledgment started - will navigate when avatar finishes`);
+        }
+
         // If module lock is active, ensure Tavus listening is disabled
         if (moduleSpeechLockRef.current && dailyEventManagerRef.current) {
           dailyEventManagerRef.current.disableListening();
@@ -810,10 +808,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           addDebugLog('[MCQ-QUIZ] 🔇 Re-confirmed Tavus listening disabled during quiz (mic stays on for voice commands)');
           // Don't mute mic during quiz - we need voice commands for Web Speech API
         } else if (pdfPresentationRef.current.isPresenting && dailyEventManagerRef.current) {
-          // During PDF presentation, keep listening disabled - use UI buttons for navigation
-          dailyEventManagerRef.current.disableListening();
-          listeningStateRef.current = 'disabled';
-          addDebugLog('[PDF] 🔇 Re-confirmed Tavus listening disabled during presentation');
+          // During PDF presentation, ENABLE Tavus listening for NLU-powered tool calls
+          // Tavus will hear user commands and call PDF navigation tools
+          dailyEventManagerRef.current.enableListening();
+          listeningStateRef.current = 'enabled';
+          addDebugLog('[PDF] 🎤 Tavus listening ENABLED during presentation for tool calls');
         } else {
           // Mute microphone at Daily.co level (backup) - only when NOT in quiz mode or PDF presentation
           if (sessionManagerRef.current?.isInitialized) {
@@ -934,11 +933,37 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         }
 
         // ⚡ PRIORITY CHECK: If PDF presentation is active, handle slide narration
-        if (pdfPresentation.isPresenting && !transitioningSlideRef.current) {
+        // CRITICAL: Use pdfPresentationRef.current (not pdfPresentation from closure) to avoid stale closure bug
+        // The useEffect that sets up this callback doesn't re-run when pdfPresentation changes
+        if (pdfPresentationRef.current.isPresenting && !transitioningSlideRef.current) {
+          console.log('\n╔══════════════════════════════════════════════════════════════╗');
+          console.log('║     🎬 PDF STOP SPEAKING HANDLER                              ║');
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ interrupted: ${interrupted}`);
+          console.log(`║ lastSpeech: "${lastSpeech?.substring(0, 60)}..."`);
+          console.log(`║ userNavigatedToSlideRef: ${userNavigatedToSlideRef.current}`);
+          console.log(`║ pendingPdfNavigationRef: ${pendingPdfNavigationRef.current?.action || 'null'}`);
+          console.log(`║ isQandAResponseRef: ${isQandAResponseRef.current}`);
+          console.log(`║ expectingNarrationRef: ${expectingNarrationRef.current}`);
+          console.log(`║ currentSlideIndex: ${pdfPresentationRef.current.currentSlideIndex}`);
+          console.log(`║ totalSlides: ${pdfPresentationRef.current.totalSlides}`);
+          console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
+          // 🚫 If narration was interrupted, do NOT auto-advance
+          // This happens when Tavus responds to our system messages or user speaks
+          if (interrupted) {
+            addDebugLog(`[PDF] ⚠️ Narration was INTERRUPTED - NOT auto-advancing. Last speech: "${lastSpeech?.substring(0, 50)}..."`);
+            // Note: We don't need to call onNarrationComplete for interrupted speech
+            setIsAvatarSpeaking(false);
+            isAvatarSpeakingRef.current = false;
+            setAvatarState("idle");
+            return; // Don't auto-advance on interruption
+          }
+
           // Check if user navigated via voice command - skip auto-advance
           if (userNavigatedToSlideRef.current !== null) {
             const targetSlide = userNavigatedToSlideRef.current;
-            const currentSlide = pdfPresentation.currentSlideIndex;
+            const currentSlide = pdfPresentationRef.current.currentSlideIndex;
 
             if (currentSlide === targetSlide) {
               // We've reached the target slide and narration finished
@@ -951,17 +976,21 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             }
 
             // Mark narration complete but DON'T auto-advance
-            pdfPresentation.onNarrationComplete();
+            // Note: No need to call onNarrationComplete - just skip auto-advance
             setIsAvatarSpeaking(false);
             isAvatarSpeakingRef.current = false;
             setAvatarState("idle");
             return;
           }
 
-          // Check if navigation is in progress (voice command being processed)
-          if (pdfNavigationInProgressRef.current) {
-            addDebugLog('[PDF] Navigation in progress - skipping auto-advance');
-            pdfPresentation.onNarrationComplete();
+          // 🚫 EARLY CHECK: If we're not expecting narration, this is NOT a slide narration completion
+          // This happens when intro speech finishes right after presentation starts
+          // We should NOT set transitioningSlideRef (which would block the real narration event)
+          if (!expectingNarrationRef.current) {
+            console.log('   🚫 NOT EXPECTING NARRATION - skipping auto-advance setup');
+            console.log('   📝 This is likely intro speech finishing, not slide narration');
+            addDebugLog('[PDF] Speech finished but not expecting narration (intro speech?) - skipping auto-advance');
+            // Note: No need to call onNarrationComplete - this is intro speech, not slide narration
             setIsAvatarSpeaking(false);
             isAvatarSpeakingRef.current = false;
             setAvatarState("idle");
@@ -969,10 +998,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }
 
           transitioningSlideRef.current = true;
-          addDebugLog('[PDF] Avatar finished narrating slide - will auto-advance after 1.5s');
+          addDebugLog('[PDF] Avatar finished narrating slide (not interrupted) - will auto-advance after 1.5s');
 
-          // Notify hook that narration is complete
-          pdfPresentation.onNarrationComplete();
+          // Note: onNarrationComplete was removed as it only reset a ref that's not needed
 
           setIsAvatarSpeaking(false);
           isAvatarSpeakingRef.current = false;
@@ -980,11 +1008,28 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
           // Auto-advance to next slide after pause
           setTimeout(() => {
-            // Guard: Only advance if still presenting and user hasn't taken control
-            if (pdfPresentation.isPresenting &&
-                !pdfNavigationInProgressRef.current &&
-                userNavigatedToSlideRef.current === null) {
-              addDebugLog('[PDF] Auto-advancing to next slide');
+            console.log('\n⏰ [PDF AUTO-ADVANCE TIMEOUT] Checking conditions...');
+            console.log(`   isPresenting: ${pdfPresentationRef.current.isPresenting}`);
+            console.log(`   userNavigatedToSlideRef: ${userNavigatedToSlideRef.current}`);
+            console.log(`   pendingPdfNavigationRef: ${pendingPdfNavigationRef.current?.action || 'null'}`);
+            console.log(`   isQandAResponseRef: ${isQandAResponseRef.current}`);
+            console.log(`   expectingNarrationRef: ${expectingNarrationRef.current}`);
+            console.log(`   currentSlideIndex: ${pdfPresentationRef.current.currentSlideIndex}`);
+
+            // Guard: Only advance if:
+            // 1. Still presenting
+            // 2. User hasn't manually navigated
+            // 3. No pending voice navigation
+            // 4. Not in Q&A mode (answer_pdf_question was called)
+            // 5. We were expecting narration (echo was sent) - this prevents auto-advance after conversational responses
+            // CRITICAL: Use pdfPresentationRef (not pdfPresentation from closure) to avoid stale closure bug
+            if (pdfPresentationRef.current.isPresenting &&
+                userNavigatedToSlideRef.current === null &&
+                pendingPdfNavigationRef.current === null &&
+                !isQandAResponseRef.current &&
+                expectingNarrationRef.current) {
+              console.log('   ✅ ALL CONDITIONS MET - AUTO-ADVANCING');
+              addDebugLog('[PDF] Auto-advancing to next slide (narration completed)');
 
               // 🔇 Auto-mute mic when advancing to next slide (if user had enabled it)
               if (!isMuted && sessionManagerRef.current?.isInitialized) {
@@ -995,9 +1040,31 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                 addDebugLog('[PDF] 🔇 Auto-muted mic on slide advance');
               }
 
-              pdfPresentation.nextSlide();
+              // Keep expectingNarrationRef = true since nextSlide will call narrateSlide
+              // which will send another echo. This flag stays true for continuous narration.
+              // CRITICAL: Use pdfNextSlideRef (not pdfPresentation.nextSlide from closure) to avoid stale closure bug
+              pdfNextSlideRef.current?.();
             } else {
-              addDebugLog('[PDF] Auto-advance skipped - user took control or presentation ended');
+              console.log('   ❌ CONDITIONS NOT MET - SKIPPING AUTO-ADVANCE');
+              // Clear Q&A mode if it was set (user can ask another question or navigate)
+              if (isQandAResponseRef.current) {
+                console.log('   📝 Reason: Q&A response just completed');
+                addDebugLog('[PDF] Auto-advance skipped - Q&A response just completed. Staying on current slide.');
+                isQandAResponseRef.current = false; // Clear Q&A mode
+                // CRITICAL: Reset expectingNarrationRef so the system can accept new narrations
+                // This allows the user to click buttons or give voice commands to navigate
+                expectingNarrationRef.current = false;
+                console.log('   🔄 Reset expectingNarrationRef = false - ready for new narration');
+              } else if (!expectingNarrationRef.current) {
+                console.log('   📝 Reason: expectingNarrationRef is false (conversational response)');
+                addDebugLog('[PDF] Auto-advance skipped - conversational response (not narration). Staying on current slide.');
+                // expectingNarrationRef is already false, no need to reset
+              } else if (!pdfPresentationRef.current.isPresenting) {
+                console.log('   📝 Reason: PDF presentation is no longer active');
+              } else {
+                console.log(`   📝 Reason: User took control (userNav: ${userNavigatedToSlideRef.current}, pendingNav: ${pendingPdfNavigationRef.current?.action})`);
+                addDebugLog(`[PDF] Auto-advance skipped - user took control (userNav: ${userNavigatedToSlideRef.current}, pendingNav: ${pendingPdfNavigationRef.current?.action})`);
+              }
             }
             transitioningSlideRef.current = false;
           }, 1500); // 1.5 second pause before auto-advance
@@ -1007,8 +1074,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // Check for pending module transition
         // This handles transitions after quiz completion or when Tavus auto-responds
+        console.log('\n📋 [MODULE-TRANSITION CHECK] pendingModuleTransitionRef:', pendingModuleTransitionRef.current);
         if (pendingModuleTransitionRef.current) {
           const nextModuleId = pendingModuleTransitionRef.current;
+          console.log('   ⚠️ PENDING MODULE TRANSITION DETECTED:', nextModuleId);
 
           addDebugLog(`[MODULE-TRANSITION] Pending transition detected after Tavus speech: "${lastSpeech}" - proceeding to: ${nextModuleId}`);
 
@@ -1033,7 +1102,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // Handle module completion when avatar stops speaking
         // Skip video modules (handled by video stop callback) and final-quiz (handled separately)
-        if (activeModuleRef.current && !videoModules.includes(activeModuleRef.current) && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted) {
+        // Skip PDF presentations - they have their own completion flow via onPresentationEnd callback
+        console.log('\n📋 [MODULE-COMPLETION CHECK]');
+        console.log(`   activeModuleRef: ${activeModuleRef.current}`);
+        console.log(`   isVideoModule: ${videoModules.includes(activeModuleRef.current)}`);
+        console.log(`   moduleSpeechLockRef: ${moduleSpeechLockRef.current}`);
+        console.log(`   interrupted: ${interrupted}`);
+        console.log(`   pdfPresentationRef.isPresenting: ${pdfPresentationRef.current.isPresenting}`);
+        if (activeModuleRef.current && !videoModules.includes(activeModuleRef.current) && activeModuleRef.current !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted && !pdfPresentationRef.current.isPresenting) {
+          console.log('   ✅ Module completion conditions MET - will process completion');
           // Skip module completion if MCQ quiz is active OR speaking instructions (quiz handles its own flow)
           if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
             addDebugLog(`[MODULE-LOCK] Skipping module completion - MCQ quiz is active or speaking instructions`);
@@ -1871,13 +1948,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Mark module as completed when avatar finishes explaining
     // SKIP video modules - they have their own completion handling in handleVideoModuleStop
     // SKIP when waiting for confirmation - the avatar is speaking a completion prompt, not lesson content
+    // SKIP PDF presentation modules - they complete via onPresentationEnd callback, not speech detection
     const isVideoModule = videoModules.includes(activeModule);
+    const isPdfPresenting = pdfPresentationRef.current.isPresenting;
     const isWaitingForConfirmation = waitingForVideoQuizConfirmationRef.current ||
                                       waitingForSectionConfirmationRef.current ||
                                       waitingForModuleConfirmationRef.current;
 
     if (activeModule && activeModule !== 'final-quiz' && !completedModules.includes(activeModule) &&
-        !isVideoModule && !isWaitingForConfirmation) {
+        !isVideoModule && !isPdfPresenting && !isWaitingForConfirmation) {
       // Check if avatar's speech indicates completion of topic
       const completionIndicators = [
         'does that make sense',
@@ -2018,6 +2097,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Handle tool calls from Tavus
   const handleToolCall = (name, args) => {
+    // VERBOSE DEBUG LOGGING - Log every tool call before processing
+    console.log('\n╔══════════════════════════════════════════════════════════════╗');
+    console.log('║           📥 handleToolCall() INVOKED                         ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log(`║ Tool Name: "${name}"`);
+    console.log(`║ Arguments:`, JSON.stringify(args, null, 2));
+    console.log(`║ PDF Presentation State:`);
+    console.log(`║   - isPresenting: ${pdfPresentationRef.current?.isPresenting}`);
+    console.log(`║   - currentSlideIndex: ${pdfPresentationRef.current?.currentSlideIndex}`);
+    console.log(`║   - totalSlides: ${pdfPresentationRef.current?.totalSlides}`);
+    console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
     switch (name) {
       case 'schedule_meeting':
       case 'book_call':
@@ -2098,6 +2189,178 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           }, 30000);
         }
         break;
+
+      // ========== PDF NAVIGATION TOOLS ==========
+      // These tools are called by Tavus LLM during PDF presentations
+      // Each has a guard to ensure presentation is active
+
+      case 'navigate_pdf_next':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] navigate_pdf_next CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        console.log('   currentSlideIndex:', pdfPresentationRef.current.currentSlideIndex);
+        console.log('   totalSlides:', pdfPresentationRef.current.totalSlides);
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] Ignored navigate_pdf_next - no active presentation');
+          console.log('   ❌ IGNORED - no active presentation');
+          break;
+        }
+        addDebugLog('[PDF-TOOL] navigate_pdf_next called');
+        {
+          const currentIndex = pdfPresentationRef.current.currentSlideIndex;
+          const totalSlides = pdfPresentationRef.current.totalSlides;
+          console.log(`   ✅ EXECUTING: Going from slide ${currentIndex} to ${currentIndex + 1}`);
+          if (currentIndex < totalSlides - 1) {
+            // Queue navigation to wait for avatar acknowledgment to finish
+            // Avatar will say "okay, going to next slide" - we navigate after it finishes
+            const targetIndex = currentIndex + 1;
+            pendingPdfNavigationRef.current = { action: 'next', targetIndex };
+            // CRITICAL: If avatar is already speaking (tool call comes during speech),
+            // mark acknowledged immediately since we missed the started_speaking event
+            pdfNavigationAcknowledgedRef.current = isAvatarSpeakingRef.current;
+            console.log(`   ⏳ Queued navigation to slide ${targetIndex + 1} - acknowledged: ${pdfNavigationAcknowledgedRef.current}`);
+          } else {
+            console.log('   ⚠️ Already at last slide');
+            // CRITICAL: Mark this as NOT a narration - it's an info message
+            // This prevents auto-advance after the avatar speaks this message
+            expectingNarrationRef.current = false;
+            console.log('   🚫 Set expectingNarrationRef = false to prevent auto-advance after info message');
+            dailyEventManagerRef.current?.sendEchoMessage("This is the last slide. Say 'finish' when you're ready to move on.");
+          }
+        }
+        break;
+
+      case 'navigate_pdf_back':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] navigate_pdf_back CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        console.log('   currentSlideIndex:', pdfPresentationRef.current.currentSlideIndex);
+        console.log('   totalSlides:', pdfPresentationRef.current.totalSlides);
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] Ignored navigate_pdf_back - no active presentation');
+          console.log('   ❌ IGNORED - no active presentation');
+          break;
+        }
+        addDebugLog('[PDF-TOOL] navigate_pdf_back called');
+        {
+          const currentIndex = pdfPresentationRef.current.currentSlideIndex;
+          console.log(`   ✅ EXECUTING: Going from slide ${currentIndex} to ${currentIndex - 1}`);
+          if (currentIndex > 0) {
+            // Queue navigation to wait for avatar acknowledgment to finish
+            const targetIndex = currentIndex - 1;
+            pendingPdfNavigationRef.current = { action: 'back', targetIndex };
+            // CRITICAL: If avatar is already speaking (tool call comes during speech),
+            // mark acknowledged immediately since we missed the started_speaking event
+            pdfNavigationAcknowledgedRef.current = isAvatarSpeakingRef.current;
+            console.log(`   ⏳ Queued navigation to slide ${targetIndex + 1} - acknowledged: ${pdfNavigationAcknowledgedRef.current}`);
+          } else {
+            console.log('   ⚠️ Already at first slide');
+            // CRITICAL: Mark this as NOT a narration - it's an info message
+            // This prevents auto-advance after the avatar speaks this message
+            expectingNarrationRef.current = false;
+            console.log('   🚫 Set expectingNarrationRef = false to prevent auto-advance after info message');
+            dailyEventManagerRef.current?.sendEchoMessage("This is the first slide.");
+          }
+        }
+        break;
+
+      case 'navigate_pdf_goto':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] navigate_pdf_goto CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        console.log('   args.slide_number:', args.slide_number);
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] Ignored navigate_pdf_goto - no active presentation');
+          console.log('   ❌ IGNORED - no active presentation');
+          break;
+        }
+        if (!args.slide_number) {
+          addDebugLog('[PDF-TOOL] navigate_pdf_goto missing slide_number');
+          console.log('   ❌ IGNORED - missing slide_number');
+          break;
+        }
+        addDebugLog(`[PDF-TOOL] navigate_pdf_goto called - slide ${args.slide_number}`);
+        {
+          const slideIndex = args.slide_number - 1; // Convert to 0-based
+          const totalSlides = pdfPresentationRef.current.totalSlides;
+          console.log(`   ✅ EXECUTING: Going to slide index ${slideIndex} (1-based: ${args.slide_number})`);
+          if (slideIndex >= 0 && slideIndex < totalSlides) {
+            // Queue navigation to wait for avatar acknowledgment to finish
+            const targetIndex = slideIndex;
+            pendingPdfNavigationRef.current = { action: 'goto', targetIndex };
+            // CRITICAL: If avatar is already speaking (tool call comes during speech),
+            // mark acknowledged immediately since we missed the started_speaking event
+            pdfNavigationAcknowledgedRef.current = isAvatarSpeakingRef.current;
+            console.log(`   ⏳ Queued navigation to slide ${targetIndex + 1} - acknowledged: ${pdfNavigationAcknowledgedRef.current}`);
+          } else {
+            console.log(`   ⚠️ Invalid slide number: ${args.slide_number} (total: ${totalSlides})`);
+            // CRITICAL: Mark this as NOT a narration - it's an error response
+            // This prevents auto-advance after the avatar speaks this message
+            expectingNarrationRef.current = false;
+            console.log(`   🚫 Set expectingNarrationRef = false to prevent auto-advance after error message`);
+            dailyEventManagerRef.current?.sendEchoMessage(
+              `There is no slide ${args.slide_number}. This presentation has ${totalSlides} slides.`
+            );
+          }
+        }
+        break;
+
+      case 'navigate_pdf_repeat':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] navigate_pdf_repeat CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        console.log('   currentSlideIndex:', pdfPresentationRef.current.currentSlideIndex);
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] Ignored navigate_pdf_repeat - no active presentation');
+          console.log('   ❌ IGNORED - no active presentation');
+          break;
+        }
+        addDebugLog('[PDF-TOOL] navigate_pdf_repeat called');
+        {
+          const currentIndex = pdfPresentationRef.current.currentSlideIndex;
+          // Queue repeat to wait for avatar acknowledgment to finish
+          pendingPdfNavigationRef.current = { action: 'repeat', targetIndex: currentIndex };
+          // CRITICAL: If avatar is already speaking (tool call comes during speech),
+          // mark acknowledged immediately since we missed the started_speaking event
+          pdfNavigationAcknowledgedRef.current = isAvatarSpeakingRef.current;
+          console.log(`   ⏳ Queued repeat for slide ${currentIndex + 1} - acknowledged: ${pdfNavigationAcknowledgedRef.current}`);
+        }
+        break;
+
+      case 'end_pdf_presentation':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] end_pdf_presentation CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] Ignored end_pdf_presentation - no active presentation');
+          console.log('   ❌ IGNORED - no active presentation');
+          break;
+        }
+        addDebugLog('[PDF-TOOL] end_pdf_presentation called');
+        console.log('   ✅ EXECUTING: Ending PDF presentation');
+        // Interrupt any ongoing narration
+        if (dailyEventManagerRef.current) {
+          dailyEventManagerRef.current.interruptReplica();
+        }
+        pdfEndPresentationRef.current?.();
+        console.log('   ✅ Called pdfEndPresentationRef');
+        break;
+
+      case 'answer_pdf_question':
+        console.log('\n🎯 [PDF-TOOL-HANDLER] answer_pdf_question CASE HIT');
+        console.log('   isPresenting:', pdfPresentationRef.current.isPresenting);
+        console.log('   args.question:', args.question);
+        // Tavus LLM answers the question directly using slide context in conversation
+        // We just log it - no action needed as Tavus handles the response
+        if (!pdfPresentationRef.current.isPresenting) {
+          addDebugLog('[PDF-TOOL] answer_pdf_question called but no presentation active');
+          console.log('   ⚠️ Warning: No presentation active');
+        } else {
+          // Mark that we're in Q&A mode - this prevents auto-advance after the response
+          isQandAResponseRef.current = true;
+          addDebugLog('[PDF-TOOL] 🔄 Q&A mode enabled - auto-advance will be skipped after response');
+          console.log('   🔄 Q&A mode enabled - auto-advance will be skipped');
+        }
+        addDebugLog(`[PDF-TOOL] User question: ${args.question || 'unknown'}`);
+        console.log('   ✅ Tavus LLM will answer based on slide context');
+        // The LLM will generate a response based on the slide context we sent
+        break;
+
       default:
         log('TOOL_CALL', `Unhandled tool: ${name}`);
     }
@@ -2212,14 +2475,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Clear inactivity timeout - user is in PDF presentation with mic enabled for voice commands
       clearInactivityTimeouts();
 
-      // 🔇 Disable Tavus listening during PDF presentation to prevent voice command interference
+      // 🎤 Keep Tavus listening ENABLED during PDF for NLU-powered tool calls
+      // User can navigate slides by speaking (e.g., "next slide", "go back")
       if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        listeningStateRef.current = 'disabled';
-        addDebugLog('[PDF] 🔇 Disabled Tavus listening during presentation');
+        dailyEventManagerRef.current.enableListening();
+        listeningStateRef.current = 'enabled';
+        addDebugLog('[PDF] 🎤 Tavus listening ENABLED for NLU tool calls');
       }
 
-      // 🔇 Mute microphone during PDF presentation (user can unmute if needed)
+      // 🔇 Mute microphone initially during PDF presentation (user can unmute to speak)
       if (sessionManagerRef.current?.isInitialized) {
         sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
           addDebugLog(`[PDF] Failed to mute mic: ${err.message}`);
@@ -2231,10 +2495,29 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Start the PDF presentation
       pdfPresentation.startPresentation(presentationData).then(() => {
         // Voice commands disabled - using auto-advance instead
+        console.log('\n🎬 [PDF-START] startPresentation resolved - setting up first slide');
 
-        // Narrate first slide
+        // CRITICAL: Set ref directly to avoid React state sync delay
+        // The useEffect that syncs pdfPresentationRef.current may not run until next render
+        pdfPresentationRef.current.isPresenting = true;
+        pdfPresentationRef.current.totalSlides = presentationData.slides?.length || 0;
+        console.log('   ✅ pdfPresentationRef.current.isPresenting = true');
+
+        // DON'T set expectingNarrationRef here - the SYSTEM message in startPresentation
+        // may trigger a Tavus conversational response. We only want to set the flag
+        // right before the actual narration echo is sent.
+        isQandAResponseRef.current = false; // Reset Q&A mode
+        console.log('   ⏳ expectingNarrationRef stays false until narration echo is sent');
+
+        // Narrate first slide - set expectingNarrationRef RIGHT BEFORE sending echo
         setTimeout(() => {
-          pdfPresentation.narrateSlide(0);
+          console.log('   🎤 [PDF-START] 800ms timer fired - setting expectingNarrationRef and calling narrateSlide(0)');
+          // CRITICAL: Set this flag RIGHT BEFORE narration so any Tavus response
+          // to the SYSTEM message doesn't trigger auto-advance
+          expectingNarrationRef.current = true;
+          console.log('   ✅ expectingNarrationRef.current = true (now ready for narration)');
+          // CRITICAL: Use pdfNarrateSlideRef (not pdfPresentation from closure) to avoid stale closure bug
+          pdfNarrateSlideRef.current?.(0);
           startingPresentationRef.current = false;
         }, 800);
       }).catch((error) => {
@@ -2271,6 +2554,40 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
     }
   }, [isAvatarSpeaking, isUserSpeaking, pendingPdfUrl, state, log]);
+
+  // Execute pending PDF navigation when avatar finishes speaking acknowledgment
+  // This allows avatar to say "okay, going to next slide" before actually navigating
+  useEffect(() => {
+    if (pendingPdfNavigationRef.current && pdfNavigationAcknowledgedRef.current && !isAvatarSpeaking) {
+      const { action, targetIndex } = pendingPdfNavigationRef.current;
+
+      console.log(`\n🎯 [PDF-NAV] Avatar finished acknowledgment - executing ${action} to slide ${targetIndex + 1}`);
+      addDebugLog(`[PDF-NAV] Avatar finished - executing ${action} to slide ${targetIndex + 1}`);
+
+      // Clear pending state
+      pendingPdfNavigationRef.current = null;
+      pdfNavigationAcknowledgedRef.current = false;
+
+      // Mark user-initiated navigation to prevent auto-muting and auto-advance
+      userNavigatedToSlideRef.current = targetIndex;
+
+      // CRITICAL: Set expectingNarrationRef = true because navigation will send narration echo
+      // This allows auto-advance to work after the narration completes
+      expectingNarrationRef.current = true;
+      console.log(`   ✅ Set expectingNarrationRef = true for upcoming narration`);
+
+      // Interrupt any lingering speech and navigate
+      if (dailyEventManagerRef.current) {
+        dailyEventManagerRef.current.interruptReplica();
+      }
+
+      if (action === 'repeat') {
+        pdfNarrateSlideRef.current?.(targetIndex);
+      } else {
+        pdfGoToSlideRef.current?.(targetIndex);
+      }
+    }
+  }, [isAvatarSpeaking, addDebugLog]);
 
   // Restore widget state after PDF closes
   useEffect(() => {
@@ -2723,6 +3040,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     pendingCalendlyRef.current = false;
     pendingDemoVideoRef.current = null;
     videoAnnouncementStartedRef.current = false;
+    pendingPdfNavigationRef.current = null;
+    pdfNavigationAcknowledgedRef.current = false;
     prePdfWidgetStateRef.current = null;
     hasAutoExpandedRef.current = false;
     entriOnboardingStartedRef.current = false;
@@ -3041,7 +3360,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
           // Handle module completion for all modules except video modules (handled by video callback) and final-quiz
           // Also skip if MCQ quiz is active or speaking instructions
-          if (currentModule && !videoModules.includes(currentModule) && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted && !mcqQuizStateRef.current.isActive && !mcqQuizStateRef.current.speakingInstructions) {
+          // Also skip if PDF presentation is active - PDF has its own completion flow via onPresentationEnd callback
+          if (currentModule && !videoModules.includes(currentModule) && currentModule !== 'final-quiz' && moduleSpeechLockRef.current && !interrupted && !mcqQuizStateRef.current.isActive && !mcqQuizStateRef.current.speakingInstructions && !pdfPresentationRef.current.isPresenting) {
             // Check if this module requires user confirmation before advancing
             if (modulesRequiringConfirmation.includes(currentModule)) {
               addDebugLog(`[MODULE-CONFIRM] ⏸️ Module ${currentModule} finished - waiting for user confirmation`);
@@ -3582,298 +3902,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       quizSpeechRecognitionRef.current = null;
     }
   }, []);
-
-  // ========== PDF PRESENTATION VOICE COMMANDS ==========
-
-  // Debounce constant - minimum time between same command type
-  const PDF_COMMAND_DEBOUNCE_MS = 1000;
-
-  // Helper to detect command type from transcript
-  const detectPdfCommandType = useCallback((lowerText) => {
-    const nextPatterns = ['next', 'forward', 'continue', 'proceed'];
-    const prevPatterns = ['previous', 'back', 'backward', 'before'];
-    const repeatPatterns = ['repeat', 'again', 'one more time'];
-    const endPatterns = ['end', 'finish', 'close', 'exit', 'done'];
-    const slideNumberMatch = lowerText.match(/(?:go to |slide |page )(\d+)/);
-
-    if (nextPatterns.some(p => lowerText.includes(p))) return 'next';
-    if (prevPatterns.some(p => lowerText.includes(p))) return 'previous';
-    if (repeatPatterns.some(p => lowerText.includes(p))) return 'repeat';
-    if (endPatterns.some(p => lowerText.includes(p))) return 'end';
-    if (slideNumberMatch) return `goto_${slideNumberMatch[1]}`;
-    return 'unknown';
-  }, []);
-
-  // Process PDF voice command from Web Speech API
-  const processPdfVoiceCommand = useCallback((transcript) => {
-    const lowerText = transcript.toLowerCase().trim();
-    const now = Date.now();
-
-    console.log('[PDF-VOICE] 🎤 Processing transcript:', lowerText);
-    console.log('[PDF-VOICE] PDF state:', {
-      isPresenting: pdfPresentationRef.current.isPresenting,
-      currentSlideIndex: pdfPresentationRef.current.currentSlideIndex,
-      totalSlides: pdfPresentationRef.current.totalSlides,
-    });
-
-    // GUARD 1: Check if presentation is active
-    if (!pdfPresentationRef.current.isPresenting) {
-      console.log('[PDF-VOICE] ❌ PDF not presenting, ignoring');
-      return;
-    }
-
-    // GUARD 2: Check if navigation is already in progress
-    if (pdfNavigationInProgressRef.current) {
-      console.log('[PDF-VOICE] ⏳ Navigation in progress, ignoring command');
-      return;
-    }
-
-    // Detect command type for debouncing
-    const commandType = detectPdfCommandType(lowerText);
-
-    // GUARD 3: Debounce - ignore same command type within debounce window
-    if (commandType === lastPdfCommandTypeRef.current &&
-        now - lastPdfCommandTimeRef.current < PDF_COMMAND_DEBOUNCE_MS) {
-      console.log(`[PDF-VOICE] 🔇 Debounced duplicate "${commandType}" command (${now - lastPdfCommandTimeRef.current}ms since last)`);
-      return;
-    }
-
-    // Keep inactivity timeout cleared during PDF presentation
-    clearInactivityTimeouts();
-
-    // Get current state
-    const currentIndex = pdfPresentationRef.current.currentSlideIndex;
-    const totalSlides = pdfPresentationRef.current.totalSlides;
-
-    // Helper function to execute navigation
-    const executeNavigation = (targetIndex, commandName) => {
-      console.log(`[PDF-VOICE] ✅ Executing ${commandName}: slide ${currentIndex + 1} → ${targetIndex + 1}`);
-      addDebugLog(`[PDF] Voice command: ${commandName} - "${transcript}"`);
-
-      // Update debounce tracking
-      lastPdfCommandTimeRef.current = now;
-      lastPdfCommandTypeRef.current = commandType;
-
-      // Set navigation in progress flag
-      pdfNavigationInProgressRef.current = true;
-
-      // Interrupt current narration
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.interruptReplica();
-      }
-
-      // Set target slide to prevent auto-advance issues
-      userNavigatedToSlideRef.current = targetIndex;
-
-      // Execute navigation
-      if (pdfGoToSlideRef.current) {
-        pdfGoToSlideRef.current(targetIndex);
-      }
-
-      // Clear navigation in progress after delay (allow state to settle)
-      setTimeout(() => {
-        pdfNavigationInProgressRef.current = false;
-        console.log('[PDF-VOICE] ✅ Navigation complete, ready for next command');
-      }, 1200);
-    };
-
-    // NEXT SLIDE
-    if (commandType === 'next') {
-      if (currentIndex < totalSlides - 1) {
-        executeNavigation(currentIndex + 1, 'next slide');
-      } else {
-        sendMessageToReplica("This is the last slide. You can say 'finish' to end the presentation or 'previous' to go back.", 'echo');
-      }
-      return;
-    }
-
-    // PREVIOUS SLIDE
-    if (commandType === 'previous') {
-      if (currentIndex > 0) {
-        executeNavigation(currentIndex - 1, 'previous slide');
-      } else {
-        sendMessageToReplica("This is the first slide. You can say 'next' to continue.", 'echo');
-      }
-      return;
-    }
-
-    // REPEAT SLIDE
-    if (commandType === 'repeat') {
-      console.log('[PDF-VOICE] ✅ Executing repeat slide');
-      addDebugLog(`[PDF] Voice command: repeat slide - "${transcript}"`);
-
-      lastPdfCommandTimeRef.current = now;
-      lastPdfCommandTypeRef.current = commandType;
-      pdfNavigationInProgressRef.current = true;
-
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.interruptReplica();
-      }
-      userNavigatedToSlideRef.current = currentIndex;
-
-      if (pdfNarrateSlideRef.current) {
-        pdfNarrateSlideRef.current(currentIndex);
-      }
-
-      setTimeout(() => {
-        pdfNavigationInProgressRef.current = false;
-      }, 1200);
-      return;
-    }
-
-    // END PRESENTATION
-    if (commandType === 'end') {
-      console.log('[PDF-VOICE] ✅ Executing end presentation');
-      addDebugLog(`[PDF] Voice command: end presentation - "${transcript}"`);
-
-      lastPdfCommandTimeRef.current = now;
-      lastPdfCommandTypeRef.current = commandType;
-
-      if (pdfEndPresentationRef.current) {
-        pdfEndPresentationRef.current();
-      }
-      return;
-    }
-
-    // GO TO SPECIFIC SLIDE
-    if (commandType.startsWith('goto_')) {
-      const slideNumber = parseInt(commandType.split('_')[1], 10);
-      const slideIndex = slideNumber - 1;
-
-      if (slideIndex >= 0 && slideIndex < totalSlides) {
-        executeNavigation(slideIndex, `go to slide ${slideNumber}`);
-      } else {
-        sendMessageToReplica(`There is no slide ${slideNumber}. This presentation has ${totalSlides} slides.`, 'echo');
-      }
-      return;
-    }
-
-    // UNKNOWN COMMAND - Generic response
-    console.log('[PDF-VOICE] ⚠️ Unrecognized command');
-    addDebugLog(`[PDF] Unrecognized voice during presentation: "${transcript}"`);
-    sendMessageToReplica("You can say 'next' or 'previous' to navigate slides, 'repeat' to hear this slide again, or 'finish' to end the presentation.", 'echo');
-  }, [addDebugLog, sendMessageToReplica, clearInactivityTimeouts, detectPdfCommandType]);
-
-  // Start Web Speech API recognition for PDF presentation
-  const startPdfSpeechRecognition = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.log('[PDF-VOICE] ❌ Web Speech API not supported');
-      addDebugLog('[PDF] Web Speech API not supported - voice commands disabled');
-      return false;
-    }
-
-    if (isPdfSpeechRecognitionActiveRef.current) {
-      console.log('[PDF-VOICE] ⚠️ PDF speech recognition already active');
-      return true;
-    }
-
-    console.log('[PDF-VOICE] 🎤 Starting Web Speech API for PDF voice commands');
-    addDebugLog('[PDF] Starting Web Speech API for voice commands');
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      console.log('[PDF-VOICE] 🎤 Web Speech API started listening');
-      isPdfSpeechRecognitionActiveRef.current = true;
-    };
-
-    recognition.onresult = (event) => {
-      const lastResultIndex = event.results.length - 1;
-      const result = event.results[lastResultIndex];
-
-      // CRITICAL: Only process FINAL results to prevent duplicate commands
-      if (!result.isFinal) {
-        console.log('[PDF-VOICE] ⏳ Interim result, waiting for final...');
-        return;
-      }
-
-      const transcript = result[0].transcript;
-      const confidence = result[0].confidence;
-
-      console.log('[PDF-VOICE] 🎤 FINAL Web Speech result:', { transcript, confidence });
-
-      if (pdfPresentationRef.current.isPresenting) {
-        processPdfVoiceCommand(transcript);
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.log('[PDF-VOICE] ❌ Web Speech API error:', event.error);
-      if (event.error !== 'aborted' && event.error !== 'not-allowed' && pdfPresentationRef.current.isPresenting) {
-        setTimeout(() => {
-          if (pdfPresentationRef.current.isPresenting && pdfSpeechRecognitionRef.current) {
-            try {
-              pdfSpeechRecognitionRef.current.start();
-            } catch (e) {
-              console.log('[PDF-VOICE] ⚠️ Could not restart:', e.message);
-            }
-          }
-        }, 1000);
-      }
-    };
-
-    recognition.onend = () => {
-      console.log('[PDF-VOICE] 🎤 Web Speech API ended');
-      if (pdfPresentationRef.current.isPresenting && isPdfSpeechRecognitionActiveRef.current) {
-        // Use longer delay to prevent rapid restart cascades
-        console.log('[PDF-VOICE] 🔄 Auto-restarting speech recognition (500ms delay)');
-        setTimeout(() => {
-          if (pdfPresentationRef.current.isPresenting && pdfSpeechRecognitionRef.current) {
-            try {
-              pdfSpeechRecognitionRef.current.start();
-              console.log('[PDF-VOICE] ✅ Speech recognition restarted');
-            } catch (e) {
-              console.log('[PDF-VOICE] ⚠️ Could not restart:', e.message);
-            }
-          }
-        }, 500); // Increased from 100ms to prevent cascade issues
-      } else {
-        isPdfSpeechRecognitionActiveRef.current = false;
-      }
-    };
-
-    pdfSpeechRecognitionRef.current = recognition;
-
-    try {
-      recognition.start();
-      return true;
-    } catch (e) {
-      console.log('[PDF-VOICE] ❌ Failed to start:', e.message);
-      addDebugLog(`[PDF] Failed to start speech recognition: ${e.message}`);
-      return false;
-    }
-  }, [addDebugLog, processPdfVoiceCommand]);
-
-  // Stop Web Speech API recognition for PDF presentation
-  const stopPdfSpeechRecognition = useCallback(() => {
-    console.log('[PDF-VOICE] 🛑 Stopping Web Speech API');
-    isPdfSpeechRecognitionActiveRef.current = false;
-
-    if (pdfSpeechRecognitionRef.current) {
-      try {
-        // Use abort() for immediate stop without triggering onend restart
-        pdfSpeechRecognitionRef.current.abort();
-      } catch (e) {
-        console.log('[PDF-VOICE] ⚠️ Error aborting:', e.message);
-      }
-      pdfSpeechRecognitionRef.current = null;
-    }
-
-    // Reset navigation state
-    pdfNavigationInProgressRef.current = false;
-    lastPdfCommandTypeRef.current = null;
-    lastPdfCommandTimeRef.current = 0;
-  }, []);
-
-  // Update refs for PDF speech recognition functions
-  useEffect(() => {
-    startPdfSpeechRecognitionRef.current = startPdfSpeechRecognition;
-    stopPdfSpeechRecognitionRef.current = stopPdfSpeechRecognition;
-  }, [startPdfSpeechRecognition, stopPdfSpeechRecognition]);
 
   // ========== MCQ QUIZ FUNCTIONS ==========
 
@@ -4484,13 +4512,23 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     listeningStateRef.current = targetState;
 
     if (isMuted) {
-      // Microphone muted → disable listening
-      dailyEventManagerRef.current.disableListening();
-      console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening disabled (microphone is muted)');
-      // Update avatar state to idle when mic is muted (if not speaking and no lock)
-      if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
-        setAvatarState("idle");
-        console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "idle" - microphone muted (sync)');
+      // Microphone muted → disable listening EXCEPT during PDF presentation
+      // During PDF, we need Tavus listening enabled for NLU tool calls (navigation commands)
+      if (pdfPresentationRef.current.isPresenting) {
+        dailyEventManagerRef.current.enableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 🎤 Tavus listening ENABLED (mic muted but PDF presentation active - need NLU tools)');
+        // Keep avatar idle during PDF when mic is muted
+        if (!isAvatarSpeakingRef.current) {
+          setAvatarState("idle");
+        }
+      } else {
+        dailyEventManagerRef.current.disableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening disabled (microphone is muted)');
+        // Update avatar state to idle when mic is muted (if not speaking and no lock)
+        if (!moduleSpeechLockRef.current && !isAvatarSpeakingRef.current) {
+          setAvatarState("idle");
+          console.log('[TAVUS-DEBUG] [AVATAR-STATE] Setting to "idle" - microphone muted (sync)');
+        }
       }
     } else {
       // Microphone unmuted → enable listening (but NOT during MCQ quiz, PDF presentation, or confirmation waiting)
@@ -4506,10 +4544,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (waiting for module confirmation)');
         setAvatarState("idle");
       } else if (pdfPresentationRef.current.isPresenting) {
-        // During PDF presentation, keep listening disabled - use UI buttons for navigation
-        dailyEventManagerRef.current.disableListening();
-        console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (PDF presentation active)');
-        setAvatarState("idle");
+        // During PDF presentation, ENABLE Tavus listening for NLU-powered tool calls
+        dailyEventManagerRef.current.enableListening();
+        console.log('[TAVUS-DEBUG] [SYNC] 🎤 Tavus listening ENABLED (PDF presentation - NLU tool calls)');
+        // Keep avatar state as idle during PDF narration
+        if (!isAvatarSpeakingRef.current) {
+          setAvatarState("listening");
+        }
       } else {
         dailyEventManagerRef.current.enableListening();
         console.log('[TAVUS-DEBUG] [SYNC] 👂 Tavus listening enabled (microphone is unmuted)');
@@ -4586,7 +4627,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // 🔴 CRITICAL: End any active PDF presentation when switching modules
     if (pdfPresentation.isPresenting) {
       addDebugLog('[PDF] Ending presentation due to module switch');
-      stopPdfSpeechRecognition(); // Stop voice commands
       await pdfPresentation.endPresentation(false); // Don't trigger callback to prevent infinite loop
     }
 
@@ -4594,6 +4634,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     pendingPresentationRef.current = null;
     pendingDemoVideoRef.current = null;
     videoAnnouncementStartedRef.current = false;
+    pendingPdfNavigationRef.current = null;
+    pdfNavigationAcknowledgedRef.current = false;
     startingPresentationRef.current = false;
     transitioningSlideRef.current = false;
 
@@ -4729,14 +4771,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // No intro, start presentation immediately
         addDebugLog(`[MODULE-LOCK] 📊 No intro prompt, starting PDF presentation immediately`);
 
-        // 🔇 Disable Tavus listening during PDF presentation to prevent voice command interference
+        // 🎤 Keep Tavus listening ENABLED during PDF for NLU-powered tool calls
+        // User can navigate slides by speaking (e.g., "next slide", "go back")
         if (dailyEventManagerRef.current) {
-          dailyEventManagerRef.current.disableListening();
-          listeningStateRef.current = 'disabled';
-          addDebugLog('[PDF] 🔇 Disabled Tavus listening during presentation');
+          dailyEventManagerRef.current.enableListening();
+          listeningStateRef.current = 'enabled';
+          addDebugLog('[PDF] 🎤 Tavus listening ENABLED for NLU tool calls');
         }
 
-        // 🔇 Mute microphone during PDF presentation (user can unmute if needed)
+        // 🔇 Mute microphone initially during PDF presentation (user can unmute to speak)
         if (sessionManagerRef.current?.isInitialized) {
           sessionManagerRef.current.setMicrophoneMuted(true).catch(err => {
             addDebugLog(`[PDF] Failed to mute mic: ${err.message}`);
@@ -4752,8 +4795,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         // Voice commands disabled - using auto-advance instead
 
+        // CRITICAL: Set ref directly to avoid React state sync delay
+        // The useEffect that syncs pdfPresentationRef.current may not run until next render
+        pdfPresentationRef.current.isPresenting = true;
+        pdfPresentationRef.current.totalSlides = presentationData.slides?.length || 0;
+
+        // Mark that we're expecting narration (for auto-advance logic)
+        expectingNarrationRef.current = true;
+        isQandAResponseRef.current = false; // Reset Q&A mode
+
         setTimeout(() => {
-          pdfPresentation.narrateSlide(0);
+          // CRITICAL: Use pdfNarrateSlideRef (not pdfPresentation from closure) to avoid stale closure bug
+          pdfNarrateSlideRef.current?.(0);
         }, 800);
       }
       } else {
@@ -5473,8 +5526,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                   if (dailyEventManagerRef.current) {
                     dailyEventManagerRef.current.interruptReplica();
                   }
-                  // Set target slide to prevent auto-advance
+                  // Set target slide to prevent auto-advance until narration completes
                   userNavigatedToSlideRef.current = index;
+                  // CRITICAL: Set expectingNarrationRef so auto-advance works after narration
+                  expectingNarrationRef.current = true;
                   pdfPresentation.goToSlide(index);
                 }}
                 onRepeatSlide={(index) => {
@@ -5483,8 +5538,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                   if (dailyEventManagerRef.current) {
                     dailyEventManagerRef.current.interruptReplica();
                   }
-                  // Set target slide to prevent auto-advance
+                  // Set target slide to prevent auto-advance until narration completes
                   userNavigatedToSlideRef.current = index;
+                  // CRITICAL: Set expectingNarrationRef so auto-advance works after narration
+                  expectingNarrationRef.current = true;
                   pdfPresentation.narrateSlide(index);
                 }}
                 onPresentationEnd={() => {
