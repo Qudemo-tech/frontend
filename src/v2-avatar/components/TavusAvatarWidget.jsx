@@ -163,10 +163,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const startMcqQuizRef = useRef(null); // Ref to startMcqQuiz function
   const askNextMcqQuestionRef = useRef(null); // Ref to askNextMcqQuestion function
   const completeMcqQuizRef = useRef(null); // Ref to completeMcqQuiz function
-  const handleMcqSelectRef = useRef(null); // Ref to handleMcqSelect function
-  const skipMcqQuizRef = useRef(null); // Ref to skipMcqQuiz function
-  const skipMcqQuestionRef = useRef(null); // Ref to skipMcqQuestion function
-  const repeatMcqQuestionRef = useRef(null); // Ref to repeatMcqQuestion function
   const pendingQuizDataRef = useRef(null); // Stores quiz data while instructions are being spoken
   const pendingModuleTransitionRef = useRef(null); // Pending module ID to transition to after avatar finishes speaking
   const waitingForSectionConfirmationRef = useRef(false); // True when waiting for user to say "continue" to move to next section
@@ -182,10 +178,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const sidebarAutoHiddenRef = useRef(false); // Track if sidebar has been auto-hidden (only auto-hide once)
 
 
-  // Quiz Voice Command Debouncing - prevents spam on tab switch
-  const lastQuizUnrecognizedMessageTimeRef = useRef(0);
-  const QUIZ_UNRECOGNIZED_DEBOUNCE_MS = 5000; // 5 seconds between "let's complete the quiz" messages
-  const startQuizSpeechRecognitionRef = useRef(null); // Ref to startQuizSpeechRecognition function
+  // Quiz uses click-only answers (no voice commands) for reliability
 
   // 🔒 HARD MODULE SPEECH LOCK - blocks ALL user interaction while module is being spoken
   const moduleSpeechLockRef = useRef(false);
@@ -244,9 +237,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   });
   const mcqQuizStateRef = useRef(mcqQuizState); // Ref for use in callbacks
 
-  // Web Speech API for quiz voice commands (works independently of Tavus)
-  const quizSpeechRecognitionRef = useRef(null);
-  const isQuizSpeechRecognitionActiveRef = useRef(false);
+  // Quiz uses click-only answers (no Web Speech API)
 
   // ⏱️ Inactivity timeout - check-in after 30s, end after 60s of no response
   const INACTIVITY_CHECKIN_MS = 30 * 1000; // 30 seconds for first check-in
@@ -803,8 +794,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         if ((mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) && dailyEventManagerRef.current) {
           dailyEventManagerRef.current.disableListening();
           listeningStateRef.current = 'disabled';
-          addDebugLog('[MCQ-QUIZ] 🔇 Re-confirmed Tavus listening disabled during quiz (mic stays on for voice commands)');
-          // Don't mute mic during quiz - we need voice commands for Web Speech API
+          addDebugLog('[MCQ-QUIZ] 🔇 Tavus listening disabled during quiz (click-only answers)');
         } else if (pdfPresentationRef.current.isPresenting && dailyEventManagerRef.current) {
           // During PDF presentation, ENABLE Tavus listening for NLU-powered tool calls
           // Tavus will hear user commands and call PDF navigation tools
@@ -1884,11 +1874,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // If neither clear confirmation nor question, let it fall through to normal processing
     }
 
-    // Check if MCQ quiz is active - voice commands are handled by Web Speech API
-    // This block catches any stray Tavus transcripts that might come through
+    // Check if MCQ quiz is active - quiz uses click-only answers, ignore any voice input
     if (mcqQuizStateRef.current.isActive) {
-      console.log('[VOICE-DEBUG] handleUserSpeech - MCQ quiz active, ignoring Tavus transcript (Web Speech API handles voice):', text);
-      addDebugLog(`[MCQ-QUIZ] Ignoring Tavus transcript during quiz (Web Speech API active): "${text}"`);
+      console.log('[VOICE-DEBUG] handleUserSpeech - MCQ quiz active, ignoring voice (click-only quiz):', text);
+      addDebugLog(`[MCQ-QUIZ] Ignoring voice during quiz (click-only): "${text}"`);
       return;
     }
 
@@ -2930,16 +2919,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           hiddenTimestampRef.current = null;
         }
 
-        // Restart quiz speech recognition if quiz is active
-        // Add a delay to let the page stabilize and avoid picking up noise
-        if (mcqQuizStateRef.current.isActive && !isQuizSpeechRecognitionActiveRef.current) {
-          addDebugLog('[VISIBILITY] Quiz is active - restarting speech recognition after delay');
-          setTimeout(() => {
-            if (mcqQuizStateRef.current.isActive && startQuizSpeechRecognitionRef.current) {
-              startQuizSpeechRecognitionRef.current();
-            }
-          }, 1000); // 1 second delay to avoid noise
-        }
+        // Quiz uses click-only answers, no speech recognition needed
       }
     };
 
@@ -3666,242 +3646,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     sendMessageToReplica(summaryMessage);
   };
 
-  // ========== WEB SPEECH API FOR QUIZ VOICE COMMANDS ==========
-
-  // Process quiz voice command from Web Speech API
-  // Uses refs to access quiz functions that are defined later
-  const processQuizVoiceCommand = useCallback((transcript) => {
-    const lowerText = transcript.toLowerCase().trim();
-    const state = mcqQuizStateRef.current;
-
-    console.log('[VOICE-DEBUG] 🎤 Web Speech API transcript:', lowerText);
-    console.log('[VOICE-DEBUG] Quiz state:', {
-      isActive: state.isActive,
-      isAnswered: state.isAnswered,
-      waitingForAvatarToFinish: state.waitingForAvatarToFinish,
-    });
-
-    if (!state.isActive) {
-      console.log('[VOICE-DEBUG] ❌ Quiz not active, ignoring');
-      return;
-    }
-
-    // User spoke during quiz - reset inactivity timeout
-    resetInactivityTimeout();
-
-    // End quiz commands (exit the entire quiz)
-    // Match various ways users might say "end quiz" including common speech recognition variations
-    const endQuizPatterns = [
-      'end quiz', 'end the quiz', 'and quiz', 'and the quiz',
-      'stop quiz', 'stop the quiz',
-      'exit quiz', 'exit the quiz',
-      'quit quiz', 'quit the quiz',
-      'finish quiz', 'finish the quiz',
-      'close quiz', 'close the quiz',
-      'cancel quiz', 'cancel the quiz',
-      'done with quiz', 'done with the quiz',
-      'i want to end', 'i want to stop', 'i want to quit',
-      'end this', 'stop this', 'quit this'
-    ];
-    if (endQuizPatterns.some(pattern => lowerText.includes(pattern))) {
-      console.log('[VOICE-DEBUG] ✅ Matched: END QUIZ command');
-      addDebugLog(`[MCQ-QUIZ] Voice command: end quiz - "${transcript}"`);
-      skipMcqQuizRef.current?.();
-      return;
-    }
-
-    // Skip question commands (skip current question, move to next)
-    if (lowerText.includes('skip') || lowerText.includes('next question') || lowerText.includes('pass')) {
-      console.log('[VOICE-DEBUG] ✅ Matched: SKIP QUESTION command');
-      addDebugLog(`[MCQ-QUIZ] Voice command: skip question - "${transcript}"`);
-      skipMcqQuestionRef.current?.();
-      return;
-    }
-
-    // Repeat question commands
-    if (lowerText.includes('repeat') || lowerText.includes('say again') || lowerText.includes('again please') || lowerText.includes('one more time')) {
-      console.log('[VOICE-DEBUG] ✅ Matched: REPEAT command');
-      addDebugLog(`[MCQ-QUIZ] Voice command: repeat question - "${transcript}"`);
-
-      // 🔴 CRITICAL: Ensure Tavus listening is disabled before repeating
-      // This prevents Tavus from interpreting "repeat" as a conversation trigger
-      if (dailyEventManagerRef.current) {
-        dailyEventManagerRef.current.disableListening();
-        addDebugLog('[MCQ-QUIZ] 🔇 Re-confirmed Tavus listening disabled before repeat');
-      }
-
-      repeatMcqQuestionRef.current?.();
-      return;
-    }
-
-    // A/B/C/D voice commands for answer selection
-    // Only process if not already answered and not waiting for avatar
-    if (!state.isAnswered && !state.waitingForAvatarToFinish) {
-      // Match single letters or variations like "option A", "answer B", etc.
-      const optionPatterns = [
-        { pattern: /\b(a|option a|answer a|letter a|choice a)\b/i, index: 0 },
-        { pattern: /\b(b|option b|answer b|letter b|choice b)\b/i, index: 1 },
-        { pattern: /\b(c|option c|answer c|letter c|choice c)\b/i, index: 2 },
-        { pattern: /\b(d|option d|answer d|letter d|choice d)\b/i, index: 3 },
-      ];
-
-      for (const { pattern, index } of optionPatterns) {
-        if (pattern.test(lowerText)) {
-          const optionLabels = ['A', 'B', 'C', 'D'];
-          console.log('[VOICE-DEBUG] ✅ Matched: Option', optionLabels[index]);
-          addDebugLog(`[MCQ-QUIZ] Voice command: selected option ${optionLabels[index]} - "${transcript}"`);
-          handleMcqSelectRef.current?.(index);
-          return;
-        }
-      }
-      console.log('[VOICE-DEBUG] ❌ No A/B/C/D pattern matched');
-    } else {
-      console.log('[VOICE-DEBUG] ⏳ Skipping A/B/C/D - already answered or waiting for avatar');
-    }
-
-    // Any other voice input during quiz - but only respond if it's a meaningful input
-    // Skip very short transcripts (likely noise), and don't spam the message if avatar is speaking
-    const minTranscriptLength = 2; // At least 2 characters to be considered valid input
-    if (lowerText.length < minTranscriptLength) {
-      console.log('[VOICE-DEBUG] ⚠️ Ignoring very short transcript (likely noise):', lowerText);
-      return;
-    }
-
-    // Don't send if avatar is currently speaking (prevents spam on tab switch)
-    if (isAvatarSpeakingRef.current || state.waitingForAvatarToFinish) {
-      console.log('[VOICE-DEBUG] ⚠️ Ignoring unrecognized input - avatar is speaking or waiting');
-      return;
-    }
-
-    // Debounce: Don't spam the "complete quiz first" message
-    const now = Date.now();
-    const timeSinceLastUnrecognized = now - lastQuizUnrecognizedMessageTimeRef.current;
-    if (timeSinceLastUnrecognized < QUIZ_UNRECOGNIZED_DEBOUNCE_MS) {
-      console.log(`[VOICE-DEBUG] ⚠️ Debounced unrecognized message (${timeSinceLastUnrecognized}ms since last)`);
-      return;
-    }
-    lastQuizUnrecognizedMessageTimeRef.current = now;
-
-    console.log('[VOICE-DEBUG] ⚠️ Unrecognized command - sending generic response');
-    addDebugLog(`[MCQ-QUIZ] Unrecognized voice during quiz: "${transcript}" - asking to complete quiz first`);
-    sendMessageToReplica("Let's complete the quiz first. You can say A, B, C, or D to select an answer, 'repeat' to hear the question again, 'skip' to skip this question, or 'end quiz' to exit.", 'echo');
-  }, [addDebugLog, sendMessageToReplica]);
-
-  // Start Web Speech API recognition for quiz
-  const startQuizSpeechRecognition = useCallback(() => {
-    // Check if Web Speech API is available
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.log('[VOICE-DEBUG] ❌ Web Speech API not supported in this browser');
-      addDebugLog('[MCQ-QUIZ] Web Speech API not supported - voice commands disabled');
-      return false;
-    }
-
-    // Don't start if already active
-    if (isQuizSpeechRecognitionActiveRef.current) {
-      console.log('[VOICE-DEBUG] ⚠️ Quiz speech recognition already active');
-      return true;
-    }
-
-    console.log('[VOICE-DEBUG] 🎤 Starting Web Speech API for quiz voice commands');
-    addDebugLog('[MCQ-QUIZ] Starting Web Speech API for voice commands');
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      console.log('[VOICE-DEBUG] 🎤 Web Speech API started listening');
-      isQuizSpeechRecognitionActiveRef.current = true;
-    };
-
-    recognition.onresult = (event) => {
-      // Get the latest result
-      const lastResultIndex = event.results.length - 1;
-      const transcript = event.results[lastResultIndex][0].transcript;
-      const confidence = event.results[lastResultIndex][0].confidence;
-
-      console.log('[VOICE-DEBUG] 🎤 Web Speech result:', { transcript, confidence });
-
-      // Only process if quiz is still active
-      if (mcqQuizStateRef.current.isActive) {
-        processQuizVoiceCommand(transcript);
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.log('[VOICE-DEBUG] ❌ Web Speech API error:', event.error);
-      // Restart on recoverable errors (not 'aborted' or 'not-allowed')
-      if (event.error !== 'aborted' && event.error !== 'not-allowed' && mcqQuizStateRef.current.isActive) {
-        console.log('[VOICE-DEBUG] 🔄 Attempting to restart speech recognition...');
-        setTimeout(() => {
-          if (mcqQuizStateRef.current.isActive && quizSpeechRecognitionRef.current) {
-            try {
-              quizSpeechRecognitionRef.current.start();
-            } catch (e) {
-              console.log('[VOICE-DEBUG] ⚠️ Could not restart:', e.message);
-            }
-          }
-        }, 1000);
-      }
-    };
-
-    recognition.onend = () => {
-      console.log('[VOICE-DEBUG] 🎤 Web Speech API ended');
-      // Auto-restart if quiz is still active AND page is visible
-      // Don't restart if page is hidden (tab switched) - prevents noise pickup on return
-      const pageIsVisible = document.visibilityState === 'visible';
-      if (mcqQuizStateRef.current.isActive && isQuizSpeechRecognitionActiveRef.current && pageIsVisible) {
-        console.log('[VOICE-DEBUG] 🔄 Auto-restarting speech recognition (quiz still active, page visible)');
-        setTimeout(() => {
-          if (mcqQuizStateRef.current.isActive && quizSpeechRecognitionRef.current && document.visibilityState === 'visible') {
-            try {
-              quizSpeechRecognitionRef.current.start();
-            } catch (e) {
-              console.log('[VOICE-DEBUG] ⚠️ Could not restart:', e.message);
-            }
-          }
-        }, 100);
-      } else {
-        if (!pageIsVisible) {
-          console.log('[VOICE-DEBUG] ⏸️ Not restarting - page is hidden (tab switched)');
-        }
-        isQuizSpeechRecognitionActiveRef.current = false;
-      }
-    };
-
-    quizSpeechRecognitionRef.current = recognition;
-
-    try {
-      recognition.start();
-      return true;
-    } catch (e) {
-      console.log('[VOICE-DEBUG] ❌ Failed to start Web Speech API:', e.message);
-      addDebugLog(`[MCQ-QUIZ] Failed to start speech recognition: ${e.message}`);
-      return false;
-    }
-  }, [addDebugLog, processQuizVoiceCommand]);
-
-  // Update ref for visibility change handler
-  startQuizSpeechRecognitionRef.current = startQuizSpeechRecognition;
-
-  // Stop Web Speech API recognition for quiz
-  const stopQuizSpeechRecognition = useCallback(() => {
-    console.log('[VOICE-DEBUG] 🛑 Stopping Web Speech API');
-    isQuizSpeechRecognitionActiveRef.current = false;
-
-    if (quizSpeechRecognitionRef.current) {
-      try {
-        quizSpeechRecognitionRef.current.stop();
-      } catch (e) {
-        console.log('[VOICE-DEBUG] ⚠️ Error stopping speech recognition:', e.message);
-      }
-      quizSpeechRecognitionRef.current = null;
-    }
-  }, []);
-
   // ========== MCQ QUIZ FUNCTIONS ==========
+  // Quiz uses click-only answers for reliability (no Web Speech API)
 
   // Start MCQ quiz for a module - first speaks instructions, then shows quiz panel
   const startMcqQuiz = useCallback((moduleId) => {
@@ -3923,21 +3669,18 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Store quiz data for later activation
     pendingQuizDataRef.current = { moduleId, quizData };
 
-    // Keep microphone UNMUTED during quiz - user can speak A/B/C/D, repeat, skip, end
-    // Tavus listening is still disabled below, so avatar won't auto-respond
+    // MUTE microphone during quiz - click-only answers for reliability
     if (sessionManagerRef.current?.isInitialized) {
-      console.log('[VOICE-DEBUG] 🎤 startMcqQuiz - Setting mic to UNMUTED');
-      sessionManagerRef.current.setMicrophoneMuted(false);
-      setIsMuted(false);
+      console.log('[VOICE-DEBUG] 🔇 startMcqQuiz - Muting mic (quiz is click-only)');
+      sessionManagerRef.current.setMicrophoneMuted(true);
+      setIsMuted(true);
     }
 
-    // CRITICAL: Disable Tavus listening during MCQ quiz - avatar should NOT respond to audio
-    // But we still receive transcripts via onUserTranscript callback
+    // Also disable Tavus listening during quiz
     if (dailyEventManagerRef.current) {
-      console.log('[VOICE-DEBUG] 🔇 startMcqQuiz - Disabling Tavus listening (avatar won\'t auto-respond, but we still get transcripts)');
       dailyEventManagerRef.current.disableListening();
       listeningStateRef.current = 'disabled';
-      addDebugLog('[MCQ-QUIZ] Disabled Tavus listening');
+      addDebugLog('[MCQ-QUIZ] Muted mic and disabled Tavus listening (click-only quiz)');
     }
 
     // Create the new quiz state
@@ -3963,14 +3706,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Also update React state for UI
     setMcqQuizState(newQuizState);
 
-    // Start Web Speech API for voice commands during quiz
-    startQuizSpeechRecognition();
+    // Quiz is click-only - no speech recognition needed
 
     // Speak ONLY the quiz instructions first
     // The quiz panel will be shown when avatar finishes speaking (in onReplicaStopSpeaking)
     sendMessageToReplica(quizData.intro, 'echo');
     return true;
-  }, [addDebugLog, sendMessageToReplica, startQuizSpeechRecognition]);
+  }, [addDebugLog, sendMessageToReplica]);
 
   // Activate quiz panel and ask first question (called after instructions are spoken)
   const activateQuizPanel = useCallback(() => {
@@ -4188,8 +3930,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingModuleTransitionRef.current = nextModuleId;
     }
 
-    // Stop Web Speech API recognition
-    stopQuizSpeechRecognition();
+    // Quiz was click-only, no speech recognition to stop
 
     // Use ECHO mode for completion message
     // The module transition will happen in onReplicaStopSpeaking when avatar finishes (if not section-ending)
@@ -4209,7 +3950,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-  }, [addDebugLog, sendMessageToReplica, moduleOrder, sectionEndingModules, stopQuizSpeechRecognition]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder, sectionEndingModules]);
 
   // Skip/End MCQ quiz
   const skipMcqQuiz = useCallback(() => {
@@ -4229,8 +3970,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingModuleTransitionRef.current = nextModuleId;
     }
 
-    // Stop Web Speech API recognition
-    stopQuizSpeechRecognition();
+    // Quiz was click-only, no speech recognition to stop
 
     // Use ECHO mode - transition will happen in onReplicaStopSpeaking
     sendMessageToReplica("Okay, let's skip the quiz and move on to the next topic.", 'echo');
@@ -4249,7 +3989,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-  }, [addDebugLog, sendMessageToReplica, moduleOrder, stopQuizSpeechRecognition]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder]);
 
   // Skip current MCQ question (move to next without answering)
   const skipMcqQuestion = useCallback(() => {
@@ -4342,12 +4082,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }));
     addDebugLog('[MCQ-QUIZ] Selection enabled - avatar finished speaking');
   }, [addDebugLog]);
-
-  // Update refs for quiz voice command functions (used in processQuizVoiceCommand)
-  handleMcqSelectRef.current = handleMcqSelect;
-  skipMcqQuizRef.current = skipMcqQuiz;
-  skipMcqQuestionRef.current = skipMcqQuestion;
-  repeatMcqQuestionRef.current = repeatMcqQuestion;
 
   // ========== END MCQ QUIZ FUNCTIONS ==========
 
@@ -4532,7 +4266,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Microphone unmuted → enable listening (but NOT during MCQ quiz, PDF presentation, or confirmation waiting)
       if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
         // During MCQ quiz (including instruction phase), keep Tavus listening disabled
-        // Web Speech API handles voice commands instead
+        // Quiz uses click-only answers
         dailyEventManagerRef.current.disableListening();
         console.log('[TAVUS-DEBUG] [SYNC] 🔇 Tavus listening kept DISABLED (MCQ quiz active or speaking instructions)');
         setAvatarState("idle");
@@ -4599,8 +4333,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
       addDebugLog('[MCQ] Closing active quiz or pending instructions due to module switch');
 
-      // Stop Web Speech API recognition
-      stopQuizSpeechRecognition();
+      // Quiz was click-only, no speech recognition to stop
 
       // Clear pending quiz data ref
       pendingQuizDataRef.current = null;

@@ -6,7 +6,7 @@
 
 export const moduleQuizzes = {
   'functions-at-entri-quiz': {
-    intro: "Now that you've learned about Entri's functions, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you've learned about Entri's functions, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "Which team is responsible for creating and maintaining the product features that users interact with?",
@@ -99,7 +99,7 @@ export const moduleQuizzes = {
     ]
   },
   'founder-video-quiz': {
-    intro: "Now that you have seen the video, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you have seen the video, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What is the main goal of Entri as a learning platform?",
@@ -206,7 +206,7 @@ export const moduleQuizzes = {
   },
 
   'hr-policies-quiz': {
-    intro: "Now that you've learned about HR Policies, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you've learned about HR Policies, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "How many earned leaves can an employee carry forward per year?",
@@ -291,7 +291,7 @@ export const moduleQuizzes = {
   },
 
   'posh-quiz': {
-    intro: "Now that you've watched the POSH video, let's take a quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you've watched the POSH video, let's take a quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What does POSH stand for?",
@@ -398,7 +398,7 @@ export const moduleQuizzes = {
   },
 
   'employee-benefits-quiz': {
-    intro: "Now that you've learned about Employee Benefits, let's take a quick quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you've learned about Employee Benefits, let's take a quick quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What is the insured amount offered under the group medical insurance for employee, spouse and children?",
@@ -461,7 +461,7 @@ export const moduleQuizzes = {
   },
 
   'final-quiz': {
-    intro: "This is the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Please click your answer on the screen.",
+    intro: "This is the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What is the main goal of Entri as a learning platform?",
@@ -525,7 +525,7 @@ export const moduleQuizzes = {
 };
 
 export const finalQuiz = {
-  intro: "It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri.",
+  intro: "It's time for the final quiz. I'll ask you a few questions to see how much you've learned about Entri. Please click your answer on the screen - voice answers are not supported for quizzes.",
   questions: [
     {
       question: "How many users does Entri have?",

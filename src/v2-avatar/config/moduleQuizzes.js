@@ -17,7 +17,7 @@
 
 const moduleQuizzes = {
   'founder-video': {
-    intro: "Now that you have seen the video, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen.",
+    intro: "Now that you have seen the video, let's take a short quiz to test your understanding. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What is the main goal of Entri as a learning platform?",
@@ -124,7 +124,7 @@ const moduleQuizzes = {
   },
 
   'posh-info': {
-    intro: "Now let's do a quick quiz to check your understanding of POSH. I'll read each question with 4 options. Please click your answer on the screen. You can say 'repeat' if you want me to read the question again, or 'skip' to move on to the next topic.",
+    intro: "Now let's do a quick quiz to check your understanding of POSH. I'll read each question with 4 options. Please click your answer on the screen - voice answers are not supported for quizzes.",
     questions: [
       {
         question: "What does POSH stand for?",
