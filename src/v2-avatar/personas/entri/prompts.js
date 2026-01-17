@@ -217,9 +217,11 @@ When you're ready for a quick quiz, ... say "continue".`,
 
 export const welcomeMessage = "Hello! Welcome to Entri's onboarding. I'm Ann, your AI guide. Let's get started!";
 
-export default {
+const entriPrompts = {
   modulePrompts,
   moduleTransitionPrompts,
   videoCompletionPrompts,
   welcomeMessage,
 };
+
+export default entriPrompts;

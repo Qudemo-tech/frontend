@@ -562,7 +562,9 @@ export const finalQuiz = {
   completionMessage: "You've now completed your onboarding. ... I'll always be here to help, so feel free to ask me anything related to the company whenever you need. ... We're excited to have you on the team. ... Welcome aboard, and all the best as you get started!"
 };
 
-export default {
+const entriQuizzes = {
   moduleQuizzes,
   finalQuiz,
 };
+
+export default entriQuizzes;

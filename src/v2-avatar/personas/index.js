@@ -84,9 +84,11 @@ export const isRegisteredPersona = (personaId) => {
 // Export individual personas for direct access if needed
 export { entriPersona, qatarPersona, evolutionPersona, basePersona };
 
-export default {
+const personaApi = {
   getPersona,
   hasFeature,
   getAllPersonaIds,
   isRegisteredPersona,
 };
+
+export default personaApi;

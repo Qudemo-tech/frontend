@@ -49,9 +49,11 @@ export const modulePrompts = {
   'final-quiz': "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned. Are you ready to begin?"
 };
 
-export default {
+const evolutionModules = {
   order: moduleOrder,
   definitions: moduleDefinitions,
   requiresConfirmation: [], // No confirmation required for Evolution
   prompts: modulePrompts,
 };
+
+export default evolutionModules;

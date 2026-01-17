@@ -1911,9 +1911,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Remove inline code (`code`)
       .replace(/`([^`]+)`/g, '$1')
       // Remove links [text](url) -> text
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       // Remove images ![alt](url)
-      .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
       // Remove horizontal rules (---, ***)
       .replace(/^[-*]{3,}$/gm, '')
       // Remove blockquotes (> text)
