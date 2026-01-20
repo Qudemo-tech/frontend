@@ -439,7 +439,7 @@ const HomePage = () => {
                 }}
               >
                 <button
-                  onClick={() => setTriggerAvatarFullscreen(true)}
+                  onClick={() => window.location.href = 'https://qudemo.com/v2-avatar/qatar'}
                   className="text-white font-medium text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group z-[999]"
                   style={{
                     background: "rgba(59, 130, 246, 1)",
@@ -2335,13 +2335,15 @@ const HomePage = () => {
         }
       `}</style>
 
-      {/* AI Chat Widget - Live Avatar */}
-      <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
-        <AIChatWidget
-          autoExpand={triggerAvatarFullscreen}
-          onDisconnect={() => setTriggerAvatarFullscreen(false)}
-        />
-      </div>
+      {/* AI Chat Widget - Live Avatar - Hidden */}
+      {false && (
+        <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
+          <AIChatWidget
+            autoExpand={triggerAvatarFullscreen}
+            onDisconnect={() => setTriggerAvatarFullscreen(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
