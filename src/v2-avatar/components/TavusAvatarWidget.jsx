@@ -6,15 +6,12 @@ import {
   Volume2,
   VolumeX,
   PhoneOff,
-  Calendar,
   Mic,
   MicOff,
-  MessageSquare,
   Ear,
   Brain,
   Smile,
   User,
-  Bot,
   Video,
   Award,
   Menu,
@@ -23,6 +20,8 @@ import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../c
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
 import { usePdfPresentation } from '../hooks/usePdfPresentation';
+// TODO: useMcqQuiz hook is available for future refactoring
+// import useMcqQuiz from '../hooks/useMcqQuiz';
 import TavusSessionManager from '../utils/TavusSessionManager';
 import DailyEventManager from '../utils/DailyEventManager';
 import LearningModules from './LearningModules';
