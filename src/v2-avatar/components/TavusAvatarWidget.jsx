@@ -429,17 +429,22 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       // Check if user hasn't spoken and avatar isn't speaking (use refs for current values)
       if (!isUserSpeakingRef.current && !isAvatarSpeakingRef.current && dailyEventManagerRef.current) {
-        // 🛑 Do NOT auto-advance modules - all module transitions require user confirmation
-        // The proactive flow for module advancement has been removed to ensure
-        // users explicitly confirm before moving to the next module
+        // Qatar persona (pf5e3d8bef4a): Enable proactive conversation continuation
+        // After 5 seconds of silence, prompt the avatar to continue naturally
+        const isQatarPersona = personaId === 'pf5e3d8bef4a';
 
+        if (isQatarPersona) {
+          addDebugLog('[PROACTIVE] Qatar: 5 seconds passed, triggering conversation continuation');
+          dailyEventManagerRef.current.sendRespondMessage("Continue the conversation naturally with a related topic or question.");
+          return;
+        }
+
+        // For other personas: Do NOT auto-advance modules - all module transitions require user confirmation
         addDebugLog('[PROACTIVE] 5 seconds passed - NOT auto-advancing (confirmation required)');
-        // Don't send continuation message during onboarding modules
-        // Users must say "continue" to advance
       }
       proactiveTimeoutRef.current = null;
     }, 5000);
-  }, [addDebugLog]);
+  }, [addDebugLog, personaId]);
 
   // Ref to track video playing state for callbacks
   const isDemoPlayingRef = useRef(false);
@@ -3098,18 +3103,25 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
       let resp;
       try {
-        // Pass empty customGreeting to suppress Tavus persona's default greeting
-        // We control greetings via our module prompts instead
+        // Build request payload based on persona type
+        // Entri needs custom context to prevent auto-responses during module flow
+        // Qatar and others use Tavus Cloud persona config as-is
+        const isEntriPersona = personaId === 'p54ceeb77022';
+
+        const requestBody = { personaId };
+
+        if (isEntriPersona) {
+          // Suppress default greeting - Entri sends its own via module prompts
+          requestBody.customGreeting = ' ';
+          // Override context to prevent Tavus from responding on its own during module flow
+          requestBody.conversationalContext = `You are Ann, an AI onboarding guide. IMPORTANT: Do NOT proactively speak or give information unless specifically instructed via an echo message. Wait for echo messages to know what to say. When users say simple confirmations like "continue", "yes", "okay", "next", "ready" - do NOT respond with information. Just acknowledge briefly or stay silent. The frontend application controls all module content delivery.`;
+        }
+        // For Qatar and other personas: use Tavus Cloud config (greeting + context)
+
         resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            personaId,
-            customGreeting: ' ', // Empty greeting - we send our own via module prompts
-            // Override persona's conversational context to prevent auto-responses
-            // The frontend controls all responses via echo mode
-            conversationalContext: `You are Ann, an AI onboarding guide. IMPORTANT: Do NOT proactively speak or give information unless specifically instructed via an echo message. Wait for echo messages to know what to say. When users say simple confirmations like "continue", "yes", "okay", "next", "ready" - do NOT respond with information. Just acknowledge briefly or stay silent. The frontend application controls all module content delivery.`,
-          }),
+          body: JSON.stringify(requestBody),
         });
       } catch (fetchError) {
         addDebugLog(`Network Error: ${fetchError.message}`);
