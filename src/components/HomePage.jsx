@@ -428,7 +428,7 @@ const HomePage = () => {
                   fontWeight: "400",
                 }}
               >
-              Qudemo creates AI video call agents that feel like your best employee is always available.
+              Qudemo creates interactive AI buddy for onboarding and training
               </p>
 
               {/* CTA Button */}
@@ -705,10 +705,10 @@ const HomePage = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 sm:mb-3">
-                    Instant Product Demo 
+                    Interactive Onboarding Courses 
                     </h3>
                     <p className="text-gray-300 text-sm sm:text-base leading-relaxed">
-                    Show website visitors a quick, interactive demo and answer their questions in real time so they understand your product faster.
+                    Show employees an interactive onboarding course and answer their questions in real time so they understand faster.
 
                     </p>
                   </div>
