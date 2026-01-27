@@ -415,7 +415,7 @@ const HomePage = () => {
                   textShadow: "0 4px 24px rgba(41, 52, 255, 0.3)",
                 }}
               >
-                Clone your best employee.
+                AI buddy for Onboarding and Training.
                 <br />
             
               </h1>
