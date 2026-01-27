@@ -15,7 +15,10 @@ import {
   Building2,
   Video,
   FileText,
-  HelpCircle
+  HelpCircle,
+  Briefcase,
+  Star,
+  Layers
 } from 'lucide-react';
 
 /**
@@ -32,6 +35,9 @@ const iconMap = {
   Video,
   FileText,
   HelpCircle,
+  Briefcase,
+  Star,
+  Layers,
 };
 
 const getIcon = (iconName) => {
