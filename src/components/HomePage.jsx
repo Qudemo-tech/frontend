@@ -439,7 +439,7 @@ const HomePage = () => {
                 }}
               >
                 <button
-                  onClick={() => window.location.href = 'https://qudemo.com/v2-avatar/qatar'}
+                  onClick={() => window.location.href = 'https://qudemo.com/v2-avatar/entri'}
                   className="text-white font-medium text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group z-[999]"
                   style={{
                     background: "rgba(59, 130, 246, 1)",
@@ -681,11 +681,11 @@ const HomePage = () => {
               </div>
 
               <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-medium text-white mb-3 sm:mb-4 leading-tight">
-              Powerful Ways to Use Qudemo
+              Unlock your team's potential with AI buddy
               </h2>
 
               <p className="text-sm sm:text-base md:text-md text-gray-500 mb-6 sm:mb-8 max-w-4xl mx-auto">
-                Create a personalized 24x7 expert for your customers and team.
+                Augment your team's learning with AI buddy
               </p>
 
               {/* Benefit Cards */}
@@ -729,10 +729,10 @@ const HomePage = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 sm:mb-3">
-                      Smart Onboarding
+                      Smart Integrations
                     </h3>
                     <p className="text-gray-300 text-sm sm:text-base leading-relaxed">
-                    Guide new customers or employees through clear steps and explain key features with simple, real-time answers.
+                    Integrates with Notion, Google Drive, Slack and more making it easy to create and manage your training courses.
             
                     </p>
                   </div>
