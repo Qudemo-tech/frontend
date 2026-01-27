@@ -30,7 +30,33 @@ const PdfPresentation = ({
 }) => {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [containerWidth, setContainerWidth] = useState(null);
   const containerRef = useRef(null);
+
+  // Track container width for responsive PDF sizing
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        // Account for padding/margins - use 95% of available width
+        const width = containerRef.current.offsetWidth * 0.95;
+        setContainerWidth(width);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+
+    // Also observe container size changes (e.g., sidebar toggle)
+    const resizeObserver = new ResizeObserver(updateWidth);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateWidth);
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // Sync page number with current slide index
   useEffect(() => {
@@ -101,7 +127,7 @@ const PdfPresentation = ({
             pageNumber={pageNumber}
             renderTextLayer={false}
             renderAnnotationLayer={false}
-            width={1200}
+            width={containerWidth || 800}
             loading={
               <div className="pdf-loading">
                 <div className="spinner"></div>
