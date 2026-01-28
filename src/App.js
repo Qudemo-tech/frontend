@@ -10,7 +10,6 @@ import "./App.css";
 import { getNodeApiUrl } from "./config/api";
 import { clearAuthTokens } from "./utils/tokenRefresh";
 import { checkDomainOnLoad } from "./utils/domainEnforcer";
-import { isMobileDevice } from "./mobile/utils/utils";
 // Import components
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -49,8 +48,6 @@ import { CompanyProvider, useCompany } from "./context/CompanyContext";
 import { BackendProvider } from "./context/BackendContext";
 import { NotificationProvider } from "./context/NotificationContext";
 
-// Lazy load mobile components for code splitting
-const MobileLandingPage = lazy(() => import("./mobile/MobileLandingPage"));
 // Protected Route Component
 //test
 const ProtectedRoute = ({ children }) => {
@@ -269,26 +266,6 @@ function App() {
       window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
-  const HomeRoute = () => {
-    const isMobile = isMobileDevice();
-
-    if (isMobile) {
-      return (
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-screen">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-            </div>
-          }
-        >
-          <MobileLandingPage />
-        </Suspense>
-      );
-    }
-
-    return <HomePage />;
-  };
-
   return (
     <Router>
       <BackendProvider>
@@ -296,7 +273,7 @@ function App() {
           <div className="App">
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<HomeRoute />} />
+              <Route path="/" element={<HomePage />} />
               <Route path="/privacypolicy" element={<PrivacyPolicy />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
