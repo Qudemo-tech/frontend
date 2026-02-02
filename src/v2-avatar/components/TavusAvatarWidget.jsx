@@ -3106,7 +3106,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Build request payload based on persona type
         // Entri needs custom context to prevent auto-responses during module flow
         // Qatar and others use Tavus Cloud persona config as-is
-        const isEntriPersona = personaId === 'p54ceeb77022';
+        const isEntriPersona = personaId !== 'pf5e3d8bef4a';
 
         const requestBody = { personaId };
 

@@ -15,7 +15,7 @@ import basePersona, { createPersona } from './basePersona';
 import entriPersona from './entri';
 import qatarPersona from './qatar';
 import evolutionPersona from './evolution';
-
+import fiveGPersona from './5G';
 // Registry of all known personas
 const personaRegistry = {
   // Entri onboarding
@@ -26,6 +26,8 @@ const personaRegistry = {
 
   // Evolution learning
   'p99b6eb28083': evolutionPersona,
+
+  'p607dc212fc9': fiveGPersona,
 };
 
 /**

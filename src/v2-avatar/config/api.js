@@ -24,6 +24,7 @@ export const PERSONA_MAP = {
   'qatar': 'pf5e3d8bef4a',
   'evolution': 'p99b6eb28083',
   'entri': 'p54ceeb77022',
+  '5g': 'p607dc212fc9',  // lowercase for case-insensitive URL matching
   // Add more personas here as needed
   // 'friendly-name': 'actual-persona-id',
 };

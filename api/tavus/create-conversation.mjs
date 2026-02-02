@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     console.log('Request method:', req.method);
 
     // Get Tavus API key from environment
-    const TAVUS_API_KEY = process.env.TAVUS_API_KEY;
+    const TAVUS_API_KEY = 'a04adc41c3524c03a9942294e3dce7de';
 
     // Use persona_id from request body, fall back to env var if not provided
     const TAVUS_PERSONA_ID = personaId || process.env.TAVUS_PERSONA_ID;
