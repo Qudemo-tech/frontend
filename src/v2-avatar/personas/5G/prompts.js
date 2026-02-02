@@ -10,7 +10,7 @@
  */
 
 export const modulePrompts = {
-  'intro-5g': `Hello!   I'm Ann.
+  'intro-5g': `Hello!   I'm Ann. I am here to help you learn about 5G.
 
 Think of 5G not as just "faster 4G,"   but as a new network architecture designed to support very different types of communication.
 

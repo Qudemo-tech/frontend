@@ -29,10 +29,22 @@ import EntriLearningModules from './EntriLearningModules';
 import MCQQuizOverlay from './MCQQuizOverlay';
 import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
+// Presentation configs - imported from persona folders
 import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
 import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
 import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
-import { moduleTransitionPrompts, videoCompletionPrompts } from '../personas/entri/prompts';
+import { speedLatencyPresentation } from '../personas/5G/presentations/speed-latency';
+
+// Presentation registry - maps presentationConfig names to their data
+const PRESENTATION_REGISTRY = {
+  'functions-at-entri': functionsAtEntriPresentation,
+  'hr-policies': hrPoliciesPresentation,
+  'employee-benefits': employeeBenefitsPresentation,
+  'speed-latency': speedLatencyPresentation,
+};
+
+// Note: videoCompletionPrompts and moduleTransitionPrompts are now accessed via persona.prompts
+
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -452,15 +464,31 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const lastVideoCompletionModuleRef = useRef(null); // Track which module's completion was last processed
 
   // Video modules that should auto-advance after video ends
-  const videoModules = ['user-success-stories', 'founder-video', 'posh-info'];
+  // Dynamically built from moduleDefinitions - any module with type: 'video' and hasVideo: true
+  const videoModules = useMemo(() => {
+    return Object.keys(moduleDefinitions).filter(moduleId => {
+      const config = moduleDefinitions[moduleId];
+      return config?.type === 'video' && config?.hasVideo === true;
+    });
+  }, [moduleDefinitions]);
 
   // Mapping from video modules to their associated quiz modules
-  // The video module (founder-video) has its quiz named differently (founder-video-quiz)
-  const videoToQuizMap = {
-    'founder-video': 'founder-video-quiz',
-    'posh-info': 'posh-quiz',
-    // user-success-stories has no quiz - it's section-ending
-  };
+  // Dynamically built: looks for a quiz module that follows the video module in moduleOrder
+  const videoToQuizMap = useMemo(() => {
+    const map = {};
+    videoModules.forEach(videoModuleId => {
+      const videoIndex = moduleOrder.indexOf(videoModuleId);
+      if (videoIndex !== -1 && videoIndex < moduleOrder.length - 1) {
+        const nextModuleId = moduleOrder[videoIndex + 1];
+        const nextModuleConfig = moduleDefinitions[nextModuleId];
+        // If the next module is a quiz, map it
+        if (nextModuleConfig?.type === 'quiz') {
+          map[videoModuleId] = nextModuleId;
+        }
+      }
+    });
+    return map;
+  }, [videoModules, moduleOrder, moduleDefinitions]);
 
   // Callback for when a video module stops - move to next module
   const handleVideoModuleStop = useCallback(() => {
@@ -530,8 +558,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       waitingForVideoQuizConfirmationRef.current = true;
       pendingVideoQuizModuleRef.current = associatedQuizId;
 
-      // Speak video completion message if available
-      const completionMessage = videoCompletionPrompts[currentModule];
+      // Speak video completion message if available (from persona's prompts)
+      const completionMessage = persona.prompts.videoCompletionPrompts?.[currentModule];
       if (completionMessage && dailyEventManagerRef.current) {
         addDebugLog(`[DEMO] Speaking video completion message for ${currentModule}`);
         dailyEventManagerRef.current.sendEchoMessage(completionMessage);
@@ -575,8 +603,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         pendingSectionTransitionRef.current = nextModuleId;
 
         // Prefer video completion prompt (has repeat/continue instructions), fall back to transition prompt
-        const completionPrompt = videoCompletionPrompts[currentModule];
-        const transitionPrompt = moduleTransitionPrompts[currentModule];
+        const completionPrompt = persona.prompts.videoCompletionPrompts?.[currentModule];
+        const transitionPrompt = persona.prompts.moduleTransitionPrompts?.[currentModule];
         const promptToSpeak = completionPrompt || transitionPrompt;
 
         if (promptToSpeak && dailyEventManagerRef.current) {
@@ -3910,8 +3938,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Section-ending quiz - add transition prompt and wait for user confirmation
       addDebugLog(`[MCQ-QUIZ] ${moduleId} is section-ending - will wait for confirmation before ${nextModuleId}`);
 
-      // Add transition prompt to completion message
-      const transitionPrompt = moduleTransitionPrompts[moduleId];
+      // Add transition prompt to completion message (from persona's prompts)
+      const transitionPrompt = persona.prompts.moduleTransitionPrompts?.[moduleId];
       if (transitionPrompt) {
         completionMessage += ` ... ${transitionPrompt}`;
       }
@@ -4463,14 +4491,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Special handling for presentation modules: Speak intro first, then show PDF and narrate slides
         addDebugLog(`[MODULE-LOCK] Presentation module ${moduleId} - will speak intro then load PDF`);
 
-        // Get presentation config
-        const presentationData = moduleConfig.presentationConfig === 'functions-at-entri'
-          ? functionsAtEntriPresentation
-          : moduleConfig.presentationConfig === 'hr-policies'
-          ? hrPoliciesPresentation
-          : moduleConfig.presentationConfig === 'employee-benefits'
-          ? employeeBenefitsPresentation
-          : null;
+        // Get presentation config from registry
+        const presentationData = PRESENTATION_REGISTRY[moduleConfig.presentationConfig] || null;
 
       if (!presentationData) {
         addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);

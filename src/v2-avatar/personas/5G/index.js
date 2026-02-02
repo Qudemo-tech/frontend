@@ -62,6 +62,8 @@ const fiveGPersona = createPersona({
   prompts: {
     welcome: prompts.welcomeMessage,
     modulePrompts: prompts.modulePrompts,
+    videoCompletionPrompts: prompts.videoCompletionPrompts,
+    moduleTransitionPrompts: prompts.moduleTransitionPrompts,
     courseCompletion: prompts.courseCompletionPrompt,
   },
 
