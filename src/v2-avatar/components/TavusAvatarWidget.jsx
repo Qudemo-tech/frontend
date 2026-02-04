@@ -34,6 +34,8 @@ import { functionsAtEntriPresentation } from '../personas/entri/presentations/fu
 import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
 import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
 import { speedLatencyPresentation } from '../personas/5G/presentations/speed-latency';
+import { qatarPearlDivingPresentation } from '../personas/qatar_history/presentations/qatar-pearl-diving';
+import { qatarOilGasPresentation } from '../personas/qatar_history/presentations/qatar-oil-gas';
 
 // Presentation registry - maps presentationConfig names to their data
 const PRESENTATION_REGISTRY = {
@@ -41,6 +43,8 @@ const PRESENTATION_REGISTRY = {
   'hr-policies': hrPoliciesPresentation,
   'employee-benefits': employeeBenefitsPresentation,
   'speed-latency': speedLatencyPresentation,
+  'qatar-pearl-diving': qatarPearlDivingPresentation,
+  'qatar-oil-gas': qatarOilGasPresentation,
 };
 
 // Note: videoCompletionPrompts and moduleTransitionPrompts are now accessed via persona.prompts
