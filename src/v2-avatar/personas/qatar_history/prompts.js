@@ -10,7 +10,7 @@
  */
 
 export const modulePrompts = {
-  'geography-intro': `Hello!   I'm Nex.
+  'geography-intro': `Hello!   I'm Nex. I am here to help you learn about Qatar's history.
 
 To understand Qatar's history, we must begin with its geography.
 
