@@ -1,0 +1,209 @@
+{
+  "id": "entri",
+  "meta": {
+    "title": "Entri Employee Onboarding",
+    "company": "Entri",
+    "language": "en",
+    "estimatedDuration": "45m",
+    "description": "Complete onboarding program for new Entri employees"
+  },
+  "avatar": {
+    "personaId": "p54ceeb77022",
+    "name": "Ann",
+    "welcomeMessage": "Hello! Welcome to Entri's onboarding. I'm Ann, your AI guide. Let's get started!"
+  },
+  "features": {
+    "learningModules": true,
+    "moduleConfirmation": true,
+    "mcqQuiz": true,
+    "pdfViewer": true,
+    "videoPlayer": true,
+    "progressTracking": true,
+    "sidebar": true
+  },
+  "structure": {
+    "sections": [
+      {
+        "id": "section-welcome",
+        "title": "1. Welcome & Introduction",
+        "modules": ["welcome-intro", "founder-video", "founder-video-quiz"]
+      },
+      {
+        "id": "section-success-stories",
+        "title": "2. User Success Stories",
+        "modules": ["user-success-stories"]
+      },
+      {
+        "id": "section-functions",
+        "title": "3. Functions at Entri",
+        "modules": ["functions-at-entri", "functions-at-entri-quiz"]
+      },
+      {
+        "id": "section-hr-policies",
+        "title": "4. HR Policies",
+        "modules": ["hr-policies", "hr-policies-quiz"]
+      },
+      {
+        "id": "section-posh",
+        "title": "5. POSH Information",
+        "modules": ["posh-info", "posh-quiz"]
+      },
+      {
+        "id": "section-employee-benefits",
+        "title": "6. Employee Benefits",
+        "modules": ["employee-benefits", "employee-benefits-quiz"]
+      },
+      {
+        "id": "section-assessment",
+        "title": "7. Final Assessment",
+        "modules": ["final-quiz"]
+      }
+    ],
+    "moduleOrder": [
+      "welcome-intro",
+      "founder-video",
+      "founder-video-quiz",
+      "user-success-stories",
+      "functions-at-entri",
+      "functions-at-entri-quiz",
+      "hr-policies",
+      "hr-policies-quiz",
+      "posh-info",
+      "posh-quiz",
+      "employee-benefits",
+      "employee-benefits-quiz",
+      "final-quiz"
+    ],
+    "modulesRequiringConfirmation": [
+      "welcome-intro",
+      "functions-at-entri",
+      "hr-policies"
+    ],
+    "sectionEndingModules": [
+      "founder-video-quiz",
+      "user-success-stories",
+      "functions-at-entri-quiz",
+      "hr-policies-quiz",
+      "posh-quiz",
+      "employee-benefits-quiz"
+    ]
+  },
+  "modules": {
+    "welcome-intro": {
+      "id": "welcome-intro",
+      "type": "lesson",
+      "title": "Welcome to Entri",
+      "description": "Introduction to Entri",
+      "duration": "3m",
+      "icon": "CheckCircle"
+    },
+    "founder-video": {
+      "id": "founder-video",
+      "type": "video",
+      "title": "Founder's Video",
+      "description": "Meet the founders of Entri",
+      "duration": "5m",
+      "icon": "Video",
+      "videoUrl": "https://www.youtube.com/watch?v=YtB5fjEO1zc",
+      "videoPlatform": "youtube"
+    },
+    "founder-video-quiz": {
+      "id": "founder-video-quiz",
+      "type": "quiz",
+      "title": "Founder's Video Quiz",
+      "description": "Test your understanding of the video",
+      "icon": "Award",
+      "quizRef": "quizzes/founder-video-quiz.json"
+    },
+    "user-success-stories": {
+      "id": "user-success-stories",
+      "type": "video",
+      "title": "User Success Stories",
+      "description": "Inspiring stories from Entri users",
+      "duration": "5m",
+      "icon": "Star",
+      "videoUrl": "https://www.youtube.com/watch?v=5R35-Yxkw2Y",
+      "videoPlatform": "youtube"
+    },
+    "functions-at-entri": {
+      "id": "functions-at-entri",
+      "type": "presentation",
+      "title": "Functions at Entri",
+      "description": "Different functions and teams",
+      "duration": "4m",
+      "icon": "Briefcase",
+      "presentationRef": "presentations/functions-at-entri.json",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Functions_at_Entri..pdf"
+    },
+    "functions-at-entri-quiz": {
+      "id": "functions-at-entri-quiz",
+      "type": "quiz",
+      "title": "Functions Quiz",
+      "description": "Test your knowledge of Entri functions",
+      "icon": "Award",
+      "quizRef": "quizzes/functions-at-entri-quiz.json"
+    },
+    "hr-policies": {
+      "id": "hr-policies",
+      "type": "presentation",
+      "title": "HR Policies",
+      "description": "Working hours, leave policy, and benefits",
+      "duration": "8m",
+      "icon": "BookOpen",
+      "presentationRef": "presentations/hr-policies.json",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2025/05/12/Module_5-HR_Policies_1_1.pdf"
+    },
+    "hr-policies-quiz": {
+      "id": "hr-policies-quiz",
+      "type": "quiz",
+      "title": "HR Policies Quiz",
+      "description": "Test your knowledge of HR policies",
+      "icon": "Award",
+      "quizRef": "quizzes/hr-policies-quiz.json"
+    },
+    "posh-info": {
+      "id": "posh-info",
+      "type": "video",
+      "title": "Prevention of Sexual Harassment",
+      "description": "POSH Policy overview",
+      "duration": "10m",
+      "icon": "Shield",
+      "videoUrl": "https://www.youtube.com/watch?v=XPAhyFETMpM",
+      "videoPlatform": "youtube"
+    },
+    "posh-quiz": {
+      "id": "posh-quiz",
+      "type": "quiz",
+      "title": "POSH Quiz",
+      "description": "Test your knowledge of POSH policies",
+      "icon": "Award",
+      "quizRef": "quizzes/posh-quiz.json"
+    },
+    "employee-benefits": {
+      "id": "employee-benefits",
+      "type": "presentation",
+      "title": "Benefits Overview",
+      "description": "Your benefits at Entri",
+      "duration": "8m",
+      "icon": "Heart",
+      "presentationRef": "presentations/employee-benefits.json",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Employee_Benefits.pdf"
+    },
+    "employee-benefits-quiz": {
+      "id": "employee-benefits-quiz",
+      "type": "quiz",
+      "title": "Employee Benefits Quiz",
+      "description": "Test your knowledge of employee benefits",
+      "icon": "Award",
+      "quizRef": "quizzes/employee-benefits-quiz.json"
+    },
+    "final-quiz": {
+      "id": "final-quiz",
+      "type": "quiz",
+      "title": "Final Quiz",
+      "description": "Test your knowledge",
+      "icon": "Award",
+      "quizRef": "quizzes/final-quiz.json"
+    }
+  }
+}
