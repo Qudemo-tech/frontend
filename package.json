@@ -34,7 +34,8 @@
     "eject": "react-scripts eject",
     "build:css": "tailwindcss -i ./src/index.css -o ./dist/output.css --watch",
     "dev:api": "node dev-server.mjs",
-    "dev": "npm run dev:api & npm start"
+    "dev": "npm run dev:api & npm start",
+    "bundle-courses": "node scripts/bundle-courses.js"
   },
   "eslintConfig": {
     "extends": [
