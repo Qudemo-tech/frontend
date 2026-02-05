@@ -777,5 +777,188 @@
         }
       ]
     }
+  },
+  "presentations": {
+    "functions-at-entri": {
+      "id": "functions-at-entri",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Functions_at_Entri..pdf",
+      "totalSlides": 18,
+      "slides": [
+        {
+          "page": 1,
+          "title": "Title Slide",
+          "narration": "Welcome to Functions at Entri. Let's learn about how our teams work together."
+        },
+        {
+          "page": 2,
+          "title": "Overview of Functions",
+          "narration": "At a high level, Entri operates through eleven distinct functions. Think of these as the gears that keep our engine running. We're going to break them down one by one so you can understand what each team does and how they contribute to our overall success. Whether it's Engineering, Product, or User Happiness, every single function plays a vital role here."
+        },
+        {
+          "page": 3,
+          "title": "Engineering Team",
+          "narration": "First up, we have the Engineering Team. You can think of them as the backbone of our product development. They build and maintain all the technical aspects of our platform, ensuring reliability, scalability, and performance. From the front-end interfaces you see to the back-end systems running silently in the background, this team ensures everything functions seamlessly. Our product's success relies heavily on their technical expertise and problem-solving skills."
+        },
+        {
+          "page": 4,
+          "title": "Product Team",
+          "narration": "Next is the Product Team. They are the ones responsible for defining our vision, strategy, and roadmap. Their goal is to ensure our product meets market demands while aligning with both user needs and our business goals. They prioritize which features get developed and when, ensuring that everything we build delivers real value to our users."
+        },
+        {
+          "page": 5,
+          "title": "Design Team",
+          "narration": "Then we have the Design Team. They focus on creating user-centered, aesthetically pleasing, and functional designs. They are the driving force behind ensuring every interaction a user has with our app is intuitive and enjoyable. By balancing functionality with creativity, they don't just deliver features, they deliver seamless and delightful experiences."
+        },
+        {
+          "page": 6,
+          "title": "Academics & Content Team",
+          "narration": "As an ed-tech company, content is king. Our Academics and Content Team is responsible for ensuring our courses feature the best syllabus and high-quality content. This talented group of academics, teachers, and creators ensures our courses are well-structured and engaging, providing an exceptional educational experience for our learners."
+        },
+        {
+          "page": 7,
+          "title": "User Happiness Team",
+          "narration": "User happiness is one of our core organizational values, and we have a dedicated team to uphold it. The User Happiness Team ensures every user receives prompt attention and priority. They work diligently to cultivate a loyal user base, making sure that every interaction leaves our users feeling satisfied and valued."
+        },
+        {
+          "page": 8,
+          "title": "Media Team",
+          "narration": "Our Media Team plays a crucial role in creating engaging content across all platforms. They produce everything from in-app video content to promotional marketing videos. They also manage our presence on YouTube and social media, ensuring our content resonates with the audience and effectively communicates our mission."
+        },
+        {
+          "page": 9,
+          "title": "Placements Team",
+          "narration": "Since our goal is helping users get job-ready, our Placements Team is essential. They bridge the gap between education and employment by providing placement assistance and working with industry partners to create job opportunities. They also guide learners on resume building and interview prep, empowering them to achieve their career goals."
+        },
+        {
+          "page": 10,
+          "title": "Growth Team",
+          "narration": "The Growth Team focuses on attracting new users and expanding our market presence. Using data analysis and marketing campaigns, they drive user acquisition and retention. By understanding user behavior, they identify opportunities to enhance our reach, ensuring more learners can benefit from our courses."
+        },
+        {
+          "page": 11,
+          "title": "Inside Sales Team",
+          "narration": "Our Inside Sales Team is actually the largest team at Entri. They are dedicated to driving revenue by reaching out to potential clients and providing exceptional service throughout the sales process. Their commitment is essential for connecting with more users and helping them achieve their educational aspirations."
+        },
+        {
+          "page": 12,
+          "title": "Founder's Office",
+          "narration": "The Founder's Office plays a critical role in strategic planning and executive decision-making. They support the CEO in driving the company's vision and mission, ensuring all initiatives align with our long-term goals. This team facilitates communication between leadership and other departments to maintain focus on key priorities."
+        },
+        {
+          "page": 13,
+          "title": "Human Resources",
+          "narration": "The HR function is vital for managing our most important asset, you, the employees. They handle recruitment, onboarding, and training to ensure a positive work environment. By focusing on employee development and engagement, HR helps align your individual goals with the company's objectives."
+        },
+        {
+          "page": 14,
+          "title": "Finance & Accounting",
+          "narration": "The Finance and Accounting team is crucial for keeping Entri financially healthy. They manage budgeting, compliance, payroll, and expenses. By ensuring accurate financial records, they help us make informed decisions and identify cost-saving opportunities, supporting our overall growth and efficiency."
+        },
+        {
+          "page": 15,
+          "title": "Administration & Operations",
+          "narration": "And finally, our Administration and Operations Team. They are key to keeping everything running smoothly by managing assets and handling daily administrative tasks. They streamline processes to allow other teams to focus on their main goals, helping us succeed as a whole."
+        },
+        {
+          "page": 16,
+          "title": "Core Team Members",
+          "narration": "Before we wrap up, I want to introduce you to some of the core team members you might see around. We have our Co-Founder and CEO, Mohammed Hisamuddin, and Co-Founder and CTO, Rahul Ramesh. We also have leaders across all functions, including Hrishikesh Bhaskaran, VP of Engineering, Ratheesh Sebastian, Head of Finance and Operations, and many others leading our Growth, Academics, and User Happiness teams."
+        },
+        {
+          "page": 17,
+          "title": "Functional Leadership",
+          "narration": "Moving on, I'd like to introduce you to the key leaders driving our major functions. On this slide, you see the individuals heading up critical departments such as Engineering, Finance, Growth, and Academics. These leaders, including our VPs and Heads of Operations, work closely with the founders to execute our strategy and ensure that every department, from Content Operations to User Happiness, is aligned with our mission."
+        },
+        {
+          "page": 18,
+          "title": "Extended Leadership & Operational Heads",
+          "narration": "Here we have more of our integral team leaders who manage specific verticals and operational areas. This group includes our Heads of HR, Media, and Product Design, as well as leaders managing specific regions and categories like Study Abroad and Corporate Relations. Their specialized expertise ensures that every aspect of our business runs smoothly and that we continue to innovate and expand our reach effectively."
+        }
+      ]
+    },
+    "hr-policies": {
+      "id": "hr-policies",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2025/05/12/Module_5-HR_Policies_1_1.pdf",
+      "totalSlides": 7,
+      "slides": [
+        {
+          "page": 1,
+          "title": "Title Slide",
+          "narration": "Welcome back! ... Now that we've covered the functions and teams, ... let's move on to Module 5: HR Policies. ... This section is very important ... as it covers the practical aspects of your employment here at Entri, ... from when you work to how you get paid ... and the benefits you're entitled to. ... We want to ensure you have all the information you need ... to have a smooth and productive experience with us."
+        },
+        {
+          "page": 2,
+          "title": "Working Hours & Days",
+          "narration": "Let's start with the basics, your schedule. ... Our standard working hours are from 9:30 AM to 6:30 PM. ... However, we understand that different teams have different needs, ... so there may be flexibility depending on your specific role or shift. ... Your specific working days will be outlined in your offer letter. ... Regarding compensation, ... we follow a standard payroll period from the 1st to the last day of the month. ... You can expect your salary to be processed on the 1st working day of the following month, ... while any incentives you earn are paid out by the 10th."
+        },
+        {
+          "page": 3,
+          "title": "Leave Policy - Part 1",
+          "narration": "We believe in a healthy work-life balance. ... For Earned Leave, ... you are granted 18 days annually, ... credited at a rate of 1.5 days per month. ... If you don't use them all, don't worry, ... you can carry forward up to 30 days into the next year. ... We also provide 6 sick days at the beginning of each year ... for any health-related absences. ... Additionally, ... if you are required to work on a public holiday or weekend, ... you are eligible for Comp Off, or compensatory leave, ... to use later."
+        },
+        {
+          "page": 4,
+          "title": "Leave Policy - Part 2",
+          "narration": "We also support you during significant life events. ... For your wedding, ... you are entitled to 5 days of paid leave to celebrate. ... For new parents, ... we offer substantial support. ... Female team members are entitled to up to 180 days of maternity leave ... starting from the 8th month of pregnancy. ... New fathers receive 5 days of paternity leave ... to support their families. ... Finally, ... in the unfortunate event of losing an immediate family member, ... we grant 5 days of bereavement leave ... to give you time for personal reflection and family support."
+        },
+        {
+          "page": 5,
+          "title": "Holiday Policy",
+          "narration": "Everyone needs a break to recharge. ... At Entri, ... employees are entitled to 15 holidays each year, ... covering mandatory, regional, and festival occasions. ... On top of that, ... we offer flexibility with Restricted Holidays. ... You can select 2 optional holidays of your choice ... to celebrate festivals or events that matter most to you personally."
+        },
+        {
+          "page": 6,
+          "title": "Software We Use",
+          "narration": "To keep us connected and efficient, ... we use a specific stack of software tools. ... Our official internal communication platform is Slack. ... This is where most day-to-day conversation happens. ... For other functional needs, ... we rely on a suite of tools ... including G Suite for email and docs, ... Jira and Gitlab for engineering and project management, ... and others like Growthbook, Mixpanel, Figma, and Clevertap ... depending on your department. ... Getting comfortable with these tools ... will help you collaborate seamlessly with your team."
+        },
+        {
+          "page": 7,
+          "title": "Performance & Reimbursements",
+          "narration": "Finally, ... let's talk about your growth and expenses. ... We conduct quarterly one-on-one reviews ... which are integral to your annual appraisal. ... These are designed to provide ongoing feedback ... to support your long-term career goals here. ... Regarding expenses, ... we want to make sure you are reimbursed promptly for any eligible costs. ... Simply submit your claims with documentation ... before the 24th of every month. ... The link to the reimbursement portal ... is provided in your appointment letter for easy reference. ... That covers the key HR policies! ... We are happy to have you on board."
+        }
+      ]
+    },
+    "employee-benefits": {
+      "id": "employee-benefits",
+      "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Employee_Benefits.pdf",
+      "totalSlides": 7,
+      "slides": [
+        {
+          "page": 1,
+          "title": "Title Slide",
+          "narration": "Welcome to Module 7: Employee Benefits. ... At Entri, we know that our success is built on the well-being and happiness of our team. ... This module outlines the perks and benefits designed to support you not just as an employee, but as a person ... covering everything from your health to your hobbies."
+        },
+        {
+          "page": 2,
+          "title": "Health & Financial Support",
+          "narration": "Let's start with your health and security. ... We offer a comprehensive Group Medical Insurance plan ... that covers you, your spouse, and your children ... with a generous insured amount of 5 lakhs. ... We also prioritize mental wellness through 'YourDOST,' ... a platform where you can access free counseling and emotional support from experts. ... Additionally, we have a Welfare Fund ... to provide a financial safety net for you during unexpected emergencies."
+        },
+        {
+          "page": 3,
+          "title": "Growth & Rewards",
+          "narration": "We love it when you help us build our team and grow personally. ... With our Referral Bonus, ... you get rewarded when you refer a candidate who successfully completes 3 months with us. ... For the readers among you, ... the Entri Book Club is a fantastic community. ... We even support your habit with a quarterly allowance of 500 rupees to buy books of your choice."
+        },
+        {
+          "page": 4,
+          "title": "Lifestyle Benefits",
+          "narration": "Beyond the basics, ... we have a suite of lifestyle benefits designed to make your time at Entri enjoyable and balanced. ... Let's take a look at how we support your daily life and well-being."
+        },
+        {
+          "page": 5,
+          "title": "Wellness & Connection",
+          "narration": "Our Wellness Club is committed to your overall health, ... offering activities like yoga sessions to help you thrive physically and mentally. ... To keep us connected as a team, ... we host monthly virtual 'Employee Happy Hours'. ... These are a great way to unwind, chat, ... and just have fun with your colleagues outside of work tasks."
+        },
+        {
+          "page": 6,
+          "title": "Community & Culture",
+          "narration": "Culture is huge here. ... We celebrate a wide range of festivals ... from Onam and Diwali to Christmas and Eid ... honoring the diversity of our team. ... For those who love to stay active, ... our Sports Club organizes activities like Cricket, Football, and Badminton. ... And to keep you fueled, ... our Lunch Program provides nutritious and delicious meals every day."
+        },
+        {
+          "page": 7,
+          "title": "Fitness & Recreation",
+          "narration": "Finally, we want you to stay fit and relaxed. ... Our Corporate Gym Plans give you access to premier fitness facilities through local partnerships. ... Inside the office, you can take a break with our recreational facilities, ... which include Table Tennis, Carom, board games, and even a library. ... These are there for you to recharge whenever you need a break. ... That covers all the employee benefits at Entri!"
+        }
+      ]
+    }
   }
 }
