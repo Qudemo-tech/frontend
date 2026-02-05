@@ -4,10 +4,13 @@
  * This source uses static imports that get tree-shaken at build time,
  * ensuring only the bundles actually used are included in the final build.
  *
- * Bundle structure expected:
+ * Bundle structure (flat at root level):
  * {
  *   id: 'course-id',
- *   manifest: { ... course metadata ... },
+ *   meta: { ... course metadata ... },
+ *   avatar: { ... avatar config ... },
+ *   features: { ... feature flags ... },
+ *   structure: { ... sections, moduleOrder ... },
  *   modules: { moduleId: { ... module definition ... } },
  *   quizzes: { quizId: { ... quiz definition ... } },
  *   presentations: { presentationId: { ... presentation ... } },
@@ -15,21 +18,19 @@
  * }
  */
 
-// Bundles will be imported statically in Phase 2:
-// import entriBundle from '../../data/courses/entri/bundle.json';
-// import qatarBundle from '../../data/courses/qatar/bundle.json';
-// import evolutionBundle from '../../data/courses/evolution/bundle.json';
+// Static imports for bundling (tree-shakeable)
+import entriBundle from '../../data/courses/entri.json';
+import qatarBundle from '../../data/courses/qatar.json';
+import evolutionBundle from '../../data/courses/evolution.json';
 
 /**
  * Map of course IDs to their bundled content.
- * Populated in Phase 2 after content migration.
  * @type {Object.<string, Object>}
  */
 const COURSE_BUNDLES = {
-  // Populated in Phase 2 after content migration
-  // 'entri': entriBundle,
-  // 'qatar': qatarBundle,
-  // 'evolution': evolutionBundle,
+  entri: entriBundle,
+  qatar: qatarBundle,
+  evolution: evolutionBundle,
 };
 
 /**
@@ -50,29 +51,46 @@ export class BundleSource {
 
   /**
    * Get the course manifest for a given course ID.
+   * Bundle has flat structure - extract manifest fields from top level.
    * @param {string} courseId - The unique identifier of the course
-   * @returns {Object|null} The course manifest object, or null if not found
+   * @returns {Object|null} The course manifest object (id, meta, avatar, features, structure), or null if not found
    */
   getCourse(courseId) {
     const bundle = this.bundles[courseId];
     if (!bundle) {
       return null;
     }
-    return bundle.manifest || null;
+
+    // Bundle has flat structure - extract manifest fields
+    const { id, meta, avatar, features, structure } = bundle;
+    return { id, meta, avatar, features, structure };
   }
 
   /**
    * Get a module definition by course and module ID.
+   * Returns the module with its associated prompt attached.
    * @param {string} courseId - The unique identifier of the course
    * @param {string} moduleId - The unique identifier of the module
-   * @returns {Object|null} The module definition object, or null if not found
+   * @returns {Object|null} The module definition object with prompt attached, or null if not found
    */
   getModule(courseId, moduleId) {
     const bundle = this.bundles[courseId];
     if (!bundle || !bundle.modules) {
       return null;
     }
-    return bundle.modules[moduleId] || null;
+
+    const moduleData = bundle.modules[moduleId];
+    if (!moduleData) {
+      return null;
+    }
+
+    // Attach prompt if available
+    const prompt = bundle.prompts?.[moduleId] || null;
+    if (prompt) {
+      return { ...moduleData, prompt };
+    }
+
+    return moduleData;
   }
 
   /**
@@ -124,7 +142,7 @@ export class BundleSource {
    * Get prompts for a module by course, module ID, and optional prompt type.
    * @param {string} courseId - The unique identifier of the course
    * @param {string} moduleId - The unique identifier of the module
-   * @param {string} [promptType] - Optional prompt type (e.g., 'intro', 'outro', 'completion')
+   * @param {string} [promptType] - Optional prompt type (e.g., 'main', 'completion', 'transition')
    * @returns {Object|string|null} The prompts object, specific prompt string, or null if not found
    */
   getModulePrompt(courseId, moduleId, promptType) {
