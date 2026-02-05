@@ -1,0 +1,40 @@
+{
+  "id": "qatar",
+  "meta": {
+    "title": "Qatar Conversational Avatar",
+    "company": "Qatar",
+    "language": "en",
+    "estimatedDuration": "0m",
+    "description": "Conversational avatar without learning modules"
+  },
+  "avatar": {
+    "personaId": "pf5e3d8bef4a",
+    "name": "Qatar Avatar",
+    "welcomeMessage": "Hello! How can I help you today?"
+  },
+  "features": {
+    "learningModules": false,
+    "moduleConfirmation": false,
+    "mcqQuiz": false,
+    "pdfViewer": false,
+    "videoPlayer": false,
+    "progressTracking": false,
+    "sidebar": false
+  },
+  "structure": {
+    "sections": [
+      {
+        "id": "section-conversational",
+        "title": "Conversational",
+        "modules": []
+      }
+    ],
+    "moduleOrder": [],
+    "modulesRequiringConfirmation": [],
+    "sectionEndingModules": []
+  },
+  "modules": {},
+  "quizzes": {},
+  "presentations": {},
+  "prompts": {}
+}

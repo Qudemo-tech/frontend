@@ -157,12 +157,11 @@ export const courseSchema = {
         },
         moduleOrder: {
           type: 'array',
-          minItems: 1,
           items: {
             type: 'string',
             pattern: '^[a-z0-9-]+$'
           },
-          description: 'Complete ordered list of module IDs'
+          description: 'Complete ordered list of module IDs (empty for conversational-only personas)'
         },
         modulesRequiringConfirmation: {
           type: 'array',
