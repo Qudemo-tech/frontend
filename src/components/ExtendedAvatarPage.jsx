@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AIChatWidget } from './AIChatWidget';
 import styles from './ExtendedAvatarPage.module.css';
 
 // AIDEV-NOTE: Fullscreen avatar page for /extended route
@@ -50,12 +49,13 @@ const ExtendedAvatarPage = () => {
           </button>
         </div>
       ) : (
-        // AIDEV-NOTE: Widget container - unmounts immediately when isStarted becomes false
+        // AIDEV-NOTE: Widget container - placeholder after HeyGen removal
         <div className={styles.widgetContainer}>
           <div className="extended-avatar-wrapper">
-            {/* AIDEV-NOTE: key prop forces React to completely destroy and recreate widget on each session */}
-            {/* AIDEV-NOTE: autoExpand prop automatically expands widget and starts session */}
-            <AIChatWidget key={sessionKey} onDisconnect={handleDisconnect} autoExpand={true} />
+            {/* HeyGen AIChatWidget removed - component deprecated */}
+            <div className="text-center p-8">
+              <p className="text-gray-500">Avatar functionality removed</p>
+            </div>
           </div>
         </div>
       )}

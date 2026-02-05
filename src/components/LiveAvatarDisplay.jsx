@@ -1,8 +1,7 @@
 import React from 'react';
-import LiveAvatarManager from './LiveAvatarManager';
-import { 
-  SpeakerWaveIcon, 
-  SpeakerXMarkIcon, 
+import {
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
   ArrowPathIcon,
   SignalIcon,
   SignalSlashIcon
@@ -75,20 +74,6 @@ const LiveAvatarDisplay = ({
     <div className={`relative ${
       isMaximized ? 'w-full h-full' : 'w-full aspect-video'
     } rounded-lg overflow-hidden shadow-lg`}>
-      
-      {/* LiveAvatar Manager Component */}
-      <LiveAvatarManager
-        qudemoId={qudemoId}
-        companyName={companyName}
-        avatarId={avatarId}
-        voiceId={voiceId}
-        quality={quality}
-        onReady={onReady}
-        onStartTalking={handleStartTalking}
-        onStopTalking={handleStopTalking}
-        onError={handleError}
-        onConnectionChange={handleConnectionChange}
-      />
       
       {/* Top Bar - Quality & Status */}
       <div className="absolute top-2 left-2 right-2 flex items-center justify-between">

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import FloatingQudemoWidget from "./FloatingQudemoWidget";
 import { getNodeApiUrl } from "../config/api";
 
 const WidgetPlayground = () => {
@@ -211,14 +210,7 @@ const WidgetPlayground = () => {
 
       </div>
 
-      {/* Floating Widget - The actual widget being tested */}
-      {qudemoData && (
-        <FloatingQudemoWidget
-          qudemoId={qudemoId}
-          companyName={qudemoData.company_name}
-          isPreview={false}
-        />
-      )}
+      {/* FloatingQudemoWidget removed - HeyGen integration deprecated */}
     </div>
   );
 };

@@ -38,7 +38,6 @@ import PricingPage from "./components/PricingPage";
 import CustomerInteractionsPage from "./components/CustomerInteractionsPage";
 import VideoChatPage from "./components/VideoChatPage";
 import FloatingWidgetDemo from "./components/FloatingWidgetDemo";
-import FloatingQudemoWidget from "./components/FloatingQudemoWidget";
 import WidgetTokenHelper from "./components/WidgetTokenHelper";
 import WidgetPlayground from "./components/WidgetPlayground";
 import WidgetEmbed from "./components/WidgetEmbed";

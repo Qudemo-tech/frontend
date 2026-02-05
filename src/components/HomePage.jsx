@@ -29,14 +29,12 @@ import InfiniteBadges from "./ui/InfiniteBadges";
 import { Edit2, Eye, Pointer, Upload, User2 } from "lucide-react";
 import RadarScanner from "./ui/RadarScanner";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { AIChatWidget } from "./AIChatWidget";
 
 const HomePage = () => {
   const [openFAQ, setOpenFAQ] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [isYearly, setIsYearly] = useState(false);
-  const [triggerAvatarFullscreen, setTriggerAvatarFullscreen] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile(); // Detect mobile to disable heavy animations
 
@@ -2335,15 +2333,6 @@ const HomePage = () => {
         }
       `}</style>
 
-      {/* AI Chat Widget - Live Avatar - Hidden */}
-      {false && (
-        <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
-          <AIChatWidget
-            autoExpand={triggerAvatarFullscreen}
-            onDisconnect={() => setTriggerAvatarFullscreen(false)}
-          />
-        </div>
-      )}
     </div>
   );
 };

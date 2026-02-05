@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import FloatingQudemoWidget from "./FloatingQudemoWidget";
 import { getNodeApiUrl } from "../config/api";
 
 const PublicQudemoShareWidget = () => {
@@ -58,13 +57,10 @@ const PublicQudemoShareWidget = () => {
 
   return (
     <div className="min-h-screen md:bg-gradient-to-br md:from-blue-50 md:to-blue-100">
-      {/* Locked Maximized Widget - Full Screen on all devices */}
-      <FloatingQudemoWidget
-        qudemoId={qudemoId}
-        companyName={qudemoData.company_name}
-        isPreview={false}
-        lockedExpanded={true} // Lock widget in fully maximized state (video left, chat right on desktop; full screen on mobile)
-      />
+      {/* FloatingQudemoWidget removed - HeyGen integration deprecated */}
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500">Widget functionality removed</p>
+      </div>
     </div>
   );
 };

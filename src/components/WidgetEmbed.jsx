@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import FloatingQudemoWidget from './FloatingQudemoWidget';
 
 /**
  * WidgetEmbed Component
@@ -54,15 +53,10 @@ const WidgetEmbed = () => {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      <FloatingQudemoWidget
-        qudemoId={qudemoId}
-        companyName={companyName}
-        isPreview={false}
-        lockedExpanded={false}
-        theme={theme}
-        position={position}
-        size={size}
-      />
+      {/* FloatingQudemoWidget removed - HeyGen integration deprecated */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <p style={{ color: '#666' }}>Widget functionality removed</p>
+      </div>
     </div>
   );
 };
