@@ -25,14 +25,12 @@ import { navigateToCreate } from "../utils/navigation";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import InfiniteBadges from "../components/ui/InfiniteBadges";
 import { Edit2, Eye, Pointer, Upload, User2 } from "lucide-react";
-import { MobileAvatarWidget } from "./components/MobileAvatarWidget";
 
 const MobileLandingPage = () => {
   const [openFAQ, setOpenFAQ] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [isYearly, setIsYearly] = useState(false);
-  const [triggerAvatarFullscreen, setTriggerAvatarFullscreen] = useState(false);
   const navigate = useNavigate();
 
   // Check authentication state on home page load
@@ -364,7 +362,7 @@ const MobileLandingPage = () => {
                 }}
               >
                 <button
-                  onClick={() => setTriggerAvatarFullscreen(true)}
+                  onClick={() => window.location.href = 'https://qudemo.com/v2-avatar/entri'}
                   className="text-white font-medium text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group z-[999]"
                   style={{
                     background: "rgba(59, 130, 246, 1)",
@@ -1902,39 +1900,7 @@ const MobileLandingPage = () => {
         .animate-fadeIn {
           animation: fadeIn 0.8s ease-out both;
         }
-
-        .avatar-fullscreen-wrapper > div {
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          right: 0 !important;
-          bottom: 0 !important;
-          width: 100vw !important;
-          height: 100vh !important;
-          transform: none !important;
-          margin: 0 !important;
-          border-radius: 0 !important;
-          z-index: 9999 !important;
-          overflow: visible !important;
-        }
-
-        /* Prevent body scrolling when avatar is fullscreen */
-        body:has(.avatar-fullscreen-wrapper) {
-          overflow: hidden !important;
-          position: fixed !important;
-          width: 100% !important;
-          height: 100% !important;
-        }
       `}</style>
-
-      {/* Mobile Avatar Widget - Live Avatar */}
-      <div className={triggerAvatarFullscreen ? "avatar-fullscreen-wrapper" : ""}>
-        <MobileAvatarWidget
-          autoExpand={triggerAvatarFullscreen}
-          onDisconnect={() => setTriggerAvatarFullscreen(false)}
-          onExpand={() => setTriggerAvatarFullscreen(true)}
-        />
-      </div>
     </div>
   );
 };
