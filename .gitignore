@@ -5,6 +5,9 @@
 /.pnp
 .pnp.js
 
+.claude/
+
+
 # testing
 /coverage
 
@@ -25,3 +28,6 @@ yarn-error.log*
 # ignore legacy folder for now
 legacy/
 src/mobile/DEBUG-CONNECTION-ISSUE.md
+
+# GSD planning docs (local-only)
+.planning/
