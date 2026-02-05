@@ -960,5 +960,55 @@
         }
       ]
     }
+  },
+  "prompts": {
+    "welcome-intro": {
+      "main": "Hello there! Welcome to Entri.\n\nI'm so glad you're here. My name is Ann, and I'll be your AI onboarding guide today.\n\nSo let me tell you about our company.\n\nEntri is India's leading learning platform for job seekers. We've helped over 1.4 crore users, that's more than 14 million people, achieve their career dreams.\n\nWe're an education technology company focused on making learning accessible to everyone. We help people prepare for competitive exams learn new skills and advance their careers.\n\nAs a new Entripreneur, that's what we call ourselves here, you're now part of this mission.\n\nHere's what we'll cover in this onboarding:\n\nFirst a video message from our founders.\n\nThen some inspiring user success stories.\n\nAfter that we'll explore the different functions at Entri.\n\nNext we'll go through HR Policies covering working hours, leave policies, and more.\n\nThen we'll cover POSH guidelines that's Prevention of Sexual Harassment at the Workplace.\n\nAnd finally your employee benefits and a short quiz to wrap things up.\n\nReady to get started? Just say \"continue\" when you're ready to proceed."
+    },
+    "founder-video": {
+      "main": "Now let me show you a special video message from our founders. Please watch, and I'll be right here when it's done.",
+      "completion": "That was a great message from our founders. I hope you feel inspired and excited to be part of the Entri family!\n\nI hope you understood everything in the video. If you have any questions about what you just watched, feel free to ask. If you'd like to watch the video again, just say \"repeat the video\".\n\nWhen you're ready for a quick quiz on the video, say \"continue\"."
+    },
+    "founder-video-quiz": {
+      "main": "Alright! Now that you've watched the founder's video, let's test your understanding with a quick quiz. I'll ask you a few questions Please select your answer from the options on screen.",
+      "transition": "Great job completing the Welcome section! You've learned about Entri and met our founders.\n\nNext up, we'll watch some inspiring success stories from our users.\n\nIf you have any questions about what we've covered so far, feel free to ask. Otherwise, say \"continue\" when you're ready to move on."
+    },
+    "user-success-stories": {
+      "main": "Now let me show you some inspiring success stories from our users. Please watch, and I'll be right here when it's done.",
+      "completion": "Those were some truly inspiring stories! Our users have achieved amazing things with Entri's help.\n\nI hope you found that inspiring! If you have any questions about the success stories, feel free to ask. If you'd like to watch the video again, just say \"repeat the video\".\n\nWhen you're ready to move on, say \"continue\".",
+      "transition": "Those were some amazing success stories, weren't they? Our users have achieved incredible things.\n\nNow we'll explore the different functions and teams at Entri.\n\nAny questions about the success stories? Say \"continue\" when you're ready to proceed."
+    },
+    "functions-at-entri": {
+      "main": "Let's explore the different functions at Entri. In this section, you'll learn about the key teams that work together to make our mission possible."
+    },
+    "functions-at-entri-quiz": {
+      "main": "Alright! It's time to test your knowledge about Entri's functions. I'll ask you a few questions Please select your answer from the options on screen.",
+      "transition": "Excellent! You now have a good understanding of how Entri is organized and the different teams that work together.\n\nNext, we'll cover HR Policies, including working hours, leave policies, and more important information.\n\nAny questions before we move on? Say \"continue\" when you're ready."
+    },
+    "hr-policies": {
+      "main": "Let's dive into HR Policies. In this section, you'll learn about working hours, leave policies, holidays, and important HR guidelines that apply to you."
+    },
+    "hr-policies-quiz": {
+      "main": "Great! Now let's test your understanding of HR Policies with a quick quiz. I'll ask you a few questions Please select your answer from the options on screen.",
+      "transition": "Well done! You now know the key HR policies at Entri.\n\nNext up is a very important topic, POSH, Prevention of Sexual Harassment at the Workplace.\n\nAny questions about HR policies? Say \"continue\" when you're ready to proceed."
+    },
+    "posh-info": {
+      "main": "Now let's talk about something really important. POSH, Prevention of Sexual Harassment at the Workplace. Please watch this video carefully as it covers essential guidelines for maintaining a safe and respectful work environment. I'll be right here when it's done.",
+      "completion": "That covered some very important information about POSH guidelines. It's essential that we all understand and follow these policies to maintain a safe and respectful workplace.\n\nI hope you understood everything in the video. If you have any questions about POSH, feel free to ask. If you'd like to watch the video again, just say \"repeat the video\".\n\nWhen you're ready for a quick quiz, say \"continue\"."
+    },
+    "posh-quiz": {
+      "main": "Great! Now that you've watched the POSH video, let's test your understanding with a quiz. I'll ask you a few questions Please select your answer from the options on screen.",
+      "transition": "Great job! Understanding POSH guidelines is essential for maintaining a safe workplace.\n\nNow let's talk about something exciting, your employee benefits!\n\nAny questions about POSH? Say \"continue\" when you're ready."
+    },
+    "employee-benefits": {
+      "main": "Now let's talk about something exciting your employee benefits! In this section, you'll learn about health insurance, wellness programs, and all the perks that make Entri a great place to work."
+    },
+    "employee-benefits-quiz": {
+      "main": "Great! Now let's test your understanding of Employee Benefits with a quick quiz. I'll ask you a few questions Please select your answer from the options on screen.",
+      "transition": "Wonderful! You now know all the great benefits available to you at Entri.\n\nWe're almost done! Just one more step, the final quiz to wrap up your onboarding.\n\nAny questions about your benefits? Say \"continue\" when you're ready for the final quiz."
+    },
+    "final-quiz": {
+      "main": "Alright! You've made it to the final step.\n\nIt's quiz time!\n\nI'll ask you a few questions to see how much you've learned about Entri.\n\nDon't worry, it's not too hard. Just pay attention and you'll do great.\n\nReady? Let's begin!"
+    }
   }
 }
