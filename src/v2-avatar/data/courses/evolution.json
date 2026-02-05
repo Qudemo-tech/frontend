@@ -1,0 +1,82 @@
+{
+  "id": "evolution",
+  "meta": {
+    "title": "Evolution Learning Course",
+    "company": "Evolution",
+    "language": "en",
+    "estimatedDuration": "15m",
+    "description": "Learn about evolution through natural selection, genetic drift, and fossil evidence"
+  },
+  "avatar": {
+    "personaId": "p99b6eb28083",
+    "name": "Evolution Avatar",
+    "welcomeMessage": "Hello! I'm here to teach you about evolution. Select a topic from the sidebar to begin!"
+  },
+  "features": {
+    "learningModules": true,
+    "moduleConfirmation": false,
+    "mcqQuiz": false,
+    "pdfViewer": false,
+    "videoPlayer": false,
+    "progressTracking": true,
+    "sidebar": true
+  },
+  "structure": {
+    "sections": [
+      {
+        "id": "section-evolution",
+        "title": "Evolution Topics",
+        "modules": ["natural-selection", "genetic-drift", "fossil-record", "final-quiz"]
+      }
+    ],
+    "moduleOrder": ["natural-selection", "genetic-drift", "fossil-record", "final-quiz"],
+    "modulesRequiringConfirmation": [],
+    "sectionEndingModules": []
+  },
+  "modules": {
+    "natural-selection": {
+      "id": "natural-selection",
+      "type": "lesson",
+      "title": "Natural Selection",
+      "description": "How living things change over time",
+      "duration": "1m"
+    },
+    "genetic-drift": {
+      "id": "genetic-drift",
+      "type": "lesson",
+      "title": "Genetic Drift",
+      "description": "Random changes in populations",
+      "duration": "1m"
+    },
+    "fossil-record": {
+      "id": "fossil-record",
+      "type": "lesson",
+      "title": "Fossil Record",
+      "description": "Evidence of evolution",
+      "duration": "1m"
+    },
+    "final-quiz": {
+      "id": "final-quiz",
+      "type": "lesson",
+      "title": "Final Quiz",
+      "description": "Test your knowledge",
+      "duration": "2m"
+    }
+  },
+  "quizzes": {},
+  "presentations": {},
+  "prompts": {
+    "natural-selection": {
+      "main": "Let's discuss natural selection! This is how living things change over time. Animals that are better at surviving pass on their traits to their babies. Can you think of an example of natural selection?"
+    },
+    "genetic-drift": {
+      "main": "Great! Let's explore genetic drift. This happens when random chance affects which traits get passed down in a population. It's like flipping a coin - sometimes you get heads, sometimes tails. What questions do you have about genetic drift?"
+    },
+    "fossil-record": {
+      "main": "Excellent choice! The fossil record shows us evidence of evolution over millions of years. Fossils are like nature's history book. What would you like to know about fossils?"
+    },
+    "final-quiz": {
+      "main": "Perfect! It's time for the final quiz. I'll ask you a few questions to see how much you've learned. Are you ready to begin?"
+    }
+  }
+}
