@@ -5,7 +5,6 @@ import { getNodeApiUrl, getApiUrl, getVideoApiUrl } from "../config/api";
 import { useNavigate } from "react-router-dom";
 import DocumentUpload from "./DocumentUpload";
 import CustomFAQModal from "./CustomFAQModal";
-import AvatarSelector from "./AvatarSelector";
 
 const CreateQudemoTwoStep = () => {
   const { company, isLoading } = useCompany();
@@ -32,12 +31,6 @@ const CreateQudemoTwoStep = () => {
   const [collectName, setCollectName] = useState(true);
   const [collectEmail, setCollectEmail] = useState(true);
   const [collectCompany, setCollectCompany] = useState(false);
-  
-  // LiveAvatar Configuration (NEW)
-  const [useLiveAvatar, setUseLiveAvatar] = useState(false);
-  const [selectedAvatarId, setSelectedAvatarId] = useState(null);
-  const [selectedAvatarVoiceId, setSelectedAvatarVoiceId] = useState(null);
-  const [avatarQuality, setAvatarQuality] = useState('medium');
   
   // FAQ states
   const [generatedFAQs, setGeneratedFAQs] = useState(null); // { content_faqs: [], system_faqs: [] }
@@ -244,11 +237,6 @@ const CreateQudemoTwoStep = () => {
         collectName: collectUserInfo ? collectName : false,
         collectEmail: collectUserInfo ? collectEmail : false,
         collectCompany: collectUserInfo ? collectCompany : false,
-        // LiveAvatar Configuration (NEW)
-        useLiveAvatar: useLiveAvatar,
-        liveAvatarId: useLiveAvatar ? selectedAvatarId : null,
-        liveAvatarVoiceId: useLiveAvatar ? selectedAvatarVoiceId : null,
-        avatarQuality: useLiveAvatar ? avatarQuality : 'medium',
         videos: validVideoUrls.map((url, index) => {
           const validation = validateVideoUrl(url);
           return {
@@ -642,8 +630,8 @@ const CreateQudemoTwoStep = () => {
   };
   
   const handleGenerateVideos = async () => {
-    // Validate required fields (only if NOT using LiveAvatar)
-    if (!useLiveAvatar && !presenterPhoto) {
+    // Validate required fields
+    if (!presenterPhoto) {
       setError("⚠️ Presenter photo is required to generate AI videos. Please upload a clear, front-facing photo.");
       // Scroll to presenter photo section
       const presenterSection = document.getElementById('presenter-photo-section');
@@ -652,9 +640,8 @@ const CreateQudemoTwoStep = () => {
       }
       return;
     }
-    
-    // Voice is only required if NOT using LiveAvatar (LiveAvatar has its own voice)
-    if (!useLiveAvatar && !selectedVoice) {
+
+    if (!selectedVoice) {
       setError("⚠️ Please select an AI voice for the video narration.");
       return;
     }
@@ -668,38 +655,17 @@ const CreateQudemoTwoStep = () => {
     await handleSaveFAQs();
     
     setIsGeneratingVideos(true);
-    setVideoGenerationProgress(useLiveAvatar ? "Saving LiveAvatar configuration..." : "Uploading presenter photo...");
+    setVideoGenerationProgress("Uploading presenter photo...");
     setError("");
-    
+
     try {
-      console.log('🎬 Video generation mode:', useLiveAvatar ? 'LiveAvatar' : 'Pre-recorded');
-      if (useLiveAvatar) {
-        console.log('✨ LiveAvatar config:', {
-          avatarId: selectedAvatarId,
-          voiceId: selectedAvatarVoiceId,
-          quality: avatarQuality
-        });
-      } else {
-        console.log('🎤 Pre-recorded config - Voice ID:', selectedVoice);
-      }
-      
+      console.log('🎤 Pre-recorded config - Voice ID:', selectedVoice);
+
       const formData = new FormData();
       formData.append("qudemoId", createdQudemoId);
       formData.append("companyName", company.name);
-      
-      // Add LiveAvatar-specific fields
-      formData.append("useLiveAvatar", useLiveAvatar.toString());
-      
-      if (useLiveAvatar) {
-        // LiveAvatar mode
-        formData.append("liveAvatarId", selectedAvatarId);
-        formData.append("liveAvatarVoiceId", selectedAvatarVoiceId);
-        formData.append("avatarQuality", avatarQuality);
-      } else {
-        // Pre-recorded mode
-        formData.append("presenterPhoto", presenterPhoto);
-        formData.append("voiceId", selectedVoice);
-      }
+      formData.append("presenterPhoto", presenterPhoto);
+      formData.append("voiceId", selectedVoice);
       
       const pythonApiUrl = getApiUrl('python');
       const response = await fetch(`${pythonApiUrl}/trigger-video-generation-final`, {
@@ -711,35 +677,20 @@ const CreateQudemoTwoStep = () => {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || "Failed to start video generation");
       }
-      
-      setVideoGenerationProgress(useLiveAvatar ? "Finalizing LiveAvatar setup..." : "Starting AI video generation...");
-      
+
+      setVideoGenerationProgress("Starting AI video generation...");
+
       const data = await response.json();
-      
-      if (useLiveAvatar) {
-        // LiveAvatar mode - no video generation needed
-        if (data.status === 'success' || data.use_live_avatar) {
-          setSuccess(`✅ LiveAvatar configured successfully! Your QuDemo is ready with ${data.total_faqs} FAQs. Redirecting to QuDemos page...`);
-          
-          // Redirect after 2 seconds
-          setTimeout(() => {
-            navigate("/qudemos");
-          }, 2000);
-        } else {
-          throw new Error("Failed to save LiveAvatar configuration");
-        }
+
+      if (data.success) {
+        setSuccess(`✅ Video generation started! ${data.total_videos} videos will be generated in ~${data.estimated_time_minutes} minutes. Redirecting to QuDemos page...`);
+
+        // Redirect after 3 seconds
+        setTimeout(() => {
+          navigate("/qudemos");
+        }, 3000);
       } else {
-        // Pre-recorded mode - video generation started
-        if (data.success) {
-          setSuccess(`✅ Video generation started! ${data.total_videos} videos will be generated in ~${data.estimated_time_minutes} minutes. Redirecting to QuDemos page...`);
-          
-          // Redirect after 3 seconds
-          setTimeout(() => {
-            navigate("/qudemos");
-          }, 3000);
-        } else {
-          throw new Error("Failed to start video generation");
-        }
+        throw new Error("Failed to start video generation");
       }
     } catch (error) {
       setError("Failed to generate videos: " + error.message);
@@ -1338,14 +1289,10 @@ const CreateQudemoTwoStep = () => {
             {/* Voice Selection */}
             <div className="mb-6">
               <label className="block text-sm font-bold text-graydark mb-2 text-left">
-                Select AI Voice {!useLiveAvatar && <span className="text-red-500">*</span>}
-                {useLiveAvatar && <span className="text-gray-500">(Optional - LiveAvatar has its own voice)</span>}
+                Select AI Voice <span className="text-red-500">*</span>
               </label>
               <p className="text-xs text-gray-500 mb-3 text-left">
-                {useLiveAvatar 
-                  ? 'You selected a LiveAvatar with its own voice. This selection is for pre-recorded videos only.'
-                  : 'Choose the voice that will read your FAQ answers (Click speaker icon to preview)'
-                }
+                Choose the voice that will read your FAQ answers (Click speaker icon to preview)
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1414,39 +1361,17 @@ const CreateQudemoTwoStep = () => {
                 </p>
               )}
             </div>
-            
-            {/* LiveAvatar Configuration (NEW) */}
-            <div className="mb-6">
-              <AvatarSelector
-                enabled={useLiveAvatar}
-                onEnabledChange={setUseLiveAvatar}
-                selectedAvatarId={selectedAvatarId}
-                onAvatarChange={setSelectedAvatarId}
-                selectedVoiceId={selectedAvatarVoiceId}
-                onVoiceChange={setSelectedAvatarVoiceId}
-                quality={avatarQuality}
-                onQualityChange={setAvatarQuality}
-              />
-            </div>
-            
+
             {/* Presenter Photo */}
             <div className="mb-6" id="presenter-photo-section">
               <label className="block text-sm font-bold text-graydark mb-2 text-left">
-                Presenter Photo {!useLiveAvatar && <span className="text-red-500">*</span>}
-                {useLiveAvatar && <span className="text-gray-500">(Optional - Not needed for LiveAvatar)</span>}
+                Presenter Photo <span className="text-red-500">*</span>
               </label>
               <p className="text-xs text-gray-500 mb-3 text-left">
-                {useLiveAvatar ? (
-                  <span className="font-semibold text-blue-600">Optional:</span>
-                ) : (
-                  <span className="font-semibold text-red-600">Required:</span>
-                )}{' '}
-                {useLiveAvatar 
-                  ? 'You selected a LiveAvatar - no photo needed! (Or upload to use for pre-recorded videos)'
-                  : 'Upload a clear, front-facing photo for the AI avatar (max 5MB)'
-                }
+                <span className="font-semibold text-red-600">Required:</span>{' '}
+                Upload a clear, front-facing photo for the AI avatar (max 5MB)
               </p>
-              
+
               {presenterPhotoPreview ? (
                 <div className="relative inline-block">
                   <img
@@ -1462,19 +1387,15 @@ const CreateQudemoTwoStep = () => {
                   </button>
                 </div>
               ) : (
-                <label className={`block w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer ${
-                  useLiveAvatar 
-                    ? 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50' 
-                    : 'border-red-300 bg-red-50 hover:border-red-500 hover:bg-red-100'
-                }`}>
+                <label className="block w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer border-red-300 bg-red-50 hover:border-red-500 hover:bg-red-100">
                   <div className="space-y-2">
-                    <div className={useLiveAvatar ? 'text-gray-400' : 'text-red-400'}>
+                    <div className="text-red-400">
                       <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
-                    <div className={`text-sm font-semibold ${useLiveAvatar ? 'text-gray-600' : 'text-red-600'}`}>
-                      {useLiveAvatar ? '✨ Optional: Click to upload (if needed)' : '⚠️ Required: Click to upload presenter photo'}
+                    <div className="text-sm font-semibold text-red-600">
+                      Required: Click to upload presenter photo
                     </div>
                     <div className="text-xs text-gray-600">
                       or drag and drop
@@ -1496,29 +1417,18 @@ const CreateQudemoTwoStep = () => {
               <div className="flex justify-center">
                 <button
                   onClick={handleGenerateVideos}
-                  disabled={
-                    isGeneratingVideos || 
-                    (useLiveAvatar && !selectedAvatarId) ||
-                    (!useLiveAvatar && (!selectedVoice || !presenterPhoto))
-                  }
+                  disabled={isGeneratingVideos || !selectedVoice || !presenterPhoto}
                   className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isGeneratingVideos ? "Generating..." : `🎬 Generate ${generatedFAQs.total_videos} AI Videos`}
+                  {isGeneratingVideos ? "Generating..." : `Generate ${generatedFAQs.total_videos} AI Videos`}
                 </button>
               </div>
-              
+
               {/* Requirements Notice */}
-              {(useLiveAvatar && !selectedAvatarId) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-semibold">ℹ️ LiveAvatar Required:</span> Please select an avatar from the gallery above
-                  </p>
-                </div>
-              )}
-              {(!useLiveAvatar && (!presenterPhoto || !selectedVoice)) && (
+              {(!presenterPhoto || !selectedVoice) && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
                   <p className="text-sm text-yellow-800">
-                    <span className="font-semibold">⚠️ Missing Requirements:</span>
+                    <span className="font-semibold">Missing Requirements:</span>
                     {!presenterPhoto && !selectedVoice && " Upload presenter photo and select AI voice"}
                     {!presenterPhoto && selectedVoice && " Upload presenter photo"}
                     {presenterPhoto && !selectedVoice && " Select AI voice"}
