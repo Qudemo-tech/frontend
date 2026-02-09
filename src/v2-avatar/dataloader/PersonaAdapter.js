@@ -110,6 +110,9 @@ export class PersonaAdapter {
     this._courseId = this._resolveCourseId(personaId);
     this._dataLoader = options.dataLoader || DataLoader.getInstance();
 
+    // DEBUG: trace what course we're loading
+    console.log('[PersonaAdapter DEBUG] personaId:', personaId, '-> courseId:', this._courseId);
+
     // Cached data - loaded lazily
     this._course = null;
     this._modules = null;
@@ -150,6 +153,8 @@ export class PersonaAdapter {
   _getCourse() {
     if (this._course === null) {
       this._course = this._dataLoader.getCourse(this._courseId) || {};
+      // DEBUG: trace what course data we got
+      console.log('[PersonaAdapter DEBUG] _getCourse for', this._courseId, '-> id:', this._course.id);
     }
     return this._course;
   }
@@ -180,7 +185,7 @@ export class PersonaAdapter {
    */
   get name() {
     const course = this._getCourse();
-    return course.name || 'Unknown';
+    return course.avatar?.name || course.meta?.title || 'Unknown';
   }
 
   /**
@@ -189,7 +194,7 @@ export class PersonaAdapter {
    */
   get description() {
     const course = this._getCourse();
-    return course.description || '';
+    return course.meta?.description || '';
   }
 
   // ============================================
@@ -235,10 +240,32 @@ export class PersonaAdapter {
       const course = this._getCourse();
       const allModules = this._dataLoader.getAllModules(this._courseId) || {};
 
+      // DEBUG: trace module loading
+      console.log('[PersonaAdapter DEBUG] Loading modules for course:', this._courseId);
+      console.log('[PersonaAdapter DEBUG] course.structure?.moduleOrder:', course.structure?.moduleOrder);
+      console.log('[PersonaAdapter DEBUG] allModules keys:', Object.keys(allModules));
+
+      // Transform sections from JSON format to courseStructure format
+      // JSON has { modules: [...] }, courseStructure expects { items: [...] }
+      const courseStructure = (course.structure?.sections || []).map(section => ({
+        id: section.id,
+        title: section.title,
+        items: section.modules || [],
+      }));
+
+      // Course metadata for sidebar header
+      const courseMeta = {
+        title: course.meta?.title || 'Course',
+        description: course.meta?.description || '',
+      };
+
       this._modules = {
-        order: course.moduleOrder || [],
+        order: course.structure?.moduleOrder || [],
         definitions: allModules,
-        requiresConfirmation: course.modulesRequiringConfirmation || [],
+        requiresConfirmation: course.structure?.modulesRequiringConfirmation || [],
+        sectionEndingModules: course.structure?.sectionEndingModules || [],
+        courseStructure,
+        courseMeta,
       };
     }
     return this._modules;
@@ -293,8 +320,8 @@ export class PersonaAdapter {
     const course = this._getCourse();
 
     // If course has custom unlock logic, respect it
-    if (course.moduleUnlockRules) {
-      const rule = course.moduleUnlockRules[moduleId];
+    if (course.structure?.moduleUnlockRules) {
+      const rule = course.structure.moduleUnlockRules[moduleId];
       if (rule && rule.requires) {
         // Check if all required modules are completed
         return rule.requires.every((reqId) => completedModules.includes(reqId));
@@ -328,7 +355,7 @@ export class PersonaAdapter {
       }
 
       this._prompts = {
-        welcome: course.welcomePrompt || null,
+        welcome: course.avatar?.welcomeMessage || null,
         modulePrompts,
       };
     }
@@ -361,16 +388,15 @@ export class PersonaAdapter {
       const allQuizzes = this._dataLoader.getAllQuizzes(this._courseId) || {};
       const moduleQuizzes = {};
 
-      // Map quizzes to modules based on course manifest or quiz metadata
+      // Map quizzes by their ID (e.g., 'founder-video-quiz')
+      // This matches legacy persona structure where moduleQuizzes is keyed by quiz module ID
       for (const [quizId, quiz] of Object.entries(allQuizzes)) {
-        if (quiz.moduleId) {
-          moduleQuizzes[quiz.moduleId] = quiz;
-        }
+        moduleQuizzes[quizId] = quiz;
       }
 
       this._quizzes = {
         moduleQuizzes,
-        finalQuiz: course.finalQuizId ? allQuizzes[course.finalQuizId] : null,
+        finalQuiz: course.structure?.finalQuizId ? allQuizzes[course.structure.finalQuizId] : null,
       };
     }
     return this._quizzes;
