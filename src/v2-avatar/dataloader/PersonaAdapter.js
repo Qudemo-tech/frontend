@@ -430,6 +430,33 @@ export class PersonaAdapter {
   }
 
   // ============================================
+  // Presentations (for modules with slides)
+  // ============================================
+
+  /**
+   * Get presentation slides for a module.
+   * Presentation IDs match the module's presentationRef without the path prefix.
+   * E.g., module has presentationRef: "presentations/functions-at-entri.json"
+   *       Call: getPresentation('functions-at-entri')
+   *
+   * @param {string} presentationId - The presentation ID (e.g., 'functions-at-entri')
+   * @returns {Object|null} Presentation object with slides array, or null if not found
+   */
+  getPresentation(presentationId) {
+    return this._dataLoader.getPresentation(this._courseId, presentationId);
+  }
+
+  /**
+   * Check if a presentation exists.
+   *
+   * @param {string} presentationId - The presentation ID
+   * @returns {boolean} True if presentation exists
+   */
+  hasPresentation(presentationId) {
+    return !!this.getPresentation(presentationId);
+  }
+
+  // ============================================
   // Static factory methods
   // ============================================
 
