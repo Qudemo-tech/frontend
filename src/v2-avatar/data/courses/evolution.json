@@ -15,6 +15,7 @@
   "features": {
     "learningModules": true,
     "moduleConfirmation": false,
+    "proactiveModuleFlow": true,
     "mcqQuiz": false,
     "pdfViewer": false,
     "videoPlayer": false,

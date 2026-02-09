@@ -15,6 +15,7 @@ import basePersona, { createPersona } from './basePersona';
 import entriPersona from './entri';
 import qatarPersona from './qatar';
 import evolutionPersona from './evolution';
+import { PersonaAdapter } from '../dataloader/PersonaAdapter';
 
 // Registry of all known personas
 const personaRegistry = {
@@ -35,6 +36,21 @@ const personaRegistry = {
  * @returns {object} Persona configuration (defaults to base if not found)
  */
 export const getPersona = (personaId) => {
+  // Feature flag: use DataLoader when enabled
+  if (process.env.REACT_APP_USE_DATA_LOADER === 'true') {
+    if (!personaId) {
+      console.warn('[Persona] No persona ID provided, using default via DataLoader');
+      return new PersonaAdapter('default');
+    }
+
+    if (!PersonaAdapter.isKnownPersona(personaId)) {
+      console.warn(`[Persona] Unknown persona ID: ${personaId}, using as-is via DataLoader`);
+    }
+
+    return new PersonaAdapter(personaId);
+  }
+
+  // Legacy path: use hardcoded persona configs
   if (!personaId) {
     console.warn('[Persona] No persona ID provided, using default');
     return createPersona({ id: null, name: 'Default' });
