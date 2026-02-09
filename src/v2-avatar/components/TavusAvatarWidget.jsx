@@ -29,9 +29,6 @@ import EntriLearningModules from './EntriLearningModules';
 import MCQQuizOverlay from './MCQQuizOverlay';
 import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
-import { functionsAtEntriPresentation } from '../personas/entri/presentations/functions-at-entri';
-import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
-import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
 import { moduleTransitionPrompts, videoCompletionPrompts } from '../personas/entri/prompts';
 
 /**
@@ -4463,14 +4460,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Special handling for presentation modules: Speak intro first, then show PDF and narrate slides
         addDebugLog(`[MODULE-LOCK] Presentation module ${moduleId} - will speak intro then load PDF`);
 
-        // Get presentation config
-        const presentationData = moduleConfig.presentationConfig === 'functions-at-entri'
-          ? functionsAtEntriPresentation
-          : moduleConfig.presentationConfig === 'hr-policies'
-          ? hrPoliciesPresentation
-          : moduleConfig.presentationConfig === 'employee-benefits'
-          ? employeeBenefitsPresentation
-          : null;
+        // Get presentation data from persona (via DataLoader)
+        // presentationConfig is the presentation ID (e.g., 'functions-at-entri')
+        const presentationData = persona.getPresentation(moduleConfig.presentationConfig);
 
       if (!presentationData) {
         addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);
