@@ -353,13 +353,15 @@ export class PersonaAdapter {
   }
 
   /**
-   * Get prompt for a specific module.
+   * Get the main prompt for a specific module (the text the avatar speaks when starting the module).
+   * In the JSON structure: prompts[moduleId].main
    *
    * @param {string} moduleId - The module ID
-   * @returns {Object|null} The module prompt or null
+   * @returns {string|null} The main prompt text, or null if not found
    */
   getModulePrompt(moduleId) {
-    return this.prompts.modulePrompts[moduleId] || null;
+    const prompt = this.prompts.modulePrompts[moduleId];
+    return prompt?.main || null;
   }
 
   /**

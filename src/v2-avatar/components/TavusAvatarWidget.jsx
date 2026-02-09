@@ -1897,6 +1897,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   // Strip markdown formatting from text (remove #, **, ###, etc.)
   const stripMarkdown = (text) => {
     if (!text) return text;
+    if (typeof text !== 'string') return '';
     return text
       // Remove markdown headers (#, ##, ###, etc.)
       .replace(/^#{1,6}\s+/gm, '')

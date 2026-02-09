@@ -15,11 +15,19 @@
   "features": {
     "learningModules": true,
     "moduleConfirmation": true,
+    "proactiveModuleFlow": true,
     "mcqQuiz": true,
+    "finalQuiz": true,
+    "founderVideo": true,
+    "demoVideos": true,
     "pdfViewer": true,
     "videoPlayer": true,
+    "calendlyIntegration": true,
+    "modulesSidebar": true,
     "progressTracking": true,
-    "sidebar": true
+    "sidebar": true,
+    "speechLock": true,
+    "visibilityTimeout": true
   },
   "structure": {
     "sections": [
@@ -132,6 +140,8 @@
       "description": "Different functions and teams",
       "duration": "4m",
       "icon": "Briefcase",
+      "hasPresentation": true,
+      "presentationConfig": "functions-at-entri",
       "presentationRef": "presentations/functions-at-entri.json",
       "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Functions_at_Entri..pdf"
     },
@@ -150,6 +160,8 @@
       "description": "Working hours, leave policy, and benefits",
       "duration": "8m",
       "icon": "BookOpen",
+      "hasPresentation": true,
+      "presentationConfig": "hr-policies",
       "presentationRef": "presentations/hr-policies.json",
       "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2025/05/12/Module_5-HR_Policies_1_1.pdf"
     },
@@ -186,6 +198,8 @@
       "description": "Your benefits at Entri",
       "duration": "8m",
       "icon": "Heart",
+      "hasPresentation": true,
+      "presentationConfig": "employee-benefits",
       "presentationRef": "presentations/employee-benefits.json",
       "pdfUrl": "https://entri-studyplans.s3.ap-south-1.amazonaws.com/media/pdf_notes/2024/11/04/Employee_Benefits.pdf"
     },
@@ -216,7 +230,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "What is the main goal of Entri as a learning platform?",
+          "question": "What is the main goal of Entri as a learning platform?",
           "options": [
             "Entertainment and content creation",
             "Job oriented learning and skill development",
@@ -228,7 +242,7 @@
         },
         {
           "id": "q2",
-          "text": "In which State was Entri started?",
+          "question": "In which State was Entri started?",
           "options": [
             "Tamil Nadu",
             "Karnataka",
@@ -240,7 +254,7 @@
         },
         {
           "id": "q3",
-          "text": "How does Entri ensure personalized learning?",
+          "question": "How does Entri ensure personalized learning?",
           "options": [
             "By providing content only in English",
             "Through automatic adaptation to each learner's skill level, time availability and language preference",
@@ -252,7 +266,7 @@
         },
         {
           "id": "q4",
-          "text": "When was the Entri App established?",
+          "question": "When was the Entri App established?",
           "options": [
             "2015",
             "2016",
@@ -264,7 +278,7 @@
         },
         {
           "id": "q5",
-          "text": "In which states does Entri have offices?",
+          "question": "In which states does Entri have offices?",
           "options": [
             "Kerala, Karnataka, Tamil Nadu, Delhi",
             "Maharashtra, Gujarat, Rajasthan",
@@ -276,7 +290,7 @@
         },
         {
           "id": "q6",
-          "text": "What does Entri prioritize in its mission to help users secure jobs?",
+          "question": "What does Entri prioritize in its mission to help users secure jobs?",
           "options": [
             "Physical Fitness",
             "Skill Development and Training",
@@ -288,7 +302,7 @@
         },
         {
           "id": "q7",
-          "text": "What is Entri's vision for the future?",
+          "question": "What is Entri's vision for the future?",
           "options": [
             "To provide learning materials in multiple languages without focusing on job outcome",
             "To become the largest job oriented vernacular learning app in India targeting 4 crore users by 2027",
@@ -300,7 +314,7 @@
         },
         {
           "id": "q8",
-          "text": "Who are Entripreneurs at Entri?",
+          "question": "Who are Entripreneurs at Entri?",
           "options": [
             "Users who subscribe to Entri's learning platform",
             "Employees of Entri who are driven by a founder mindset and ownership",
@@ -312,7 +326,7 @@
         },
         {
           "id": "q9",
-          "text": "What does the term Legend represent at Entri?",
+          "question": "What does the term Legend represent at Entri?",
           "options": [
             "Exceptional employees who have completed 5 years of service",
             "Trainers who have created the most study materials for the platform",
@@ -333,7 +347,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "Which team is responsible for creating and maintaining the product features that users interact with?",
+          "question": "Which team is responsible for creating and maintaining the product features that users interact with?",
           "options": [
             "Academics and Content",
             "Growth",
@@ -345,7 +359,7 @@
         },
         {
           "id": "q2",
-          "text": "What is the main responsibility of the Academics and Content team?",
+          "question": "What is the main responsibility of the Academics and Content team?",
           "options": [
             "Managing Financial reports",
             "Providing Placement assistance",
@@ -357,7 +371,7 @@
         },
         {
           "id": "q3",
-          "text": "Which team ensures that users have a positive experience and are valued?",
+          "question": "Which team ensures that users have a positive experience and are valued?",
           "options": [
             "Media",
             "User Happiness",
@@ -369,7 +383,7 @@
         },
         {
           "id": "q4",
-          "text": "The Media team is responsible for:",
+          "question": "The Media team is responsible for:",
           "options": [
             "Creating educational content and managing placements",
             "Financial budgeting and payroll management",
@@ -381,7 +395,7 @@
         },
         {
           "id": "q5",
-          "text": "Which team works closely with industry partners to assist learners with job placements?",
+          "question": "Which team works closely with industry partners to assist learners with job placements?",
           "options": [
             "Engineering, Product, and Design",
             "Placements",
@@ -393,7 +407,7 @@
         },
         {
           "id": "q6",
-          "text": "What is the focus of Entri's Growth team?",
+          "question": "What is the focus of Entri's Growth team?",
           "options": [
             "Managing human resources and employee benefits",
             "Generating creative media content",
@@ -405,7 +419,7 @@
         },
         {
           "id": "q7",
-          "text": "What is the largest team at Entri that focuses on reaching out to potential clients and driving revenue?",
+          "question": "What is the largest team at Entri that focuses on reaching out to potential clients and driving revenue?",
           "options": [
             "Growth",
             "Inside Sales",
@@ -417,7 +431,7 @@
         },
         {
           "id": "q8",
-          "text": "Which function ensures that Entri complies with labor laws and manages employee benefits?",
+          "question": "Which function ensures that Entri complies with labor laws and manages employee benefits?",
           "options": [
             "Finance and Accounting",
             "Human Resources",
@@ -438,7 +452,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "How many earned leaves can an employee carry forward per year?",
+          "question": "How many earned leaves can an employee carry forward per year?",
           "options": [
             "10",
             "20",
@@ -450,7 +464,7 @@
         },
         {
           "id": "q2",
-          "text": "Which software is used for internal communication within the company?",
+          "question": "Which software is used for internal communication within the company?",
           "options": [
             "Jira",
             "Slack",
@@ -462,7 +476,7 @@
         },
         {
           "id": "q3",
-          "text": "How many days of wedding leave are granted to eligible employees?",
+          "question": "How many days of wedding leave are granted to eligible employees?",
           "options": [
             "3 days",
             "5 days",
@@ -474,7 +488,7 @@
         },
         {
           "id": "q4",
-          "text": "How many sick leaves are employees granted annually at Entri?",
+          "question": "How many sick leaves are employees granted annually at Entri?",
           "options": [
             "10 days",
             "8 days",
@@ -486,7 +500,7 @@
         },
         {
           "id": "q5",
-          "text": "Comp Off can be claimed for working on which of the following?",
+          "question": "Comp Off can be claimed for working on which of the following?",
           "options": [
             "Sick days",
             "Public Holidays or Weekends",
@@ -498,7 +512,7 @@
         },
         {
           "id": "q6",
-          "text": "What is the total number of holidays (mandatory, regional, and festival) provided annually?",
+          "question": "What is the total number of holidays (mandatory, regional, and festival) provided annually?",
           "options": [
             "10",
             "19",
@@ -510,7 +524,7 @@
         },
         {
           "id": "q7",
-          "text": "How many days of paternity leave are provided for new fathers?",
+          "question": "How many days of paternity leave are provided for new fathers?",
           "options": [
             "3",
             "5",
@@ -531,7 +545,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "What does POSH stand for?",
+          "question": "What does POSH stand for?",
           "options": [
             "Protection of Staff Health",
             "Prevention of Sexual Harassment",
@@ -543,7 +557,7 @@
         },
         {
           "id": "q2",
-          "text": "Who can be a victim of sexual harassment?",
+          "question": "Who can be a victim of sexual harassment?",
           "options": [
             "Only full-time employees",
             "Only female employees",
@@ -555,7 +569,7 @@
         },
         {
           "id": "q3",
-          "text": "Is your complaint kept confidential in the POSH process?",
+          "question": "Is your complaint kept confidential in the POSH process?",
           "options": [
             "No, your complaint details will be shared with everyone in the company.",
             "Yes, but only if the complaint is deemed serious.",
@@ -567,7 +581,7 @@
         },
         {
           "id": "q4",
-          "text": "If an employee experiences sexual harassment, whom should they approach within the POSH process?",
+          "question": "If an employee experiences sexual harassment, whom should they approach within the POSH process?",
           "options": [
             "Their colleagues",
             "The Human Resources department or Internal Committee",
@@ -579,7 +593,7 @@
         },
         {
           "id": "q5",
-          "text": "What constitutes a sexual harassment?",
+          "question": "What constitutes a sexual harassment?",
           "options": [
             "Inappropriate jokes or comments",
             "Unwanted physical contact",
@@ -591,7 +605,7 @@
         },
         {
           "id": "q6",
-          "text": "What should I do if I experience or witness sexual harassment?",
+          "question": "What should I do if I experience or witness sexual harassment?",
           "options": [
             "Ignore the incident and hope it stops",
             "Report the incident immediately to the Internal Complaints Committee (ICC) or your HR department",
@@ -603,7 +617,7 @@
         },
         {
           "id": "q7",
-          "text": "What is the role of the Internal Complaints Committee (ICC)?",
+          "question": "What is the role of the Internal Complaints Committee (ICC)?",
           "options": [
             "Receiving and investigating complaints",
             "Ensuring confidentiality throughout the process",
@@ -615,7 +629,7 @@
         },
         {
           "id": "q8",
-          "text": "How is a complaint investigated?",
+          "question": "How is a complaint investigated?",
           "options": [
             "Conduct a thorough investigation, which may include interviews with the complainant, the accused, and any witnesses",
             "Review any relevant evidence",
@@ -627,7 +641,7 @@
         },
         {
           "id": "q9",
-          "text": "What actions can be taken if someone is found guilty of sexual harassment?",
+          "question": "What actions can be taken if someone is found guilty of sexual harassment?",
           "options": [
             "Transfer or change in role",
             "Suspension or termination of employment",
@@ -648,7 +662,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "What is the insured amount offered under the group medical insurance for employee, spouse and children?",
+          "question": "What is the insured amount offered under the group medical insurance for employee, spouse and children?",
           "options": [
             "2 Lakhs",
             "3 Lakhs",
@@ -660,7 +674,7 @@
         },
         {
           "id": "q2",
-          "text": "What does YourDOST offer to Entri employees?",
+          "question": "What does YourDOST offer to Entri employees?",
           "options": [
             "Financial support",
             "Medical insurance",
@@ -672,7 +686,7 @@
         },
         {
           "id": "q3",
-          "text": "How long does a referred candidate need to work at Entri for the referring employee to receive the referral bonus?",
+          "question": "How long does a referred candidate need to work at Entri for the referring employee to receive the referral bonus?",
           "options": [
             "1 month",
             "2 months",
@@ -684,7 +698,7 @@
         },
         {
           "id": "q4",
-          "text": "How often is the book allowance reimbursed to employees for the Entri Book Club?",
+          "question": "How often is the book allowance reimbursed to employees for the Entri Book Club?",
           "options": [
             "Monthly",
             "Quarterly",
@@ -696,7 +710,7 @@
         },
         {
           "id": "q5",
-          "text": "Who is covered under the Group Medical Insurance plan provided by Entri?",
+          "question": "Who is covered under the Group Medical Insurance plan provided by Entri?",
           "options": [
             "Only the employee",
             "Employee and spouse",
@@ -717,7 +731,7 @@
       "questions": [
         {
           "id": "q1",
-          "text": "What is the main goal of Entri as a learning platform?",
+          "question": "What is the main goal of Entri as a learning platform?",
           "options": [
             "Entertainment content creation",
             "Job-oriented learning and skill development",
@@ -729,7 +743,7 @@
         },
         {
           "id": "q2",
-          "text": "Which of the following verticals is primarily focused on preparing students for competitive exams?",
+          "question": "Which of the following verticals is primarily focused on preparing students for competitive exams?",
           "options": [
             "Study Abroad",
             "Skilling",
@@ -741,7 +755,7 @@
         },
         {
           "id": "q3",
-          "text": "Which software is used for internal communication within the company?",
+          "question": "Which software is used for internal communication within the company?",
           "options": [
             "Jira",
             "Slack",
@@ -753,7 +767,7 @@
         },
         {
           "id": "q4",
-          "text": "Is your complaint kept confidential in the POSH process?",
+          "question": "Is your complaint kept confidential in the POSH process?",
           "options": [
             "No, your complaint details will be shared with everyone in the company.",
             "Yes, but only if the complaint is deemed serious.",
@@ -765,7 +779,7 @@
         },
         {
           "id": "q5",
-          "text": "Which team is responsible for creating and maintaining the product features that users interact with?",
+          "question": "Which team is responsible for creating and maintaining the product features that users interact with?",
           "options": [
             "Academics and Content",
             "Growth",
