@@ -362,6 +362,30 @@ export class PersonaAdapter {
     return this.prompts.modulePrompts[moduleId] || null;
   }
 
+  /**
+   * Get the transition prompt for a module (used when moving to next section).
+   * In the JSON structure: prompts[moduleId].transition
+   *
+   * @param {string} moduleId - The module ID
+   * @returns {string|null} The transition prompt text, or null if not found
+   */
+  getTransitionPrompt(moduleId) {
+    const prompt = this.prompts.modulePrompts[moduleId];
+    return prompt?.transition || null;
+  }
+
+  /**
+   * Get the completion prompt for a module (used after video/content finishes).
+   * In the JSON structure: prompts[moduleId].completion
+   *
+   * @param {string} moduleId - The module ID
+   * @returns {string|null} The completion prompt text, or null if not found
+   */
+  getCompletionPrompt(moduleId) {
+    const prompt = this.prompts.modulePrompts[moduleId];
+    return prompt?.completion || null;
+  }
+
   // ============================================
   // Quizzes (matching basePersona.js)
   // ============================================
