@@ -110,9 +110,6 @@ export class PersonaAdapter {
     this._courseId = this._resolveCourseId(personaId);
     this._dataLoader = options.dataLoader || DataLoader.getInstance();
 
-    // DEBUG: trace what course we're loading
-    console.log('[PersonaAdapter DEBUG] personaId:', personaId, '-> courseId:', this._courseId);
-
     // Cached data - loaded lazily
     this._course = null;
     this._modules = null;
@@ -153,8 +150,6 @@ export class PersonaAdapter {
   _getCourse() {
     if (this._course === null) {
       this._course = this._dataLoader.getCourse(this._courseId) || {};
-      // DEBUG: trace what course data we got
-      console.log('[PersonaAdapter DEBUG] _getCourse for', this._courseId, '-> id:', this._course.id);
     }
     return this._course;
   }
@@ -239,11 +234,6 @@ export class PersonaAdapter {
     if (this._modules === null) {
       const course = this._getCourse();
       const allModules = this._dataLoader.getAllModules(this._courseId) || {};
-
-      // DEBUG: trace module loading
-      console.log('[PersonaAdapter DEBUG] Loading modules for course:', this._courseId);
-      console.log('[PersonaAdapter DEBUG] course.structure?.moduleOrder:', course.structure?.moduleOrder);
-      console.log('[PersonaAdapter DEBUG] allModules keys:', Object.keys(allModules));
 
       // Transform sections from JSON format to courseStructure format
       // JSON has { modules: [...] }, courseStructure expects { items: [...] }
