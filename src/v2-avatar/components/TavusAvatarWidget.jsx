@@ -29,7 +29,6 @@ import EntriLearningModules from './EntriLearningModules';
 import MCQQuizOverlay from './MCQQuizOverlay';
 import PdfPresentation from './PdfPresentation';
 import { getPersona } from '../personas';
-import { moduleTransitionPrompts, videoCompletionPrompts } from '../personas/entri/prompts';
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -528,7 +527,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingVideoQuizModuleRef.current = associatedQuizId;
 
       // Speak video completion message if available
-      const completionMessage = videoCompletionPrompts[currentModule];
+      const completionMessage = persona.getCompletionPrompt(currentModule);
       if (completionMessage && dailyEventManagerRef.current) {
         addDebugLog(`[DEMO] Speaking video completion message for ${currentModule}`);
         dailyEventManagerRef.current.sendEchoMessage(completionMessage);
@@ -572,8 +571,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         pendingSectionTransitionRef.current = nextModuleId;
 
         // Prefer video completion prompt (has repeat/continue instructions), fall back to transition prompt
-        const completionPrompt = videoCompletionPrompts[currentModule];
-        const transitionPrompt = moduleTransitionPrompts[currentModule];
+        const completionPrompt = persona.getCompletionPrompt(currentModule);
+        const transitionPrompt = persona.getTransitionPrompt(currentModule);
         const promptToSpeak = completionPrompt || transitionPrompt;
 
         if (promptToSpeak && dailyEventManagerRef.current) {
@@ -3908,7 +3907,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       addDebugLog(`[MCQ-QUIZ] ${moduleId} is section-ending - will wait for confirmation before ${nextModuleId}`);
 
       // Add transition prompt to completion message
-      const transitionPrompt = moduleTransitionPrompts[moduleId];
+      const transitionPrompt = persona.getTransitionPrompt(moduleId);
       if (transitionPrompt) {
         completionMessage += ` ... ${transitionPrompt}`;
       }
