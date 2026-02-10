@@ -29,7 +29,7 @@ const personaRegistry = {
   'p99b6eb28083': evolutionPersona,
 
   'p607dc212fc9': fiveGPersona,
-  'pc0c4adf1eac': qatarHistoryPersona,
+  'p3e5e7b16b65': qatarHistoryPersona,
 };
 
 /**

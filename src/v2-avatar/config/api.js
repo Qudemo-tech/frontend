@@ -25,7 +25,7 @@ export const PERSONA_MAP = {
   'evolution': 'p99b6eb28083',
   'entri': 'p54ceeb77022',
   '5g': 'p607dc212fc9', 
-  'qatar_history': 'pc0c4adf1eac', // lowercase for case-insensitive URL matching
+  'qatar_history': 'p3e5e7b16b65', // lowercase for case-insensitive URL matching
   // Add more personas here as needed
   // 'friendly-name': 'actual-persona-id',
 };
