@@ -12,7 +12,7 @@ import prompts from './prompts';
 
 const qatarHistoryPersona = createPersona({
   // Identification
-  id: 'pc0c4adf1eac',
+  id: 'p3e5e7b16b65',
   name: 'Qatar History Essentials',
   description: 'Qatar history education course',
 
