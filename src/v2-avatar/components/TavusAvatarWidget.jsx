@@ -105,6 +105,15 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     setLanguage(prev => prev === 'en' ? 'ar' : 'en');
   }, []);
 
+  // Resolve localized content based on current language (used by 5G persona)
+  // For personas without getLocalizedContent, fall back to default persona content
+  const localizedContent = useMemo(() => {
+    if (persona.getLocalizedContent) {
+      return persona.getLocalizedContent(language);
+    }
+    return null; // Non-5G personas don't need localization
+  }, [persona, language]);
+
   // Learning modules state - only show for Entri and Evolution personas
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
@@ -112,10 +121,11 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [showLearningModules, setShowLearningModules] = useState(shouldShowLearningModules());
 
   // Get module configuration from persona (empty arrays/objects for personas without modules)
-  const moduleOrder = persona.modules.order || [];
-  const modulesRequiringConfirmation = persona.modules.requiresConfirmation || [];
-  const sectionEndingModules = persona.modules.sectionEndingModules || [];
-  const moduleDefinitions = persona.modules.definitions || {};
+  // When localizedContent is available (5G + Arabic), use localized modules; otherwise fall back to persona defaults
+  const moduleOrder = localizedContent?.modules?.order || persona.modules.order || [];
+  const modulesRequiringConfirmation = localizedContent?.modules?.requiresConfirmation || persona.modules.requiresConfirmation || [];
+  const sectionEndingModules = localizedContent?.modules?.sectionEndingModules || persona.modules.sectionEndingModules || [];
+  const moduleDefinitions = localizedContent?.modules?.definitions || persona.modules.definitions || {};
 
   // Track if onboarding has started (for personas with proactive flow)
   const entriOnboardingStartedRef = useRef(false);
@@ -202,6 +212,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const pdfEndPresentationRef = useRef(null); // Ref to hold latest endPresentation function
   const pdfNextSlideRef = useRef(null); // Ref to hold latest nextSlide function (for auto-advance)
   const sidebarAutoHiddenRef = useRef(false); // Track if sidebar has been auto-hidden (only auto-hide once)
+  const languageRef = useRef(language); // Tracks current language for skip-initial-render comparison
 
 
   // Quiz uses click-only answers (no voice commands) for reliability
@@ -573,8 +584,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       waitingForVideoQuizConfirmationRef.current = true;
       pendingVideoQuizModuleRef.current = associatedQuizId;
 
-      // Speak video completion message if available (from persona's prompts)
-      const completionMessage = persona.prompts.videoCompletionPrompts?.[currentModule];
+      // Speak video completion message if available (from persona's prompts, or localized content)
+      const completionMessage = localizedContent?.prompts?.videoCompletionPrompts?.[currentModule] || persona.prompts.videoCompletionPrompts?.[currentModule];
       if (completionMessage && dailyEventManagerRef.current) {
         addDebugLog(`[DEMO] Speaking video completion message for ${currentModule}`);
         dailyEventManagerRef.current.sendEchoMessage(completionMessage);
@@ -618,8 +629,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         pendingSectionTransitionRef.current = nextModuleId;
 
         // Prefer video completion prompt (has repeat/continue instructions), fall back to transition prompt
-        const completionPrompt = persona.prompts.videoCompletionPrompts?.[currentModule];
-        const transitionPrompt = persona.prompts.moduleTransitionPrompts?.[currentModule];
+        const completionPrompt = localizedContent?.prompts?.videoCompletionPrompts?.[currentModule] || persona.prompts.videoCompletionPrompts?.[currentModule];
+        const transitionPrompt = localizedContent?.prompts?.moduleTransitionPrompts?.[currentModule] || persona.prompts.moduleTransitionPrompts?.[currentModule];
         const promptToSpeak = completionPrompt || transitionPrompt;
 
         if (promptToSpeak && dailyEventManagerRef.current) {
@@ -3153,6 +3164,10 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         const requestBody = { personaId };
 
+        // Map language state to Tavus API language values
+        // Internal: 'en' -> Tavus: 'english', Internal: 'ar' -> Tavus: 'Arabic'
+        requestBody.language = language === 'ar' ? 'Arabic' : 'english';
+
         if (isEntriPersona) {
           // Suppress default greeting - Entri sends its own via module prompts
           requestBody.customGreeting = ' ';
@@ -3557,6 +3572,131 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     }
   };
 
+  // Language switch effect - ends current conversation and restarts in new language
+  useEffect(() => {
+    // Skip initial mount - no language switch on first render
+    if (languageRef.current === language) {
+      return;
+    }
+
+    // Update ref to track current language
+    languageRef.current = language;
+
+    // Only trigger restart if there's an active session
+    if (!sessionInfoRef.current?.conversationId) {
+      console.log('[LANG-SWITCH] No active session, skipping restart');
+      return;
+    }
+
+    console.log(`[LANG-SWITCH] Language changed to ${language}, restarting conversation`);
+
+    const performLanguageSwitch = async () => {
+      try {
+        // 1. End current conversation (reuse cleanup but don't minimize)
+        cleanupPerformedRef.current = false;
+        performCleanup('language-switch');
+
+        // 2. Stop any active overlays
+        if (isDemoPlayingRef.current) {
+          stopDemoVideo();
+        }
+        if (showCalendly) {
+          setShowCalendly(false);
+        }
+        if (showPdf) {
+          setShowPdf(false);
+        }
+
+        // 3. Reset course progress state (restart from beginning)
+        setActiveModule(null);
+        setCompletedModules([]);
+        setShowQuiz(false);
+        setWaitingForModuleConfirmation(false);
+        waitingForModuleConfirmationRef.current = false;
+
+        // 4. Reset MCQ quiz state
+        setMcqQuizState({
+          isActive: false,
+          moduleId: null,
+          currentQuestionIndex: 0,
+          selectedIndex: null,
+          isAnswered: false,
+          isCorrect: false,
+          score: { correct: 0, total: 0 },
+          quizData: null,
+          waitingForAvatarToFinish: false,
+        });
+
+        // 5. Reset session-related state (keep widget expanded for seamless transition)
+        setSessionInfo(null);
+        sessionInfoRef.current = null;
+        setHasLiveVideo(false);
+        setHasAudio(false);
+        setIsMuted(true);
+        setAudioEnabled(true);
+        setIsConnecting(false);
+        setConnectionError(null);
+        setTranscripts([]);
+        setDetectedIntents([]);
+        setAvatarState("idle");
+        setIsAvatarSpeaking(false);
+        setIsUserSpeaking(false);
+
+        // 6. Clear refs
+        lastAvatarSpeechRef.current = '';
+        preDemoWidgetStateRef.current = null;
+        preCalendlyWidgetStateRef.current = null;
+        preCalendlyMutedRef.current = false;
+        preCalendlyAudioEnabledRef.current = true;
+        pendingCalendlyRef.current = false;
+        pendingDemoVideoRef.current = null;
+        videoAnnouncementStartedRef.current = false;
+        pendingPdfNavigationRef.current = null;
+        pdfNavigationAcknowledgedRef.current = false;
+        prePdfWidgetStateRef.current = null;
+        entriOnboardingStartedRef.current = false;
+        sessionManagerRef.current = null;
+        dailyEventManagerRef.current = null;
+
+        // 7. Reset lock flags so new session can start
+        cleanupPerformedRef.current = false;
+        isStartingSessionRef.current = false;
+
+        // 8. Clear pending operation timeouts
+        if (pendingVideoTimeoutRef.current) {
+          clearTimeout(pendingVideoTimeoutRef.current);
+          pendingVideoTimeoutRef.current = null;
+        }
+        if (pendingPdfTimeoutRef.current) {
+          clearTimeout(pendingPdfTimeoutRef.current);
+          pendingPdfTimeoutRef.current = null;
+        }
+        if (proactiveTimeoutRef.current) {
+          clearTimeout(proactiveTimeoutRef.current);
+          proactiveTimeoutRef.current = null;
+        }
+
+        // 9. Clear dynamic URLs
+        setCalendlyUrl('');
+        setPdfUrl('');
+        setPendingPdfUrl(null);
+
+        // 10. Small delay to ensure cleanup completes before starting new session
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 11. Start new session (will use updated language state for requestBody.language and localizedContent)
+        console.log(`[LANG-SWITCH] Starting new session in ${language}`);
+        startTavusSession();
+
+      } catch (err) {
+        console.error('[LANG-SWITCH] Error during language switch:', err);
+        setConnectionError(`Language switch failed: ${err.message}`);
+      }
+    };
+
+    performLanguageSwitch();
+  }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Retry connection
   const retryConnection = () => {
     addDebugLog('Retrying connection...');
@@ -3705,8 +3845,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Start MCQ quiz for a module - first speaks instructions, then shows quiz panel
   const startMcqQuiz = useCallback((moduleId) => {
-    // Get quiz data from persona config
-    const quizData = persona.getModuleQuiz(moduleId);
+    // Get quiz data from persona config (prefer localized content for bilingual support)
+    const quizData = localizedContent?.quizzes?.moduleQuizzes?.[moduleId] || persona.getModuleQuiz(moduleId);
     if (!quizData || !quizData.questions || quizData.questions.length === 0) {
       addDebugLog(`[MCQ-QUIZ] No quiz found for module: ${moduleId}`);
       return false;
@@ -3953,8 +4093,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       // Section-ending quiz - add transition prompt and wait for user confirmation
       addDebugLog(`[MCQ-QUIZ] ${moduleId} is section-ending - will wait for confirmation before ${nextModuleId}`);
 
-      // Add transition prompt to completion message (from persona's prompts)
-      const transitionPrompt = persona.prompts.moduleTransitionPrompts?.[moduleId];
+      // Add transition prompt to completion message (from persona's prompts, or localized content)
+      const transitionPrompt = localizedContent?.prompts?.moduleTransitionPrompts?.[moduleId] || persona.prompts.moduleTransitionPrompts?.[moduleId];
       if (transitionPrompt) {
         completionMessage += ` ... ${transitionPrompt}`;
       }
@@ -4437,8 +4577,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // This prevents Tavus from treating the prompt as user input
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Get module prompt from persona config
-    const prompt = persona.getModulePrompt(moduleId);
+    // Get module prompt from persona config (prefer localized content for bilingual support)
+    const prompt = localizedContent?.prompts?.modulePrompts?.[moduleId] || persona.getModulePrompt(moduleId);
 
     // Check if this is a quiz module (either final quiz or module quiz)
     const moduleConfig = moduleDefinitions[moduleId];
@@ -4506,8 +4646,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Special handling for presentation modules: Speak intro first, then show PDF and narrate slides
         addDebugLog(`[MODULE-LOCK] Presentation module ${moduleId} - will speak intro then load PDF`);
 
-        // Get presentation config from registry
-        const presentationData = PRESENTATION_REGISTRY[moduleConfig.presentationConfig] || null;
+        // Get presentation config from registry (append language suffix for bilingual lookup)
+        const presentationKey = moduleConfig.presentationConfig + (localizedContent?.presentationSuffix || '');
+        const presentationData = PRESENTATION_REGISTRY[presentationKey] || null;
 
       if (!presentationData) {
         addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);
@@ -5239,6 +5380,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           persona.hasFeature('proactiveModuleFlow') ? (
             <EntriLearningModules
               persona={persona}
+              localizedContent={localizedContent}
               onModuleSelect={handleModuleSelect}
               activeModule={activeModule}
               completedModules={completedModules}

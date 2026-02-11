@@ -60,16 +60,17 @@ const getIcon = (iconName) => {
  */
 const EntriLearningModules = ({
   persona,
+  localizedContent,
   onModuleSelect,
   activeModule,
   completedModules = [],
   onClose,
   isMobile = false
 }) => {
-  // Get course data from persona config
-  const courseStructure = persona?.modules?.courseStructure || [];
-  const moduleDefinitions = persona?.modules?.definitions || {};
-  const courseMeta = persona?.modules?.courseMeta || { title: 'Course' };
+  // Get course data from persona config (prefer localized content for bilingual support)
+  const courseStructure = localizedContent?.modules?.courseStructure || persona?.modules?.courseStructure || [];
+  const moduleDefinitions = localizedContent?.modules?.definitions || persona?.modules?.definitions || {};
+  const courseMeta = localizedContent?.modules?.courseMeta || persona?.modules?.courseMeta || { title: 'Course' };
 
   // Initialize all sections as expanded
   const initialExpandedState = useMemo(() => {
