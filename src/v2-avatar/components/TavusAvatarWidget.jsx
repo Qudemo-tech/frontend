@@ -39,6 +39,7 @@ import { speedLatencyPresentation as speedLatencyPresentationAr } from '../perso
 import { qatarPearlDivingPresentation } from '../personas/qatar_history/presentations/qatar-pearl-diving';
 import { qatarOilGasPresentation } from '../personas/qatar_history/presentations/qatar-oil-gas';
 import { microwaveWindowPresentation } from '../personas/microwave/presentations/microwave-window';
+import { microwaveWindowPresentation as microwaveWindowPresentationAr } from '../personas/microwave/presentations/microwave-window.ar';
 
 // Presentation registry - maps presentationConfig names to their data
 const PRESENTATION_REGISTRY = {
@@ -50,6 +51,7 @@ const PRESENTATION_REGISTRY = {
   'qatar-pearl-diving': qatarPearlDivingPresentation,
   'qatar-oil-gas': qatarOilGasPresentation,
   'microwave-window': microwaveWindowPresentation,
+  'microwave-window-ar': microwaveWindowPresentationAr,
 };
 
 // Note: videoCompletionPrompts and moduleTransitionPrompts are now accessed via persona.prompts

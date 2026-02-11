@@ -7,7 +7,7 @@
  */
 
 export const microwaveWindowPresentation = {
-  pdfUrl: 'https://storage.cloud.google.com/qudemo-test-qudemo/microwave.pdf',
+  pdfUrl: 'https://storage.googleapis.com/qudemo-test-qudemo/microwave.pdf',
 
   slides: [
     {
