@@ -17,6 +17,7 @@ import qatarPersona from './qatar';
 import evolutionPersona from './evolution';
 import fiveGPersona from './5G';
 import qatarHistoryPersona from './qatar_history';
+import microwavePersona from './microwave';
 // Registry of all known personas
 const personaRegistry = {
   // Entri onboarding
@@ -30,6 +31,7 @@ const personaRegistry = {
 
   'p607dc212fc9': fiveGPersona,
   'p3e5e7b16b65': qatarHistoryPersona,
+  'p491e1e3a3d2': microwavePersona,
 };
 
 /**
