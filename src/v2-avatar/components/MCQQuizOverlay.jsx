@@ -34,10 +34,12 @@ const MCQQuizOverlay = ({
   onSkipQuestion,
   onEndQuiz,
   sidebarVisible = false,
-  sidebarWidth = 320
+  sidebarWidth = 320,
+  language = 'en'
 }) => {
   if (!question) return null;
 
+  const isRTL = language === 'ar';
   const optionLabels = ['A', 'B', 'C', 'D'];
 
   const getOptionStyle = (index) => {
@@ -145,7 +147,7 @@ const MCQQuizOverlay = ({
       </div>
 
       {/* Question Text */}
-      <div className="mb-3 p-3 bg-white/10 rounded-lg">
+      <div className="mb-3 p-3 bg-white/10 rounded-lg" dir={isRTL ? 'rtl' : 'ltr'}>
         <p className="text-white text-base font-medium">{question.question}</p>
       </div>
 
@@ -171,7 +173,7 @@ const MCQQuizOverlay = ({
             </span>
 
             {/* Option Text */}
-            <span className="flex-1 text-sm">{option}</span>
+            <span className="flex-1 text-sm" dir={isRTL ? 'rtl' : 'ltr'}>{option}</span>
 
             {/* Result Icon */}
             {getOptionIcon(index)}

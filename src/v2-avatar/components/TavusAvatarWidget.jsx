@@ -5327,6 +5327,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
                     ? 'bg-white/10 text-white/80'
                     : 'bg-white/5 text-white/70'
                 }`}
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
               >
                 {t.type === 'user_speech' ? '👤 ' : '🤖 '}
                 {t.text}
@@ -5433,6 +5434,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             onEndQuiz={skipMcqQuiz}
             sidebarVisible={shouldShowLearningModules() && showLearningModules && !isConnecting && !connectionError && hasLiveVideo && !isDemoPlaying && !showCalendly && !showPdf}
             sidebarWidth={320}
+            language={language}
           />
         )}
 
