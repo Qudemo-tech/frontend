@@ -15,6 +15,7 @@ import {
   Video,
   Award,
   Menu,
+  Languages,
 } from "lucide-react";
 import { getApiUrl, getCreateConversationUrl, getEndConversationUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
@@ -34,6 +35,7 @@ import { functionsAtEntriPresentation } from '../personas/entri/presentations/fu
 import { hrPoliciesPresentation } from '../personas/entri/presentations/hr-policies';
 import { employeeBenefitsPresentation } from '../personas/entri/presentations/employee-benefits';
 import { speedLatencyPresentation } from '../personas/5G/presentations/speed-latency';
+import { speedLatencyPresentation as speedLatencyPresentationAr } from '../personas/5G/presentations/speed-latency.ar';
 import { qatarPearlDivingPresentation } from '../personas/qatar_history/presentations/qatar-pearl-diving';
 import { qatarOilGasPresentation } from '../personas/qatar_history/presentations/qatar-oil-gas';
 import { microwaveWindowPresentation } from '../personas/microwave/presentations/microwave-window';
@@ -44,6 +46,7 @@ const PRESENTATION_REGISTRY = {
   'hr-policies': hrPoliciesPresentation,
   'employee-benefits': employeeBenefitsPresentation,
   'speed-latency': speedLatencyPresentation,
+  'speed-latency-ar': speedLatencyPresentationAr,
   'qatar-pearl-diving': qatarPearlDivingPresentation,
   'qatar-oil-gas': qatarOilGasPresentation,
   'microwave-window': microwaveWindowPresentation,
@@ -95,7 +98,13 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const [showPdf, setShowPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState('');
   const [pendingPdfUrl, setPendingPdfUrl] = useState(null);
-  
+
+  // Language toggle state (used by 5G persona for EN/AR switching)
+  const [language, setLanguage] = useState('en');
+  const toggleLanguage = useCallback(() => {
+    setLanguage(prev => prev === 'en' ? 'ar' : 'en');
+  }, []);
+
   // Learning modules state - only show for Entri and Evolution personas
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
@@ -5063,6 +5072,19 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         >
           {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
         </button>
+        {/* Language toggle - only for personas with languageToggle feature */}
+        {persona.hasFeature('languageToggle') && (
+          <button
+            onClick={toggleLanguage}
+            className="relative p-2.5 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all"
+            title={language === 'en' ? 'Switch to Arabic' : 'Switch to English'}
+          >
+            <Languages className="w-4 h-4" />
+            <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center border border-white/30 shadow-sm">
+              {language === 'en' ? 'EN' : 'AR'}
+            </span>
+          </button>
+        )}
         <button
           onClick={handleDisconnect}
           className="p-2.5 rounded-full backdrop-blur-md bg-red-500/80 border border-red-400/30 text-white hover:bg-red-600/80 transition-all"
@@ -5129,6 +5151,20 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           >
             {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
           </button>
+
+          {/* Language toggle - only for personas with languageToggle feature */}
+          {persona.hasFeature('languageToggle') && (
+            <button
+              onClick={toggleLanguage}
+              className="relative p-3.5 rounded-full backdrop-blur-md bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all group"
+              title={language === 'en' ? 'Switch to Arabic' : 'Switch to English'}
+            >
+              <Languages className="w-5 h-5" />
+              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border border-white/30 shadow-sm">
+                {language === 'en' ? 'EN' : 'AR'}
+              </span>
+            </button>
+          )}
 
           {/* Disconnect */}
           <button
