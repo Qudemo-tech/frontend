@@ -37,7 +37,9 @@ import { employeeBenefitsPresentation } from '../personas/entri/presentations/em
 import { speedLatencyPresentation } from '../personas/5G/presentations/speed-latency';
 import { speedLatencyPresentation as speedLatencyPresentationAr } from '../personas/5G/presentations/speed-latency.ar';
 import { qatarPearlDivingPresentation } from '../personas/qatar_history/presentations/qatar-pearl-diving';
+import { qatarPearlDivingPresentation as qatarPearlDivingPresentationAr } from '../personas/qatar_history/presentations/qatar-pearl-diving.ar';
 import { qatarOilGasPresentation } from '../personas/qatar_history/presentations/qatar-oil-gas';
+import { qatarOilGasPresentation as qatarOilGasPresentationAr } from '../personas/qatar_history/presentations/qatar-oil-gas.ar';
 import { microwaveWindowPresentation } from '../personas/microwave/presentations/microwave-window';
 import { microwaveWindowPresentation as microwaveWindowPresentationAr } from '../personas/microwave/presentations/microwave-window.ar';
 
@@ -49,7 +51,9 @@ const PRESENTATION_REGISTRY = {
   'speed-latency': speedLatencyPresentation,
   'speed-latency-ar': speedLatencyPresentationAr,
   'qatar-pearl-diving': qatarPearlDivingPresentation,
+  'qatar-pearl-diving-ar': qatarPearlDivingPresentationAr,
   'qatar-oil-gas': qatarOilGasPresentation,
+  'qatar-oil-gas-ar': qatarOilGasPresentationAr,
   'microwave-window': microwaveWindowPresentation,
   'microwave-window-ar': microwaveWindowPresentationAr,
 };
