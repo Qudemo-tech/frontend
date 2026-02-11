@@ -18,13 +18,6 @@ import {
   Bot,
   Video,
 } from "lucide-react";
-import {
-  Room,
-  createLocalAudioTrack,
-  RoomEvent,
-  DataPacket_Kind,
-  Track,
-} from "livekit-client";
 import { getNodeApiUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
@@ -33,6 +26,12 @@ import videoTriggersConfig from '../config/video-triggers.json';
 import bookingConfig from '../config/booking-config.json';
 import SessionManager from '../utils/SessionManager';
 import LiveKitEventManager from '../utils/LiveKitEventManager';
+// livekit-client removed — legacy HeyGen code
+const Room = class {};
+const createLocalAudioTrack = () => {};
+const RoomEvent = {};
+const DataPacket_Kind = {};
+const Track = {};
 
 // Mobile Avatar Widget - Complete copy of desktop AIChatWidget with mobile optimizations
 // CRITICAL: Complete code independence - NO imports from desktop components

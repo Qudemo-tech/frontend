@@ -18,19 +18,18 @@ import {
   Bot,
   Video,
 } from "lucide-react";
-import {
-  Room,
-  createLocalAudioTrack,
-  RoomEvent,
-  DataPacket_Kind,
-  Track,
-} from "livekit-client";
 import { getNodeApiUrl } from '../config/api';
 import { useEventLogger } from '../hooks/useEventLogger';
 import { useDemoVideo } from '../hooks/useDemoVideo';
 import { checkForDemoTrigger } from '../utils/videoTriggerMatcher';
 import videoTriggersConfig from '../config/video-triggers.json';
 import bookingConfig from '../config/booking-config.json';
+// livekit-client removed — legacy HeyGen code
+const Room = class {};
+const createLocalAudioTrack = () => {};
+const RoomEvent = {};
+const DataPacket_Kind = {};
+const Track = {};
 
 // AIDEV-NOTE: Main widget component - manages LiveAvatar session, voice interaction, demo playback, and intent detection
 // AIDEV-NOTE: Architecture: LiveKit WebRTC for video/audio, HeyGen API for avatar session, local state for UI

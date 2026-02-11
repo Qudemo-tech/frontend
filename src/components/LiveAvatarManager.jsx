@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { 
-  LiveAvatarSession,
-  SessionEvent,
-  SessionState,
-  VoiceChatEvent,
-  VoiceChatState,
-  ConnectionQuality,
-  Language
-} from '@heygen/liveavatar-web-sdk';
 import { getVideoApiUrl } from '../config/api';
+// @heygen/liveavatar-web-sdk removed — legacy HeyGen code
+const LiveAvatarSession = class {};
+const SessionEvent = {};
+const SessionState = {};
+const VoiceChatEvent = {};
+const VoiceChatState = {};
+const ConnectionQuality = {};
+const Language = {};
 
 /**
  * LiveAvatarManager - Manages HeyGen StreamingAvatar SDK integration

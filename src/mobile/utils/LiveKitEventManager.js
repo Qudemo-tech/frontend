@@ -16,7 +16,8 @@
  * - Testable: Can unit test manager independently of React component
  */
 
-import { RoomEvent } from 'livekit-client';
+// livekit-client removed — legacy HeyGen code
+const RoomEvent = {};
 
 class LiveKitEventManager {
   constructor() {

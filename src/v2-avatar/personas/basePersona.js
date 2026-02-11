@@ -34,6 +34,7 @@ const basePersona = {
     // UI features
     modulesSidebar: false,         // Show modules sidebar
     debugPanel: false,             // Show debug panel
+    languageToggle: false,         // Show EN/AR language toggle in control bar
 
     // Behavior features
     speechLock: false,             // Lock user input during module speech
