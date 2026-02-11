@@ -684,7 +684,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         videoCompletionInProgressRef.current = false;
       }
     }
-  }, [personaId, moduleOrder, sectionEndingModules, quizState.isActive, addDebugLog, localizedContent]);
+  }, [personaId, moduleOrder, sectionEndingModules, quizState.isActive, addDebugLog]);
 
   // Demo video hook
   const { isDemoPlaying, currentVideoUrl, isYouTube, youTubeEmbedUrl, demoVideoRef, playDemoVideo, stopDemoVideo } = useDemoVideo({
@@ -3557,8 +3557,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
             setIsMuted(true);
             // Start with first module from persona config
             const firstModule = moduleOrder[0];
-            if (firstModule && handleModuleSelectRef.current) {
-              handleModuleSelectRef.current(firstModule);
+            if (firstModule) {
+              handleModuleSelect(firstModule);
             }
           }
         }, 2000); // Wait 2 seconds for session to stabilize
@@ -3849,7 +3849,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
   const startMcqQuiz = useCallback((moduleId) => {
     // Get quiz data from persona config (prefer localized content for bilingual support)
     const quizData = localizedContent?.quizzes?.moduleQuizzes?.[moduleId] || persona.getModuleQuiz(moduleId);
-    console.log(`[LANG-DEBUG] startMcqQuiz moduleId=${moduleId}, hasLocalizedQuizzes=${!!localizedContent?.quizzes?.moduleQuizzes}, quizKeys=${localizedContent?.quizzes?.moduleQuizzes ? Object.keys(localizedContent.quizzes.moduleQuizzes).join(',') : 'N/A'}, found=${!!quizData}, firstOption=${quizData?.questions?.[0]?.options?.[0]}, usedFallback=${!localizedContent?.quizzes?.moduleQuizzes?.[moduleId]}`);
     if (!quizData || !quizData.questions || quizData.questions.length === 0) {
       addDebugLog(`[MCQ-QUIZ] No quiz found for module: ${moduleId}`);
       return false;
@@ -3909,7 +3908,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // The quiz panel will be shown when avatar finishes speaking (in onReplicaStopSpeaking)
     sendMessageToReplica(quizData.intro, 'echo');
     return true;
-  }, [addDebugLog, sendMessageToReplica, localizedContent]);
+  }, [addDebugLog, sendMessageToReplica]);
 
   // Activate quiz panel and ask first question (called after instructions are spoken)
   const activateQuizPanel = useCallback(() => {
@@ -4147,7 +4146,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       pendingNextQuestion: false,
       pendingQuizComplete: false,
     });
-  }, [addDebugLog, sendMessageToReplica, moduleOrder, sectionEndingModules, localizedContent]);
+  }, [addDebugLog, sendMessageToReplica, moduleOrder, sectionEndingModules]);
 
   // Skip/End MCQ quiz
   const skipMcqQuiz = useCallback(() => {
@@ -4499,7 +4498,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
   // Handle learning module selection
   const handleModuleSelect = useCallback(async (moduleId) => {
-    console.log(`[LANG-DEBUG] handleModuleSelect moduleId=${moduleId}, hasSuffix=${localizedContent?.presentationSuffix}, hasLocalizedContent=${!!localizedContent}, moduleDefKeys=${Object.keys(moduleDefinitions).join(',').substring(0, 80)}`);
     // 🔒 CRITICAL: Block module selection if MCQ quiz is active
     // This prevents accidental module switches during quiz (e.g., from stale callbacks or race conditions)
     if (mcqQuizStateRef.current.isActive || mcqQuizStateRef.current.speakingInstructions) {
@@ -4587,7 +4585,6 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     // Check if this is a quiz module (either final quiz or module quiz)
     const moduleConfig = moduleDefinitions[moduleId];
     const isQuizModule = moduleConfig?.type === 'quiz';
-    console.log(`[LANG-DEBUG] moduleConfig for ${moduleId}: type=${moduleConfig?.type}, hasPresentation=${moduleConfig?.hasPresentation}, presentationConfig=${moduleConfig?.presentationConfig}, isQuiz=${isQuizModule}`);
 
     if (isQuizModule && persona.hasFeature('mcqQuiz')) {
       // Use MCQ quiz system for all quiz modules (both module quizzes and final quiz)
@@ -4654,10 +4651,9 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Get presentation config from registry (append language suffix for bilingual lookup)
         const presentationKey = moduleConfig.presentationConfig + (localizedContent?.presentationSuffix || '');
         const presentationData = PRESENTATION_REGISTRY[presentationKey] || null;
-        console.log(`[LANG-DEBUG] presentationKey=${presentationKey}, suffix=${localizedContent?.presentationSuffix}, found=${!!presentationData}, registryKeys=${Object.keys(PRESENTATION_REGISTRY).join(',')}`);
 
       if (!presentationData) {
-        addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for key=${presentationKey}, module=${moduleId}`);
+        addDebugLog(`[MODULE-LOCK] ⚠️ No presentation data for ${moduleId}`);
         return;
       }
 
@@ -4747,8 +4743,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         // Mark module as completed after avatar finishes (handled via transcript)
       }
     }
-  }, [personaId, quizState.isActive, sendMessageToReplica, setQuizState, setActiveModule, setTranscripts, isModuleUnlocked, pdfPresentation, addDebugLog, setMcqQuizState, localizedContent, moduleDefinitions]);
-
+  }, [personaId, quizState.isActive, sendMessageToReplica, setQuizState, setActiveModule, setTranscripts, isModuleUnlocked, pdfPresentation, addDebugLog, setMcqQuizState]);
+  
   // Store handleModuleSelect in ref for proactive continuation
   useEffect(() => {
     handleModuleSelectRef.current = handleModuleSelect;
