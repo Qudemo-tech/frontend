@@ -65,12 +65,14 @@ const EntriLearningModules = ({
   activeModule,
   completedModules = [],
   onClose,
-  isMobile = false
+  isMobile = false,
+  language = 'en'
 }) => {
   // Get course data from persona config (prefer localized content for bilingual support)
   const courseStructure = localizedContent?.modules?.courseStructure || persona?.modules?.courseStructure || [];
   const moduleDefinitions = localizedContent?.modules?.definitions || persona?.modules?.definitions || {};
   const courseMeta = localizedContent?.modules?.courseMeta || persona?.modules?.courseMeta || { title: 'Course' };
+  const isRTL = language === 'ar';
 
   // Initialize all sections as expanded
   const initialExpandedState = useMemo(() => {
@@ -133,7 +135,7 @@ const EntriLearningModules = ({
 
       {/* Course Title */}
       <div className="p-4 border-b border-gray-700">
-        <h1 className="font-semibold text-base">{courseMeta.title}</h1>
+        <h1 className="font-semibold text-base" dir={isRTL ? 'rtl' : 'ltr'}>{courseMeta.title}</h1>
       </div>
 
       {/* Scrollable Content */}
@@ -148,7 +150,7 @@ const EntriLearningModules = ({
                 onClick={() => toggleSection(section.id)}
                 className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition-colors"
               >
-                <span className="font-medium text-sm text-left">{section.title}</span>
+                <span className="font-medium text-sm" style={{ textAlign: isRTL ? 'right' : 'left' }} dir={isRTL ? 'rtl' : 'ltr'}>{section.title}</span>
                 {isExpanded ? (
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 ) : (
@@ -197,7 +199,7 @@ const EntriLearningModules = ({
                             <span className={`
                               text-sm font-medium truncate
                               ${isActive ? 'text-white' : 'text-gray-200'}
-                            `}>
+                            `} dir={isRTL ? 'rtl' : 'ltr'}>
                               {item.title}
                             </span>
                             {isCompleted && (

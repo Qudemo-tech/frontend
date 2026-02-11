@@ -5387,6 +5387,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
               completedModules={completedModules}
               onClose={() => setShowLearningModules(false)}
               isMobile={isMobile}
+              language={language}
             />
           ) : (
             <LearningModules
