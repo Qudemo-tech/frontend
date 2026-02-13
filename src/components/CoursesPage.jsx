@@ -31,7 +31,7 @@ const courses = [
     description: "Understand microwave technology, waveguides, radar, and satellite communications.",
     href: "/v2-avatar/microwave",
     duration: "~15 min",
-    videoId: "5fXp_Mrsumc",
+    videoId: "VQelI_lxu8Q",
   },
 ];
 
@@ -72,7 +72,7 @@ const CoursesPage = () => {
             Develop skills that move your career forward
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl text-left">
-            Explore interactive AI-powered courses. Learn with your personal AI guide—anytime, anywhere.
+            Explore interactive AI-powered courses. Learn with your personal AI guide anytime, anywhere.
           </p>
         </motion.section>
 
