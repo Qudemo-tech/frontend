@@ -431,25 +431,6 @@ const HomePage = () => {
               Qudemo creates interactive AI buddy for onboarding and training
               </p>
 
-              {/* CTA Button */}
-              <div
-                className="flex items-center justify-center"
-                style={{
-                  animation: isMobile ? "none" : "fadeInUp 0.8s ease-out 0.5s both",
-                }}
-              >
-                <button
-                  onClick={() => window.location.href = 'https://qudemo.com/v2-avatar/entri'}
-                  className="text-white font-medium text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group z-[999]"
-                  style={{
-                    background: "rgba(59, 130, 246, 1)",
-                    boxShadow: "0 8px 32px rgba(59, 130, 246, 0.5)",
-                  }}
-                >
-                  <span className="relative z-10">Talk to Agent</span>
-                </button>
-              </div>
-
               {/* Infinite Scrolling Logos - COMMENTED OUT */}
             </div>
             {/*<div
