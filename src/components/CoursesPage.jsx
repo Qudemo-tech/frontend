@@ -1,7 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { PlayCircle, ChevronRight } from "lucide-react";
+
+// Typeform-style design tokens (Paper + Ink palette, Plus Jakarta Sans)
+const TYPEFORM = {
+  font: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  bg: "#FFFFFF",
+  bgCard: "#FFFFFF",
+  text: "#262627",
+  textMuted: "#6B6B6B",
+  accent: "#262627",
+  border: "#E8E8E8",
+  radius: "12px",
+  radiusFull: "50px",
+};
 
 const getPreviewVideoUrl = (videoId) =>
   `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoId}&playsinline=1`;
@@ -39,10 +52,26 @@ const CoursesPage = () => {
   const navigate = useNavigate();
   const [hoveredCourse, setHoveredCourse] = useState(null);
 
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap";
+    link.rel = "stylesheet";
+    document.head.appendChild(link);
+    return () => {
+      if (link.parentNode) link.parentNode.removeChild(link);
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#f3f2ef] overflow-x-hidden">
-      {/* Top Navigation - LinkedIn style */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div
+      className="min-h-screen overflow-x-hidden"
+      style={{ backgroundColor: TYPEFORM.bg, fontFamily: TYPEFORM.font }}
+    >
+      {/* Top Navigation - Typeform style */}
+      <header
+        className="sticky top-0 z-50"
+        style={{ backgroundColor: TYPEFORM.bgCard, borderBottom: `1px solid ${TYPEFORM.border}` }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div
@@ -61,27 +90,38 @@ const CoursesPage = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero Section - LinkedIn Learning style */}
+        {/* Hero Section */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="mb-10"
         >
-          <h1 className="text-3xl sm:text-4xl font-semibold text-gray-900 mb-2 text-left">
+          <h1
+            className="text-3xl sm:text-4xl font-semibold mb-2 text-left"
+            style={{ color: TYPEFORM.text }}
+          >
             Develop skills that move your career forward
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl text-left">
-          Explore interactive AI-powered courses. Learn with your personal AI guide anytime, anywhere.
+          <p
+            className="text-lg max-w-2xl text-left"
+            style={{ color: TYPEFORM.textMuted }}
+          >
+            Explore interactive AI-powered courses. Learn with your personal AI guide anytime, anywhere.
           </p>
         </motion.section>
 
         {/* Section Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Featured Courses</h2>
+          <h2
+            className="text-xl font-semibold"
+            style={{ color: TYPEFORM.text }}
+          >
+            Featured Courses
+          </h2>
         </div>
 
-        {/* Course Grid - LinkedIn Learning card layout */}
+        {/* Course Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {courses.map((course, index) => (
               <motion.div
@@ -93,7 +133,14 @@ const CoursesPage = () => {
                 onMouseLeave={() => setHoveredCourse(null)}
               >
                 <Link to={course.href} className="block group">
-                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 h-full flex flex-col">
+                  <div
+                    className="rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 h-full flex flex-col"
+                    style={{
+                      backgroundColor: TYPEFORM.bgCard,
+                      border: `1px solid ${TYPEFORM.border}`,
+                      borderRadius: TYPEFORM.radius,
+                    }}
+                  >
                     {/* Thumbnail area - video preview on hover, first frame image otherwise */}
                     <div className="relative h-36 flex items-center justify-center overflow-hidden bg-gray-900">
                       {hoveredCourse === course.id ? (
@@ -130,13 +177,22 @@ const CoursesPage = () => {
 
                     {/* Card content */}
                     <div className="p-4 flex-1 flex flex-col">
-                      <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#0A66C2] transition-colors">
+                      <h3
+                        className="text-base font-semibold mb-2 line-clamp-2 transition-colors"
+                        style={{ color: TYPEFORM.text }}
+                      >
                         {course.title}
                       </h3>
-                      <p className="text-sm text-gray-600 line-clamp-2 flex-1 mb-4">
+                      <p
+                        className="text-sm line-clamp-2 flex-1 mb-4"
+                        style={{ color: TYPEFORM.textMuted }}
+                      >
                         {course.description}
                       </p>
-                      <div className="flex items-center text-[#0A66C2] font-medium text-sm group-hover:underline">
+                      <div
+                        className="flex items-center font-medium text-sm group-hover:underline"
+                        style={{ color: TYPEFORM.accent }}
+                      >
                         Start course
                         <ChevronRight className="w-4 h-4 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
                       </div>
@@ -152,17 +208,32 @@ const CoursesPage = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-16 p-8 bg-white rounded-lg border border-gray-200 text-center"
+          className="mt-16 p-8 text-center rounded-lg"
+          style={{
+            backgroundColor: TYPEFORM.bgCard,
+            border: `1px solid ${TYPEFORM.border}`,
+            borderRadius: TYPEFORM.radius,
+          }}
         >
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          <h3
+            className="text-xl font-semibold mb-2"
+            style={{ color: TYPEFORM.text }}
+          >
             Ready to learn?
           </h3>
-          <p className="text-gray-600 mb-4 max-w-xl mx-auto">
+          <p
+            className="mb-4 max-w-xl mx-auto"
+            style={{ color: TYPEFORM.textMuted }}
+          >
             Each course features an AI guide that adapts to your pace. Click any course above to begin.
           </p>
           <button
             onClick={() => navigate("/")}
-            className="inline-flex items-center px-6 py-2.5 bg-[#0A66C2] hover:bg-[#004182] text-white font-medium rounded-full transition-colors"
+            className="inline-flex items-center px-6 py-2.5 text-white font-medium transition-colors"
+            style={{
+              backgroundColor: TYPEFORM.accent,
+              borderRadius: TYPEFORM.radiusFull,
+            }}
           >
             Back to Home
           </button>
