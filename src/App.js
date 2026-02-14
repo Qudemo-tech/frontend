@@ -34,6 +34,7 @@ import TestRunner from "./components/TestRunner";
 import PublicQudemoShare from "./components/PublicQudemoShare";
 import PrivacyPolicy from "./components/PrivacyPolicy";
 import CoursesPage from "./components/CoursesPage";
+import CourseCreationPage from "./components/CourseCreationPage";
 import PricingPage from "./components/PricingPage";
 import CustomerInteractionsPage from "./components/CustomerInteractionsPage";
 import VideoChatPage from "./components/VideoChatPage";
@@ -276,6 +277,7 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/courses" element={<CoursesPage />} />
+              <Route path="/course-creation" element={<CourseCreationPage />} />
               <Route path="/privacypolicy" element={<PrivacyPolicy />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />

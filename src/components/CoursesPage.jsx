@@ -72,7 +72,7 @@ const CoursesPage = () => {
             Develop skills that move your career forward
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl text-left">
-            Explore interactive AI-powered courses. Learn with your personal AI guide anytime, anywhere.
+          Explore interactive AI-powered courses. Learn with your personal AI guide anytime, anywhere.
           </p>
         </motion.section>
 
