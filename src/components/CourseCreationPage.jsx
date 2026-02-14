@@ -87,11 +87,22 @@ const TYPEFORM = {
 const CourseCreationPage = () => {
   const navigate = useNavigate();
 
+  // Mode: null = choose, "design" = design flow, "request" = request flow
+  const [courseCreationMode, setCourseCreationMode] = useState(null);
+
   // Wizard step: "details" | "module" | "final"
   const [step, setStep] = useState("details");
 
   // Step index for modules (0-based)
   const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
+
+  // Request flow state
+  const [requestCourseName, setRequestCourseName] = useState("");
+  const [requestDescription, setRequestDescription] = useState("");
+  const [requestPdf, setRequestPdf] = useState(null);
+  const [requestVideoUrls, setRequestVideoUrls] = useState([]);
+  const [requestVideoUrlInput, setRequestVideoUrlInput] = useState("");
+  const [showRequestSuccessModal, setShowRequestSuccessModal] = useState(false);
 
   // Form state (persisted across steps)
   const [courseName, setCourseName] = useState("");
@@ -287,7 +298,37 @@ const CourseCreationPage = () => {
     } else if (step === "final") {
       setStep("module");
       setCurrentModuleIndex(numModulesInt - 1);
+    } else if (step === "details" && courseCreationMode === "design") {
+      setCourseCreationMode(null);
+      setStep("details");
     }
+  };
+
+  const addRequestVideoUrl = () => {
+    if (requestVideoUrlInput.trim()) {
+      setRequestVideoUrls((prev) => [...prev, requestVideoUrlInput.trim()]);
+      setRequestVideoUrlInput("");
+    }
+  };
+
+  const removeRequestVideoUrl = (index) => {
+    setRequestVideoUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const validateRequestForm = () => {
+    const e = {};
+    if (!requestCourseName.trim()) e.requestCourseName = "Course name is required";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleRequestCourse = () => {
+    if (!validateRequestForm()) return;
+    setIsCreating(true);
+    setTimeout(() => {
+      setIsCreating(false);
+      setShowRequestSuccessModal(true);
+    }, 1500);
   };
 
   const handleCreateCourse = () => {
@@ -342,37 +383,296 @@ const CourseCreationPage = () => {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Progress indicator */}
-        <div className="mb-8">
-          <div
-            className="flex items-center justify-between text-sm font-medium mb-2"
-            style={{ color: TYPEFORM.textMuted }}
-          >
-            <span>Course Details</span>
-            <span>Modules</span>
-            <span>Create</span>
-          </div>
-          <div
-            className="h-1.5 rounded-full overflow-hidden"
-            style={{ backgroundColor: TYPEFORM.border }}
-          >
+        {/* Progress indicator - only for design flow */}
+        {courseCreationMode === "design" && (
+          <div className="mb-8">
             <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width:
-                  step === "details"
-                    ? "33%"
-                    : step === "module"
-                    ? `${33 + (66 * (currentModuleIndex + 1)) / numModulesInt}%`
-                    : "100%",
-                backgroundColor: TYPEFORM.accent,
-              }}
-            />
+              className="flex items-center justify-between text-sm font-medium mb-2"
+              style={{ color: TYPEFORM.textMuted }}
+            >
+              <span>Course Details</span>
+              <span>Modules</span>
+              <span>Create</span>
+            </div>
+            <div
+              className="h-1.5 rounded-full overflow-hidden"
+              style={{ backgroundColor: TYPEFORM.border }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width:
+                    step === "details"
+                      ? "33%"
+                      : step === "module"
+                      ? `${33 + (66 * (currentModuleIndex + 1)) / numModulesInt}%`
+                      : "100%",
+                  backgroundColor: TYPEFORM.accent,
+                }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Step 1: Course Details */}
-        {step === "details" && (
+        {/* Mode selection - first page (CourseCraft style) */}
+        {courseCreationMode === null && (
+          <div className="max-w-2xl mx-auto">
+            <h1
+              className="text-3xl sm:text-4xl font-bold mb-12 text-center"
+              style={{ color: TYPEFORM.text }}
+            >
+              How would you like to create your course?
+            </h1>
+            <div className="space-y-6">
+              {/* Design my own course card */}
+              <div
+                className="rounded-2xl p-8 transition-all duration-200 hover:shadow-lg"
+                style={{
+                  backgroundColor: TYPEFORM.bgCard,
+                  border: `1px solid ${TYPEFORM.border}`,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                }}
+              >
+                <h2
+                  className="text-xl font-semibold mb-3"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Design my own course
+                </h2>
+                <p
+                  className="text-base mb-6 leading-relaxed"
+                  style={{ color: TYPEFORM.textMuted }}
+                >
+                  Build your course step by step with full control over modules, content, and quizzes.
+                </p>
+                <button
+                  onClick={() => {
+                    setCourseCreationMode("design");
+                    setStep("details");
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-3 text-white font-medium rounded-full transition-all hover:opacity-90"
+                  style={{
+                    backgroundColor: TYPEFORM.accent,
+                    borderRadius: TYPEFORM.radiusFull,
+                  }}
+                >
+                  Get started
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Request a Course card */}
+              <div
+                className="rounded-2xl p-8 transition-all duration-200 hover:shadow-lg"
+                style={{
+                  backgroundColor: TYPEFORM.bgCard,
+                  border: `1px solid ${TYPEFORM.border}`,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                }}
+              >
+                <h2
+                  className="text-xl font-semibold mb-3"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Request a Course
+                </h2>
+                <p
+                  className="text-base mb-6 leading-relaxed"
+                  style={{ color: TYPEFORM.textMuted }}
+                >
+                  Tell us what you need and we'll create your course for you within 3 business days.
+                </p>
+                <button
+                  onClick={() => setCourseCreationMode("request")}
+                  className="inline-flex items-center gap-2 px-6 py-3 text-white font-medium rounded-full transition-all hover:opacity-90"
+                  style={{
+                    backgroundColor: TYPEFORM.accent,
+                    borderRadius: TYPEFORM.radiusFull,
+                  }}
+                >
+                  Get started
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Request Course flow */}
+        {courseCreationMode === "request" && (
+          <div
+            className="rounded-lg shadow-sm p-6 sm:p-8"
+            style={{ backgroundColor: TYPEFORM.bgCard, border: `1px solid ${TYPEFORM.border}` }}
+          >
+            <h2
+              className="text-2xl font-semibold mb-8"
+              style={{ color: TYPEFORM.text }}
+            >
+              Request a Course
+            </h2>
+            <div className="space-y-6">
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Course Name <span style={{ color: "#DC2626" }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={requestCourseName}
+                  onChange={(e) => setRequestCourseName(e.target.value)}
+                  placeholder="e.g. Introduction to 5G"
+                  className="w-full px-4 py-3 text-base font-normal outline-none"
+                  style={{
+                    borderRadius: TYPEFORM.radius,
+                    border: `1px solid ${errors.requestCourseName ? "#DC2626" : TYPEFORM.border}`,
+                    color: TYPEFORM.text,
+                  }}
+                />
+                {errors.requestCourseName && (
+                  <p className="mt-1 text-sm" style={{ color: "#DC2626" }}>{errors.requestCourseName}</p>
+                )}
+              </div>
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Course Description
+                </label>
+                <textarea
+                  value={requestDescription}
+                  onChange={(e) => setRequestDescription(e.target.value)}
+                  placeholder="Describe your course requirements..."
+                  rows={4}
+                  className="w-full px-4 py-3 text-base font-normal outline-none resize-none"
+                  style={{
+                    borderRadius: TYPEFORM.radius,
+                    border: `1px solid ${TYPEFORM.border}`,
+                    color: TYPEFORM.text,
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Any Relevant PDF (Optional)
+                </label>
+                <label
+                  className="flex items-center gap-2 px-4 py-3 cursor-pointer transition-colors rounded-lg"
+                  style={{
+                    border: `1px dashed ${TYPEFORM.border}`,
+                    color: TYPEFORM.textMuted,
+                  }}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">
+                    {requestPdf?.name || "Upload .pdf"}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => setRequestPdf(e.target.files?.[0] || null)}
+                  />
+                </label>
+              </div>
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Any Relevant Videos (Optional)
+                </label>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="url"
+                    value={requestVideoUrlInput}
+                    onChange={(e) => setRequestVideoUrlInput(e.target.value)}
+                    placeholder="Paste video URL"
+                    className="flex-1 px-4 py-3 text-base font-normal outline-none"
+                    style={{
+                      borderRadius: TYPEFORM.radius,
+                      border: `1px solid ${TYPEFORM.border}`,
+                      color: TYPEFORM.text,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addRequestVideoUrl}
+                    className="inline-flex items-center gap-2 px-4 py-3 font-medium"
+                    style={{
+                      backgroundColor: TYPEFORM.accent,
+                      color: "white",
+                      borderRadius: TYPEFORM.radius,
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add
+                  </button>
+                </div>
+                {requestVideoUrls.length > 0 && (
+                  <ul className="space-y-2">
+                    {requestVideoUrls.map((url, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between px-4 py-2 rounded-lg"
+                        style={{ backgroundColor: `${TYPEFORM.bg}99`, border: `1px solid ${TYPEFORM.border}` }}
+                      >
+                        <span className="text-sm truncate" style={{ color: TYPEFORM.text }}>{url}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeRequestVideoUrl(i)}
+                          className="text-sm font-medium"
+                          style={{ color: "#DC2626" }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="mt-8 flex justify-between">
+              <button
+                onClick={() => setCourseCreationMode(null)}
+                className="inline-flex items-center gap-2 px-6 py-2.5 font-medium transition-colors"
+                style={{
+                  border: `1px solid ${TYPEFORM.border}`,
+                  borderRadius: TYPEFORM.radiusFull,
+                  color: TYPEFORM.text,
+                }}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+              <button
+                onClick={handleRequestCourse}
+                disabled={isCreating}
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-medium disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                style={{
+                  backgroundColor: TYPEFORM.accent,
+                  borderRadius: TYPEFORM.radiusFull,
+                }}
+              >
+                {isCreating ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Request Course"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Course Details (Design flow only) */}
+        {courseCreationMode === "design" && step === "details" && (
           <div
             className="rounded-lg shadow-sm p-6 sm:p-8"
             style={{ backgroundColor: TYPEFORM.bgCard, border: `1px solid ${TYPEFORM.border}` }}
@@ -508,8 +808,8 @@ const CourseCreationPage = () => {
           </div>
         )}
 
-        {/* Step 2: Module (repeat for each module) */}
-        {step === "module" && modules[currentModuleIndex] && (
+        {/* Step 2: Module (repeat for each module) - Design flow only */}
+        {courseCreationMode === "design" && step === "module" && modules[currentModuleIndex] && (
           <div
             className="rounded-lg shadow-sm p-6 sm:p-8"
             style={{ backgroundColor: TYPEFORM.bgCard, border: `1px solid ${TYPEFORM.border}` }}
@@ -886,8 +1186,8 @@ const CourseCreationPage = () => {
           </div>
         )}
 
-        {/* Step 3: Final */}
-        {step === "final" && (
+        {/* Step 3: Final - Design flow only */}
+        {courseCreationMode === "design" && step === "final" && (
           <div
             className="rounded-lg shadow-sm p-6 sm:p-8"
             style={{ backgroundColor: TYPEFORM.bgCard, border: `1px solid ${TYPEFORM.border}` }}
@@ -962,7 +1262,7 @@ const CourseCreationPage = () => {
         )}
       </main>
 
-      {/* Success modal */}
+      {/* Success modal - Design flow */}
       {showSuccessModal && (
         <div
           className="fixed inset-0 flex items-center justify-center z-50 p-4"
@@ -990,6 +1290,48 @@ const CourseCreationPage = () => {
             <button
               onClick={() => {
                 setShowSuccessModal(false);
+                navigate("/courses");
+              }}
+              className="w-full px-6 py-2.5 text-white font-medium"
+              style={{
+                backgroundColor: TYPEFORM.accent,
+                borderRadius: TYPEFORM.radiusFull,
+              }}
+            >
+              Back to Courses
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Success modal - Request flow */}
+      {showRequestSuccessModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+        >
+          <div
+            className="rounded-lg shadow-xl max-w-sm w-full p-6 text-center"
+            style={{ backgroundColor: TYPEFORM.bgCard }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ backgroundColor: "#D1FAE5" }}
+            >
+              <span className="text-2xl" style={{ color: "#059669" }}>✓</span>
+            </div>
+            <h3
+              className="text-xl font-semibold mb-2"
+              style={{ color: TYPEFORM.text }}
+            >
+              Your {requestCourseName || "course"} will be created in 3 business days
+            </h3>
+            <p className="text-sm mb-6" style={{ color: TYPEFORM.textMuted }}>
+              Our team will review your request and build your course accordingly.
+            </p>
+            <button
+              onClick={() => {
+                setShowRequestSuccessModal(false);
                 navigate("/courses");
               }}
               className="w-full px-6 py-2.5 text-white font-medium"
