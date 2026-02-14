@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { TavusAvatarWidget } from './TavusAvatarWidget';
 import { resolvePersonaId, getPersonaDisplayName } from '../config/api';
 import styles from './TavusAvatarPage.module.css';
@@ -17,10 +17,12 @@ import styles from './TavusAvatarPage.module.css';
  */
 const TavusAvatarPage = () => {
   const { personaId: personaIdentifier } = useParams();
+  const [searchParams] = useSearchParams();
   
   // Resolve friendly name to actual persona ID
   const personaId = useMemo(() => resolvePersonaId(personaIdentifier), [personaIdentifier]);
-  const [isStarted, setIsStarted] = useState(false);
+  const autoStart = searchParams.get('start') === '1';
+  const [isStarted, setIsStarted] = useState(autoStart);
   const [sessionKey, setSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
