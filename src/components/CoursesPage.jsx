@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { PlayCircle, ChevronRight } from "lucide-react";
+import fiveGPhoto from "../Courses-Photos/5G-photo.png";
+import qatarHistoryPhoto from "../Courses-Photos/qatar-history-photo.png";
+import microwavePhoto from "../Courses-Photos/microwave-photo.png";
 
 // Typeform-style design tokens (Paper + Ink palette, Plus Jakarta Sans)
 const TYPEFORM = {
@@ -16,11 +19,6 @@ const TYPEFORM = {
   radiusFull: "50px",
 };
 
-const getPreviewVideoUrl = (videoId) =>
-  `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoId}&playsinline=1`;
-const getThumbnailUrl = (videoId) =>
-  `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
 const courses = [
   {
     id: "5g",
@@ -28,7 +26,7 @@ const courses = [
     description: "Learn about 5G technology, its capabilities, and real-world applications.",
     href: "/v2-avatar/5g?start=1",
     duration: "~15 min",
-    videoId: "6ybdAVXo9x8",
+    image: fiveGPhoto,
   },
   {
     id: "qatar_history",
@@ -36,7 +34,7 @@ const courses = [
     description: "Explore Qatar's journey from geography and pearl diving to modern nationhood.",
     href: "/v2-avatar/qatar_history?start=1",
     duration: "~20 min",
-    videoId: "5fXp_Mrsumc",
+    image: qatarHistoryPhoto,
   },
   {
     id: "microwave",
@@ -44,13 +42,12 @@ const courses = [
     description: "Understand microwave technology, waveguides, radar, and satellite communications.",
     href: "/v2-avatar/microwave?start=1",
     duration: "~15 min",
-    videoId: "VQelI_lxu8Q",
+    image: microwavePhoto,
   },
 ];
 
 const CoursesPage = () => {
   const navigate = useNavigate();
-  const [hoveredCourse, setHoveredCourse] = useState(null);
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -129,8 +126,6 @@ const CoursesPage = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 * index, duration: 0.3 }}
-                onMouseEnter={() => setHoveredCourse(course.id)}
-                onMouseLeave={() => setHoveredCourse(null)}
               >
                 <Link to={course.href} className="block group">
                   <div
@@ -141,34 +136,13 @@ const CoursesPage = () => {
                       borderRadius: TYPEFORM.radius,
                     }}
                   >
-                    {/* Thumbnail area - video preview on hover, first frame image otherwise */}
-                    <div className="relative h-36 flex items-center justify-center overflow-hidden bg-gray-900">
-                      {hoveredCourse === course.id ? (
-                        <iframe
-                          src={getPreviewVideoUrl(course.videoId)}
-                          title={`${course.title} preview`}
-                          className="absolute inset-0 w-full h-full pointer-events-none"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          style={{
-                            border: "none",
-                            width: "100%",
-                            height: "100%",
-                            minWidth: "100%",
-                            minHeight: "100%",
-                          }}
-                        />
-                      ) : (
-                        <img
-                          src={getThumbnailUrl(course.videoId)}
-                          alt={`${course.title} preview`}
-                          className="absolute inset-0 w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = `https://img.youtube.com/vi/${course.videoId}/hqdefault.jpg`;
-                          }}
-                        />
-                      )}
+                    {/* Thumbnail area - course photo from Courses-Photos */}
+                    <div className="relative flex items-center justify-center overflow-hidden bg-gray-900" style={{ height: "12.83rem" }}>
+                      <img
+                        src={course.image}
+                        alt={`${course.title} preview`}
+                        className="absolute inset-0 w-full h-full object-cover object-top"
+                      />
                       <div className="absolute bottom-2 right-2 flex items-center gap-1 text-white/90 text-xs font-medium bg-black/30 px-2 py-1 rounded z-10">
                         <PlayCircle className="w-3.5 h-3.5" />
                         {course.duration}
