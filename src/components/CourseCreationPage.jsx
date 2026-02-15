@@ -109,6 +109,9 @@ const CourseCreationPage = () => {
   const [numModules, setNumModules] = useState(3);
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [selectedLanguages, setSelectedLanguages] = useState([]);
+  const [designPdfs, setDesignPdfs] = useState([]);
+  const [designVideoUrls, setDesignVideoUrls] = useState([]);
+  const [designVideoUrlInput, setDesignVideoUrlInput] = useState("");
   const [modules, setModules] = useState([
     {
       id: 1,
@@ -331,6 +334,36 @@ const CourseCreationPage = () => {
     }, 1500);
   };
 
+  const addDesignPdf = (e) => {
+    const files = e.target.files;
+    if (files?.length) {
+      setDesignPdfs((prev) => [
+        ...prev,
+        ...Array.from(files).map((f) => ({ id: Date.now() + Math.random(), file: f, name: f.name })),
+      ]);
+    }
+  };
+
+  const removeDesignPdf = (id) => setDesignPdfs((prev) => prev.filter((p) => p.id !== id));
+
+  const addDesignVideoUrl = () => {
+    if (designVideoUrlInput.trim()) {
+      setDesignVideoUrls((prev) => [...prev, designVideoUrlInput.trim()]);
+      setDesignVideoUrlInput("");
+    }
+  };
+
+  const removeDesignVideoUrl = (index) => setDesignVideoUrls((prev) => prev.filter((_, i) => i !== index));
+
+  const handleDesignCreateCourse = () => {
+    if (!validateDetails()) return;
+    setIsCreating(true);
+    setTimeout(() => {
+      setIsCreating(false);
+      setShowSuccessModal(true);
+    }, 1500);
+  };
+
   const handleCreateCourse = () => {
     setIsCreating(true);
     setTimeout(() => {
@@ -383,8 +416,8 @@ const CourseCreationPage = () => {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Progress indicator - only for design flow */}
-        {courseCreationMode === "design" && (
+        {/* Progress indicator - hidden for design (single-step flow) */}
+        {courseCreationMode === "design" && (step === "module" || step === "final") && (
           <div className="mb-8">
             <div
               className="flex items-center justify-between text-sm font-medium mb-2"
@@ -791,18 +824,147 @@ const CourseCreationPage = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Upload PDF (multiple) */}
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Upload PDF (Optional)
+                </label>
+                <label
+                  className="flex items-center gap-2 px-4 py-3 cursor-pointer transition-colors rounded-lg mb-3"
+                  style={{
+                    border: `1px dashed ${TYPEFORM.border}`,
+                    color: TYPEFORM.textMuted,
+                    borderRadius: TYPEFORM.radius,
+                  }}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">Add PDF files</span>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    multiple
+                    className="hidden"
+                    onChange={addDesignPdf}
+                  />
+                </label>
+                {designPdfs.length > 0 && (
+                  <ul className="space-y-2">
+                    {designPdfs.map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex items-center justify-between px-4 py-2 rounded-lg"
+                        style={{ backgroundColor: `${TYPEFORM.bg}99`, border: `1px solid ${TYPEFORM.border}`, borderRadius: TYPEFORM.radius }}
+                      >
+                        <span className="text-sm truncate" style={{ color: TYPEFORM.text }}>{p.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeDesignPdf(p.id)}
+                          className="text-sm font-medium"
+                          style={{ color: "#DC2626" }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Video Link (multiple) */}
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: TYPEFORM.text }}
+                >
+                  Video Links (Optional)
+                </label>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="url"
+                    value={designVideoUrlInput}
+                    onChange={(e) => setDesignVideoUrlInput(e.target.value)}
+                    placeholder="Paste video URL"
+                    className="flex-1 px-4 py-3 text-base font-normal outline-none"
+                    style={{
+                      borderRadius: TYPEFORM.radius,
+                      border: `1px solid ${TYPEFORM.border}`,
+                      color: TYPEFORM.text,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addDesignVideoUrl}
+                    className="inline-flex items-center gap-2 px-4 py-3 font-medium"
+                    style={{
+                      backgroundColor: TYPEFORM.accent,
+                      color: "white",
+                      borderRadius: TYPEFORM.radius,
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add
+                  </button>
+                </div>
+                {designVideoUrls.length > 0 && (
+                  <ul className="space-y-2">
+                    {designVideoUrls.map((url, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between px-4 py-2 rounded-lg"
+                        style={{ backgroundColor: `${TYPEFORM.bg}99`, border: `1px solid ${TYPEFORM.border}`, borderRadius: TYPEFORM.radius }}
+                      >
+                        <span className="text-sm truncate" style={{ color: TYPEFORM.text }}>{url}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeDesignVideoUrl(i)}
+                          className="text-sm font-medium"
+                          style={{ color: "#DC2626" }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex justify-between">
               <button
-                onClick={handleNextDetails}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-medium transition-colors"
+                onClick={() => {
+                  setCourseCreationMode(null);
+                  setStep("details");
+                }}
+                className="inline-flex items-center gap-2 px-6 py-2.5 font-medium transition-colors"
+                style={{
+                  border: `1px solid ${TYPEFORM.border}`,
+                  borderRadius: TYPEFORM.radiusFull,
+                  color: TYPEFORM.text,
+                }}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+              <button
+                onClick={handleDesignCreateCourse}
+                disabled={isCreating}
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-medium disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
                 style={{
                   backgroundColor: TYPEFORM.accent,
                   borderRadius: TYPEFORM.radiusFull,
                 }}
               >
-                Next
-                <ChevronRight className="w-4 h-4" />
+                {isCreating ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Course"
+                )}
               </button>
             </div>
           </div>
