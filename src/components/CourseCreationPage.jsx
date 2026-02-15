@@ -372,7 +372,7 @@ const CourseCreationPage = () => {
               />
             </div>
             <button
-              onClick={() => navigate("/courses")}
+              onClick={() => navigate("/v2-avatar/courses")}
               className="text-sm font-medium transition-colors"
               style={{ color: TYPEFORM.textMuted }}
             >
@@ -1290,7 +1290,7 @@ const CourseCreationPage = () => {
             <button
               onClick={() => {
                 setShowSuccessModal(false);
-                navigate("/courses");
+                navigate("/v2-avatar/courses");
               }}
               className="w-full px-6 py-2.5 text-white font-medium"
               style={{
@@ -1332,7 +1332,7 @@ const CourseCreationPage = () => {
             <button
               onClick={() => {
                 setShowRequestSuccessModal(false);
-                navigate("/courses");
+                navigate("/v2-avatar/courses");
               }}
               className="w-full px-6 py-2.5 text-white font-medium"
               style={{

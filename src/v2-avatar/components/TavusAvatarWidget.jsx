@@ -5023,7 +5023,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       <div className="flex flex-col sm:flex-row gap-3">
         {isUnavailableError && (
           <button
-            onClick={() => navigate('/courses')}
+            onClick={() => navigate('/v2-avatar/courses')}
             className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 text-sm"
           >
             Browse Courses

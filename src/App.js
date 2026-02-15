@@ -276,8 +276,8 @@ function App() {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/courses" element={<CoursesPage />} />
-              <Route path="/course-creation" element={<CourseCreationPage />} />
+              <Route path="/v2-avatar/courses" element={<CoursesPage />} />
+              <Route path="/v2-avatar/course-creation" element={<CourseCreationPage />} />
               <Route path="/privacypolicy" element={<PrivacyPolicy />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
