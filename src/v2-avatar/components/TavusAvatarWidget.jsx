@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactPlayer from 'react-player/lazy';
 import {
@@ -60,6 +61,23 @@ const PRESENTATION_REGISTRY = {
 
 // Note: videoCompletionPrompts and moduleTransitionPrompts are now accessed via persona.prompts
 
+/** Map API errors to user-friendly messages (industry standard: no technical details exposed) */
+const getFriendlyErrorMessage = (status, errorText = '') => {
+  const text = (errorText || '').toLowerCase();
+  if (status === 400) {
+    if (text.includes('invalid replica') || text.includes('replica_uuid')) {
+      return 'This course is not available at the moment. Please try one of our featured courses.';
+    }
+    return 'Something went wrong. Please try again later.';
+  }
+  if (status === 404) {
+    return 'This course could not be found. Please check the URL or browse our available courses.';
+  }
+  if (status >= 500) {
+    return 'Our service is temporarily unavailable. Please try again later.';
+  }
+  return 'Something went wrong. Please try again later.';
+};
 
 /**
  * TavusAvatarWidget - Tavus CVI avatar widget using Daily.co
@@ -67,6 +85,7 @@ const PRESENTATION_REGISTRY = {
  * Adapted from MobileAvatarWidget for Tavus/Daily.co instead of HeyGen/LiveKit
  */
 export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, personaId } = {}) => {
+  const navigate = useNavigate();
   console.log('[TAVUS-WIDGET] TavusAvatarWidget rendering - autoExpand:', autoExpand, 'personaId:', personaId, 'hasOnExpand:', !!onExpand);
 
   // Get persona configuration - all persona-specific behavior flows from this
@@ -3199,7 +3218,8 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       if (!resp.ok) {
         const errorText = await resp.text();
         addDebugLog(`API Error: ${errorText.substring(0, 100)}`);
-        throw new Error(`API returned ${resp.status}: ${errorText.substring(0, 200)}`);
+        const userMessage = getFriendlyErrorMessage(resp.status, errorText);
+        throw new Error(userMessage);
       }
 
       const response = await resp.json();
@@ -3569,8 +3589,12 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
       }
 
     } catch (err) {
-      const errorMsg = err.message || 'Failed to connect. Please try again.';
-      addDebugLog(`ERROR: ${errorMsg}`);
+      let errorMsg = err.message || 'Something went wrong. Please try again later.';
+      // If error looks technical (from API/network), use friendly fallback
+      if (errorMsg.includes('API returned') || errorMsg.includes('Failed to connect to API')) {
+        errorMsg = 'Something went wrong. Please try again later.';
+      }
+      addDebugLog(`ERROR: ${err.message}`);
       setConnectionError(errorMsg);
       setIsConnecting(false);
       // Reset lock on error so user can retry
@@ -4980,23 +5004,37 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
     </div>
   );
 
+  const isUnavailableError = connectionError?.includes('not available') || connectionError?.includes('could not be found');
   const renderErrorState = () => (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white p-4">
-      <div className="text-red-500 text-4xl mb-4">!</div>
-      <p className="text-sm mb-2">Connection Error</p>
-      <p className="text-xs text-gray-400 mb-4 text-center">{connectionError}</p>
-      <button
-        onClick={retryConnection}
-        className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 text-sm"
-      >
-        Retry
-      </button>
-
-      {/* Debug logs */}
-      <div className="w-full max-h-32 overflow-y-auto text-xs font-mono bg-black/50 rounded p-2 mt-4">
-        {debugLogs.map((log, i) => (
-          <div key={i} className="text-red-400">{log}</div>
-        ))}
+      <div className="text-amber-400 text-4xl mb-4">
+        {isUnavailableError ? (
+          <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        ) : (
+          <span className="text-red-500">!</span>
+        )}
+      </div>
+      <p className="text-sm font-medium mb-2">
+        {isUnavailableError ? 'Course Unavailable' : 'Connection Error'}
+      </p>
+      <p className="text-sm text-gray-300 mb-6 text-center max-w-sm">{connectionError}</p>
+      <div className="flex flex-col sm:flex-row gap-3">
+        {isUnavailableError && (
+          <button
+            onClick={() => navigate('/courses')}
+            className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 text-sm"
+          >
+            Browse Courses
+          </button>
+        )}
+        <button
+          onClick={retryConnection}
+          className="px-4 py-2 bg-gray-600 rounded hover:bg-gray-500 text-sm"
+        >
+          {isUnavailableError ? 'Try Again' : 'Retry'}
+        </button>
       </div>
     </div>
   );
