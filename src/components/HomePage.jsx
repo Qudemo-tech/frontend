@@ -268,7 +268,7 @@ const HomePage = () => {
               Pricing
             </button> */}
             <button
-              onClick={() => window.open('https://cal.com/jazeem-choori-7jbaio/qudemo-intro', '_blank')}
+              onClick={() => window.open('https://cal.com/jazeemchoori/qudemo-demo', '_blank')}
               className="text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group"
               style={{
                 background: "rgba(59, 130, 246, 1)",
@@ -992,7 +992,7 @@ const HomePage = () => {
                   customPrice={true}
                   customPriceText="Let's Talk"
                   buttonText="Book a Demo"
-                  onButtonClick={() => window.open('https://cal.com/jazeem-choori-7jbaio/qudemo-intro', '_blank')}
+                  onButtonClick={() => window.open('https://cal.com/jazeemchoori/qudemo-demo', '_blank')}
                   className="!overflow-visible"
                   features={[
                     "Everything in Starter",
