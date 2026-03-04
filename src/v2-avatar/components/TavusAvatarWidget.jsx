@@ -498,7 +498,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
 
         if (isQatarPersona) {
           addDebugLog('[PROACTIVE] Qatar: 5 seconds passed, triggering conversation continuation');
-          dailyEventManagerRef.current.sendRespondMessage("Continue the conversation naturally with a related topic or question.");
+          dailyEventManagerRef.current.sendRespondMessage("Continue the conversation naturally with a related topic or question. IMPORTANT: You must continue in the same language the user last spoke in. Do not switch languages.");
           return;
         }
 
@@ -3190,8 +3190,14 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
         const requestBody = { personaId };
 
         // Map language state to Tavus API language values
-        // Internal: 'en' -> Tavus: 'english', Internal: 'ar' -> Tavus: 'Arabic'
-        requestBody.language = language === 'ar' ? 'Arabic' : 'english';
+        if (personaId === 'pf5e3d8bef4a') {
+          // Qatar: use 'multilingual' for auto language detection across STT/LLM/TTS pipeline
+          requestBody.language = 'multilingual';
+          requestBody.conversationalContext = `CRITICAL LANGUAGE RULE: Detect the language of the user's FIRST message and use that language for the ENTIRE conversation. If the user speaks Arabic, ALL your responses — including follow-up questions, topic changes, and proactive conversation — MUST be in Arabic. Do NOT switch to English unless the user explicitly switches to English. When you receive system instructions in English (like "continue the conversation"), you must still respond in the language the user has been speaking. Maintain the user's language consistently across all turns.`;
+        } else {
+          // Internal: 'en' -> Tavus: 'english', Internal: 'ar' -> Tavus: 'Arabic'
+          requestBody.language = language === 'ar' ? 'Arabic' : 'english';
+        }
 
         if (isEntriPersona) {
           // Suppress default greeting - Entri sends its own via module prompts
@@ -3199,7 +3205,7 @@ export const TavusAvatarWidget = ({ onDisconnect, autoExpand = true, onExpand, p
           // Override context to prevent Tavus from responding on its own during module flow
           requestBody.conversationalContext = `You are Ann, an AI onboarding guide. IMPORTANT: Do NOT proactively speak or give information unless specifically instructed via an echo message. Wait for echo messages to know what to say. When users say simple confirmations like "continue", "yes", "okay", "next", "ready" - do NOT respond with information. Just acknowledge briefly or stay silent. The frontend application controls all module content delivery.`;
         }
-        // For Qatar and other personas: use Tavus Cloud config (greeting + context)
+        // For other personas: use Tavus Cloud config (greeting + context)
 
         resp = await fetch(apiUrl, {
           method: 'POST',
