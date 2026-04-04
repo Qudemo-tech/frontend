@@ -177,7 +177,7 @@ Thank you for completing this training.   Stay safe, and if you ever have doubts
 
 Best of luck in your work at DEWA!`;
 
-export const welcomeMessage = "Hello! Welcome to DEWA Electrical Safety Essentials. I'm your AI safety instructor. Let's learn how to stay safe around electrical systems!";
+export const welcomeMessage = "Hello! Welcome to this course on safety in the workplace. I am an AI and I will be guiding you through this. Feel free to stop and ask any questions at any time. Let's get started!";
 
 const dewaPrompts = {
   modulePrompts,
