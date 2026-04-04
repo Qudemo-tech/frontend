@@ -5,6 +5,7 @@ import { PlayCircle, ChevronRight } from "lucide-react";
 import fiveGPhoto from "../Courses-Photos/5G-photo.png";
 import qatarHistoryPhoto from "../Courses-Photos/qatar-history-photo.png";
 import microwavePhoto from "../Courses-Photos/microwave-photo.png";
+import dewaPhoto from "../Courses-Photos/dewa-photo.png";
 
 // Typeform-style design tokens (Paper + Ink palette, Plus Jakarta Sans)
 const TYPEFORM = {
@@ -43,6 +44,14 @@ const courses = [
     href: "/v2-avatar/microwave?start=1",
     duration: "~15 min",
     image: microwavePhoto,
+  },
+  {
+    id: "dewa",
+    title: "DEWA Electrical Safety Essentials",
+    description: "Learn electrical safety, PPE requirements, and substation procedures for DEWA personnel.",
+    href: "/v2-avatar/dewa?start=1",
+    duration: "~15 min",
+    image: dewaPhoto,
   },
 ];
 

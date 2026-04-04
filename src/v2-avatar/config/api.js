@@ -27,6 +27,7 @@ export const PERSONA_MAP = {
   '5g': 'p607dc212fc9', 
   'qatar_history': 'p3e5e7b16b65',
   'microwave': 'p491e1e3a3d2', // lowercase for case-insensitive URL matching
+  'dewa': 'p0c7ef0b7ce0',
   // Add more personas here as needed
   // 'friendly-name': 'actual-persona-id',
 };
